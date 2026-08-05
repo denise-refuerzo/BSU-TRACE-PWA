@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; // 🚨 Handles explicit confirmation validations
-import { fetchWithAuth } from '../api';
+import { fetchWithAuth } from "../../../api";
 
 export default function RolesPermissionsMatrix() {
   const navigate = useNavigate();

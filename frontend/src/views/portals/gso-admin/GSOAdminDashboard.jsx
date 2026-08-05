@@ -6,10 +6,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { 
   LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, Search, Filter, X, QrCode, LogOut, Eye, GitBranch, Camera, KeyRound, ShieldCheck, Building, Landmark, Download, FileText, Plus, Calendar, Lock, Edit, Trash2, Car, ChevronLeft, ChevronRight, MessageSquare 
 } from 'lucide-react';
-import OfficeChatHub from './OfficeChatHub';
+import OfficeChatHub from "../../shared/OfficeChatHub";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, ReferenceLine } from 'recharts';
-import { fetchWithAuth } from '../api';
-
+import { fetchWithAuth } from "../../../api";
+ 
 const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
@@ -2144,7 +2144,7 @@ const handleAddAssetSubmit = async (e) => {
               officeId={gsoOfficeId} 
             />
           )}
-
+ 
           {/* UNIFIED FULL PROFILE HUB (Matching Signee/Processor exact setup) */}
           {activeTab === 'profile' && (
             <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 text-left animate-in fade-in duration-200">

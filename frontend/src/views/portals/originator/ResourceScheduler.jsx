@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, X, Lock } from 'lucide-react';
-import { fetchWithAuth } from '../api';
+import { fetchWithAuth } from "../../../api";
 
 export default function ResourceScheduler({ userId }) {
   const userName = localStorage.getItem('user') || 'Faculty User';

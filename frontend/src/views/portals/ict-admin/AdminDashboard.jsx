@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchWithAuth } from '../api';
+import { fetchWithAuth } from "../../../api";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -11,7 +11,7 @@ export default function AdminDashboard() {
     liveAuditTrail: [],
     stalledBottlenecks: []
   });
-
+ 
   useEffect(() => {
     fetchDashboardMetrics();
     // Establish a live pooling cycle to auto-refresh feeds every 30 seconds

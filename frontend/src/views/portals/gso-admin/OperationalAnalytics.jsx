@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchWithAuth } from '../api';
+import { fetchWithAuth } from "../../../api";
 
 export default function OperationalAnalytics() {
   const navigate = useNavigate();

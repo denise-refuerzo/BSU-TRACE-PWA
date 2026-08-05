@@ -21,8 +21,8 @@ import {
   Building,
   Landmark
 } from 'lucide-react';
-import { fetchWithAuth } from '../api';
-
+import { fetchWithAuth } from "../../../api";
+ 
 const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
@@ -829,7 +829,7 @@ export default function SigneeDashboard() {
                   <p className="text-xs text-green-600 font-bold flex items-center gap-1 mt-1"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Security Seal Status: Active</p>
                 </div>
               </div>
-
+ 
               <div className="lg:col-span-2 space-y-6">
                 <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
                   <div className="flex items-center gap-2 border-b border-neutral-100 pb-3 mb-4">

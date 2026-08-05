@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Lock, MessageSquare, RefreshCw, Search } from 'lucide-react';
-import { fetchWithAuth } from '../api';
+import { fetchWithAuth } from "../../api";
 
 export default function OfficeChatHub({ userId, roleId, officeId }) {
   const [directory, setDirectory] = useState([]);

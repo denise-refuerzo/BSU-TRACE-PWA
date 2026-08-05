@@ -4,10 +4,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { LayoutDashboard, FileText, School, Bell, User, Plus, Search, Filter, X, QrCode, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import DocumentsHub from './DocumentsHub';
 import ResourceScheduler from './ResourceScheduler';
-import OfficeChatHub from './OfficeChatHub';
+import OfficeChatHub from "../../shared/OfficeChatHub";
 import Swal from 'sweetalert2'; 
-import { fetchWithAuth } from '../api';
-
+import { fetchWithAuth } from "../../../api";
+ 
 const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
@@ -662,7 +662,7 @@ export default function OriginatorDashboard() {
                   </div>
                 </div>
               </div>
-
+ 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                 <div className="md:col-span-2 space-y-6">
                   <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4">
