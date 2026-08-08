@@ -1,0 +1,139 @@
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+
+// --- CUSTOM HOOKS ---
+import { useAdminDashboard } from './hooks/useAdminDashboard';
+import { useAccountManagement } from './hooks/useAccountManagement';
+import { useRolesPermissions } from './hooks/useRolesPermissions';
+
+// --- MODULAR TAB COMPONENTS ---
+import DashboardOverviewTab from './components/DashboardOverviewTab';
+import AccountManagementTab from './components/AccountManagementTab';
+import InteractiveVisualizerTab from './components/InteractiveVisualizerTab';
+import CampusInfrastructureTab from './components/CampusInfrastructureTab';
+
+// --- MODALS ---
+import ManageAccountModal from './modals/ManageAccountModal';
+
+export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const adminName = localStorage.getItem('user') || 'Admin User';
+  
+  // Master State to control which portal view is active
+  const [activeSidebar, setActiveSidebar] = useState('dashboard'); // 'dashboard' | 'accounts' | 'matrix'
+
+  // Initialize Custom Hooks
+  const { data: dashboardData } = useAdminDashboard();
+  const accountProps = useAccountManagement();
+  const matrixProps = useRolesPermissions();
+
+  // Dynamic Header Title based on active tab
+  const getHeaderTitle = () => {
+    switch (activeSidebar) {
+      case 'accounts': return "Account Management & Access Controller";
+      case 'matrix': return "Roles & Permissions Matrix Dashboard Node";
+      default: return "Infrastructure Overview Dashboard Controller";
+    }
+  };
+
+  return (
+    <div className="flex h-screen w-screen bg-[#FDFBF9] overflow-hidden text-neutral-800 font-sans">
+      {/* Sidebar Navigation Panel */}
+      <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 shrink-0">
+        <div>
+          <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
+            <div className="bg-red-700 p-2 rounded-lg text-white text-xl">🎓</div>
+            <div>
+              <h1 className="font-bold text-white text-sm leading-none">BSU Portal</h1>
+              <span className="text-[10px] text-neutral-400 uppercase tracking-widest">Admin Console</span>
+            </div> 
+          </div>
+          <nav className="space-y-1 text-sm">
+            <button 
+              type="button" 
+              onClick={() => setActiveSidebar('dashboard')} 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'dashboard' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+            >
+              📊 Dashboard
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setActiveSidebar('accounts')} 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+            >
+              👥 Accounts
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setActiveSidebar('matrix')} 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'matrix' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+            >
+              🛡️ Roles & Matrix
+            </button>
+            
+            {/* Operational Analytics remains standalone and navigates to its distinct route */}
+            <button 
+              type="button" 
+              onClick={() => navigate('/admin/analytics')} 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${ location.pathname === '/admin/analytics' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white' }`}
+            >
+              📈 Operational Analytics 
+            </button>
+          </nav>
+        </div>
+        <button type="button" onClick={() => { localStorage.clear(); navigate('/login'); }} className="flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-400 hover:text-red-400 rounded-lg transition-colors text-left">
+          🚪 Logout
+        </button>
+      </div>
+
+      {/* Main Panel Content Scroll Area */}
+      <div className="flex-1 flex flex-col overflow-y-auto relative">
+        <header className="h-16 border-b border-neutral-200/80 bg-white px-8 flex items-center justify-between shadow-xs shrink-0">
+          <div className="text-neutral-900 font-black text-xs uppercase tracking-wider font-mono">
+            {getHeaderTitle()}
+          </div>
+          <div className="flex items-center gap-2 border-l pl-4 border-neutral-200 text-xs">
+            <span className="font-bold text-neutral-900">{adminName}</span>
+            <span className="bg-neutral-100 px-2 py-0.5 rounded text-[10px] uppercase text-neutral-500 font-bold">ICT Root</span>
+          </div>
+        </header>
+
+        <main className="p-8 max-w-5xl w-full mx-auto space-y-8">
+          
+          {/* RENDER TAB CONTEXT BASED ON SIDEBAR STATE */}
+          {activeSidebar === 'dashboard' && <DashboardOverviewTab data={dashboardData} />}
+          
+          {activeSidebar === 'accounts' && <AccountManagementTab {...accountProps} />}
+          
+          {activeSidebar === 'matrix' && (
+            <div className="space-y-6">
+              <div className="text-left">
+                <h2 className="text-2xl font-black tracking-tight text-neutral-900">System Permissions & Workflow Engineering</h2>
+                <p className="text-xs text-gray-500">Configure dynamic tracking routes, security matrix parameters, and registration building locations.</p>
+              </div>
+
+              {/* Sub-tab Controller for Matrix View */}
+              <div className="flex border-b border-neutral-200 gap-2">
+                <button type="button" onClick={() => matrixProps.setActiveTab('routes')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${matrixProps.activeTab === 'routes' ? 'border-red-800 text-red-800' : 'border-transparent text-gray-400 hover:text-neutral-700'}`}>🗺️ Interactive Visualizer</button>
+                <button type="button" onClick={() => matrixProps.setActiveTab('infrastructure')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${matrixProps.activeTab === 'infrastructure' ? 'border-red-800 text-red-800' : 'border-transparent text-gray-400 hover:text-neutral-700'}`}>🏢 Campus Infrastructure</button>
+              </div>
+
+              {/* RENDER MATRIX SUB-COMPONENTS */}
+              {matrixProps.activeTab === 'routes' && <InteractiveVisualizerTab {...matrixProps} />}
+              {matrixProps.activeTab === 'infrastructure' && <CampusInfrastructureTab {...matrixProps} />}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* GLOBAL MODALS (Rendered outside normal document flow) */}
+      <ManageAccountModal 
+        selectedUser={accountProps.selectedUser}
+        setSelectedUser={accountProps.setSelectedUser}
+        handleUpdateAccount={accountProps.handleUpdateAccount}
+        offices={accountProps.offices}
+      />
+    </div>
+  );
+}
