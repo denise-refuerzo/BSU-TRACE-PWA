@@ -8,8 +8,7 @@ import OriginatorDashboard from './views/portals/originator/OriginatorDashboard'
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
 import SigneeDashboard from './views/portals/signee/SigneeDashboard';
 import GSOAdminDashboard from './views/portals/gso-admin/GSOAdminDashboard';
-import OperationalAnalytics from './views/portals/gso-admin/OperationalAnalytics';
-
+import OperationalAnalytics from './views/portals/ict-admin/OperationalAnalytics';
 
 function App() {
   return (
