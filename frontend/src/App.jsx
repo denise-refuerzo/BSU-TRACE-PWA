@@ -2,8 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './views/auth/Login';
 import AdminDashboard from './views/portals/ict-admin/AdminDashboard';
-import AccountManagement from './views/portals/ict-admin/AccountManagement';
-import RolesPermissionsMatrix from './views/portals/ict-admin/RolesPermissionsMatrix';
+//import AccountManagement from './views/portals/ict-admin/AccountManagement';        <Route path="/admin/accounts" element={<AccountManagement />} />
+//import RolesPermissionsMatrix from './views/portals/ict-admin/RolesPermissionsMatrix';        <Route path="/admin/matrix" element={<RolesPermissionsMatrix />} />
 import OriginatorDashboard from './views/portals/originator/OriginatorDashboard';
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
 import SigneeDashboard from './views/portals/signee/SigneeDashboard';
@@ -16,8 +16,6 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/accounts" element={<AccountManagement />} />
-        <Route path="/admin/matrix" element={<RolesPermissionsMatrix />} />
         <Route path="/admin/analytics" element={<OperationalAnalytics />} />
         <Route path="/gso-dashboard" element={<GSOAdminDashboard />} />
         <Route path="/dashboard" element={<OriginatorDashboard />} />
