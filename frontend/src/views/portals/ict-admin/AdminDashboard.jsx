@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import { LogOut } from 'lucide-react';
 
 // --- CUSTOM HOOKS ---
 import { useAdminDashboard } from './hooks/useAdminDashboard';
@@ -14,6 +16,17 @@ import CampusInfrastructureTab from './components/CampusInfrastructureTab';
 
 // --- MODALS ---
 import ManageAccountModal from './modals/ManageAccountModal';
+
+const minimalSwal = Swal.mixin({
+  customClass: {
+    confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
+    cancelButton: 'px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-neutral-600 border border-neutral-200 bg-white hover:bg-neutral-50 mx-2',
+    popup: 'rounded-3xl border border-neutral-100 shadow-2xl',
+    title: 'text-lg font-black text-neutral-900',
+    htmlContainer: 'text-sm font-medium text-neutral-500'
+  },
+  buttonsStyling: false
+});
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -35,6 +48,20 @@ export default function AdminDashboard() {
       case 'matrix': return "Roles & Permissions Matrix Dashboard Node";
       default: return "Infrastructure Overview Dashboard Controller";
     }
+  };
+  const handleLogout = () => {
+    minimalSwal.fire({
+      title: 'Sign Out?',
+      text: 'Are you sure you want to securely end your session?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Sign Out'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        localStorage.clear();
+        navigate('/login');
+      }
+    });
   };
 
   return (
@@ -82,9 +109,11 @@ export default function AdminDashboard() {
             </button>
           </nav>
         </div>
-        <button type="button" onClick={() => { localStorage.clear(); navigate('/login'); }} className="flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-400 hover:text-red-400 rounded-lg transition-colors text-left">
-          🚪 Logout
-        </button>
+        <div className="border-t border-neutral-700 pt-4">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
       </div>
 
       {/* Main Panel Content Scroll Area */}

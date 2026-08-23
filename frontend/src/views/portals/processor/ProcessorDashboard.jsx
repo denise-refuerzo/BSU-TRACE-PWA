@@ -313,6 +313,7 @@ export default function ProcessorDashboard() {
     }
   };
 
+
   return (
     <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden">
       
@@ -320,9 +321,13 @@ export default function ProcessorDashboard() {
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">
         <div>
           <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
-            <div className="bg-red-700 p-2 rounded-lg text-white font-bold text-xl">🎓</div>
+            <img 
+                src="/bsu-logo.png" 
+                alt="Batangas State University Logo" 
+                className="h-15 w-auto object-contain drop-shadow-sm" 
+              />
             <div>
-              <h1 className="font-bold text-white text-sm">BSU Portal</h1>
+              <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
               <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Office Processor</span>
             </div>
           </div>

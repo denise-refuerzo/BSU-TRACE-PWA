@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { LayoutDashboard, FileText, School, Bell, User, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, FileText, School, Bell, User, MessageSquare, LogOut } from 'lucide-react';
 
 // Custom Hook
 import useOriginatorData from './hooks/useOriginatorData';
@@ -47,11 +47,15 @@ export default function OriginatorDashboard() {
       {/* SIDEBAR NAVIGATION */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0">
         <div>
-          <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
-            <div className="bg-red-700 p-2 rounded-lg text-white font-bold text-xl">🎓</div>
+        <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
+            <img 
+                src="/bsu-logo.png" 
+                alt="Batangas State University Logo" 
+                className="h-15 w-auto object-contain drop-shadow-sm" 
+              />
             <div>
-              <h1 className="font-bold text-white text-sm">BSU Portal</h1>
-              <span className="text-[10px] text-neutral-400 uppercase tracking-wider">Institutional Management</span>
+              <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
+              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Originator</span>
             </div>
           </div>
           <nav className="space-y-1 text-sm">
@@ -76,7 +80,7 @@ export default function OriginatorDashboard() {
         </div>
         <div className="border-t border-neutral-700 pt-4">
           <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-400 hover:bg-red-950/40 hover:text-red-400 font-semibold rounded-lg transition-colors">
-            <span>🚪</span> Logout Session
+          <LogOut size={16} /> Sign Out
           </button>
         </div>
       </div>

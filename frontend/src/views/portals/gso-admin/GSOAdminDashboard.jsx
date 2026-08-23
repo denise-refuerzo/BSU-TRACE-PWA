@@ -275,9 +275,16 @@ export default function GSOAdminDashboard() {
       {/* SIDEBAR */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">
         <div>
-          <div className="border-b border-neutral-700 pb-4 mb-6">
-            <h1 className="font-bold text-white text-lg">BSU Portal</h1>
-            <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">GSO Administration</span>
+        <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
+            <img 
+                src="/bsu-logo.png" 
+                alt="Batangas State University Logo" 
+                className="h-15 w-auto object-contain drop-shadow-sm" 
+              />
+            <div>
+              <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
+              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">GSO Office</span>
+            </div>
           </div>
           <nav className="space-y-1 text-sm">
             <button onClick={() => { setActiveTab('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
@@ -301,13 +308,11 @@ export default function GSOAdminDashboard() {
             </button>
           </nav>
         </div>
-        <div className="border-t border-neutral-700 pt-4 flex items-center gap-3">
-          <div className="bg-red-700 text-white font-black text-xs w-8 h-8 rounded-full flex items-center justify-center">GA</div>
-          <div className="flex-1 text-left min-w-0">
-            <p className="text-xs font-black text-white truncate">{userName}</p>
+        <div className="border-t border-neutral-700 pt-4">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
+              <LogOut size={16} /> Sign Out
+            </button>
           </div>
-          <button onClick={handleLogout} className="text-neutral-400 hover:text-red-400 transition-colors"><LogOut size={16} /></button>
-        </div>
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden relative">
