@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import { 
   LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, MessageSquare 
 } from 'lucide-react';
+import { fetchWithAuth } from '../../../api';
 
 // Custom Hook
 import { useGSOAdminData } from './hooks/useGSOAdminData';
@@ -60,7 +61,7 @@ export default function GSOAdminDashboard() {
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
 
-  // >>> TAB SYNC LISTENER (This restores the blocked analytics & tables) <<<
+  // Tab Sync Listener
   useEffect(() => {
     if (activeTab === 'analytics') {
       fetchOperationalAnalytics();
@@ -195,7 +196,7 @@ export default function GSOAdminDashboard() {
   const gymData = processProcurementData('Gymnasium', reservationsList, 'gym', 'gym', 'gym');
   const logData = processProcurementData('Logistics', logisticsList, 'logistics', 'logistics', 'logistics');
 
-  // Analytics Processing (Added safe optional chaining to prevent undefined errors)
+  // Analytics Processing
   const processedBottleneckData = [...(bottleneckData || [])]
     .filter(d => (d.office_name || '').toLowerCase().includes((bottleneckSearch || '').toLowerCase()))
     .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
@@ -219,12 +220,189 @@ export default function GSOAdminDashboard() {
     };
   });
 
-  // Modal Status Triggers
   const isAwaitingScanIn = selectedDoc && !selectedDoc.time_in;
   const isInVerification = selectedDoc?.status?.toLowerCase() === 'in verification' || ((selectedDoc?.current_step_is_adhoc || selectedDoc?.is_adhoc) && selectedDoc?.current_office !== gsoOfficeName);
   const isActionAltered = selectedDoc && (selectedDoc.status?.toLowerCase() === 'signed' || selectedDoc.status?.toLowerCase() === 'completed' || selectedDoc.status?.toLowerCase() === 'action required' || selectedDoc.time_out);
 
-  // --- ACTIONS ---
+  // --- MASTER CHECKLIST HANDLERS ---
+  useEffect(() => {
+    if (showChecklistMakerModal) {
+      const fetchTemplates = async () => {
+        const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+        const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
+        try {
+          const res = await fetchWithAuth(`http://localhost:5000/api/procurement/templates/${targetType}`);
+          if (res.ok) setMasterChecklistItems(await res.json());
+        } catch (err) { console.error("Error fetching templates:", err); }
+      };
+      fetchTemplates();
+    }
+  }, [showChecklistMakerModal, activeChecklistTab]);
+
+  const handleAddMasterChecklistItem = async (e) => {
+    e.preventDefault();
+    if (!newChecklistName.trim()) return;
+    const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+    const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
+
+    try {
+      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingType: targetType, itemName: newChecklistName.trim() })
+      });
+      if (res.ok) {
+        setNewChecklistName('');
+        const updated = await fetchWithAuth(`http://localhost:5000/api/procurement/templates/${targetType}`);
+        if (updated.ok) setMasterChecklistItems(await updated.json());
+      }
+    } catch (err) { console.error("Error adding template item:", err); }
+  };
+
+  const handleDeleteMasterChecklistItem = async (templateId) => {
+    try {
+      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/templates/${templateId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setMasterChecklistItems(prev => prev.filter(item => item.template_id !== templateId));
+      }
+    } catch (err) { console.error("Error deleting template item:", err); }
+  };
+
+  // --- BOOKING CHECKLIST HANDLERS ---
+  const handleViewChecklist = async (booking) => {
+    setActiveChecklistBooking(booking);
+    try {
+      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/checklists/${booking.booking_id}/${booking.booking_type}`);
+      if (res.ok) {
+        setActiveChecklistItems(await res.json());
+        setShowActiveChecklistModal(true);
+      }
+    } catch (err) { console.error("Error fetching checklist:", err); }
+  };
+
+  const handleToggleChecklistItem = async (checkId, currentStatus) => {
+    try {
+      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/checklists/${checkId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isChecked: !currentStatus, bookingId: activeChecklistBooking.booking_id })
+      });
+      if (res.ok) {
+        setActiveChecklistItems(prev => prev.map(item => 
+          item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
+        ));
+        fetchProcurementData();
+      }
+    } catch (err) { console.error("Error updating checklist:", err); }
+  };
+
+  // --- PDF EXPORT GENERATOR ---
+  const handleGeneratePDF = () => {
+    let dataToPrint = [];
+    if (printTargetTab === 'Logistics History') {
+      dataToPrint = logisticsList.filter(log => {
+        const logDate = new Date(log.borrowed_at).toISOString().split('T')[0];
+        const afterStart = printStartDate ? logDate >= printStartDate : true;
+        const beforeEnd = printEndDate ? logDate <= printEndDate : true;
+        return afterStart && beforeEnd;
+      });
+    } else {
+      const typeMap = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+      dataToPrint = reservationsList.filter(res => {
+        const isCorrectType = res.booking_type === typeMap[printTargetTab];
+        const resDate = new Date(res.reservation_date).toISOString().split('T')[0];
+        const afterStart = printStartDate ? resDate >= printStartDate : true;
+        const beforeEnd = printEndDate ? resDate <= printEndDate : true;
+        return isCorrectType && afterStart && beforeEnd;
+      });
+    }
+
+    if (dataToPrint.length === 0) {
+      return minimalSwal.fire({ icon: 'warning', title: 'No Records', text: 'No records found for the selected date range.' });
+    }
+
+    const printWindow = window.open('', '_blank');
+    let tableHeaders = '';
+    let tableRows = '';
+
+    if (printTargetTab === 'Logistics History') {
+      tableHeaders = `
+        <tr>
+          <th>Asset</th>
+          <th>Requestor</th>
+          <th>Qty</th>
+          <th>Lending Time</th>
+          <th>Return Time</th>
+          <th>Condition / Notes</th>
+        </tr>`;
+      tableRows = dataToPrint.map(log => `
+        <tr>
+          <td><strong>${log.asset_name}</strong></td>
+          <td>${log.requestor_name}</td>
+          <td>${log.qty_borrowed}</td>
+          <td>${log.borrowed_at ? new Date(log.borrowed_at).toLocaleString() : 'N/A'}</td>
+          <td>${log.returned_at ? new Date(log.returned_at).toLocaleString() : 'Pending'}</td>
+          <td>${log.status === 'Returned' ? (log.condition_on_return === 'Damaged' ? `<span style="color:red; font-weight:bold;">Damaged:</span> ${log.damage_notes || 'No notes'}` : 'Good Condition') : 'Out / Borrowed'}</td>
+        </tr>`).join('');
+    } else {
+      tableHeaders = `
+        <tr>
+          <th>Requestor</th>
+          <th>Purpose</th>
+          <th>Target Date & Time</th>
+          <th>System Request Made</th>
+          <th>Confirmed At</th>
+          <th>Status</th>
+        </tr>`;
+      tableRows = dataToPrint.map(res => `
+        <tr>
+          <td><strong>${res.requestor || res.requestor_name || 'N/A'}</strong></td>
+          <td>${res.purpose}</td>
+          <td>${new Date(res.reservation_date).toLocaleDateString()} <br> <small>${res.start_time?.substring(0,5)} - ${res.end_time?.substring(0,5)}</small></td>
+          <td>${res.created_at ? new Date(res.created_at).toLocaleString() : 'N/A'}</td>
+          <td>${res.updated_at ? new Date(res.updated_at).toLocaleString() : 'Pending'}</td>
+          <td style="font-weight:bold; color: ${res.status === 'Confirmed' ? 'green' : '#d97706'}">${res.status}</td>
+        </tr>`).join('');
+    }
+
+    const htmlContent = `
+      <html>
+        <head>
+          <title>Exported Logs - ${printTargetTab}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
+            .header { border-bottom: 2px solid #991b1b; padding-bottom: 10px; margin-bottom: 20px; }
+            .header h1 { margin: 0; color: #991b1b; font-size: 24px; }
+            .header p { margin: 5px 0 0 0; color: #666; font-size: 12px; }
+            table { border-collapse: collapse; margin-top: 10px; font-size: 12px; width: 100%; }
+            th { background-color: #f87171; color: white; text-align: left; padding: 10px; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+            td { padding: 10px; border-bottom: 1px solid #e5e5e5; }
+            tr:nth-child(even) { background-color: #f9fafb; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>BSU GSO Procurement Logs</h1>
+            <p><strong>Category:</strong> ${printTargetTab}</p>
+            <p><strong>Date Filter:</strong> ${printStartDate || 'Beginning of records'} to ${printEndDate || 'Present'}</p>
+            <p><strong>Generated On:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          <table>
+            <thead>${tableHeaders}</thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 250);
+  };
+
+  // --- GENERAL EVENT HANDLERS ---
   useEffect(() => {
     function handleClickOutside(event) {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) setShowNotifications(false);
@@ -270,17 +448,86 @@ export default function GSOAdminDashboard() {
     else return `${Math.round(elapsed / 86400000)} days ago`;   
   };
 
+  // --- AUDIT REPORT GENERATOR ---
+const handleGenerateAuditReport = () => {
+  const printWindow = window.open('', '_blank');
+  
+  // Filter peak demand data based on selected start and end dates
+  const filteredDemand = (peakDemandData || []).filter(d => {
+    const dDate = d.date;
+    return (!auditStartDate || dDate >= auditStartDate) && (!auditEndDate || dDate <= auditEndDate);
+  });
+
+  const htmlContent = `
+    <html>
+      <head>
+        <title>Full Operational Audit Report</title>
+        <style>
+          body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #333; }
+          .report-header { border-bottom: 2px solid #991b1b; padding-bottom: 20px; margin-bottom: 30px; }
+          .section { margin-bottom: 40px; }
+          h2 { color: #991b1b; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+          th { background: #f9fafb; padding: 10px; border: 1px solid #ddd; text-align: left; }
+          td { padding: 8px; border: 1px solid #ddd; }
+        </style>
+      </head>
+      <body>
+        <div class="report-header">
+          <h1>BSU GSO Operational Audit</h1>
+          <p>Generated on: ${new Date().toLocaleString()}</p>
+          <p>Range: ${auditStartDate || 'Start'} to ${auditEndDate || 'Present'}</p>
+        </div>
+
+        <div class="section">
+          <h2>1. Bottleneck Analytics</h2>
+          <table>
+            <thead><tr><th>Office Name</th><th>Dwell Time (Hours)</th></tr></thead>
+            <tbody>
+              ${(bottleneckData || []).map(b => `<tr><td>${b.office_name}</td><td>${Number(b.dwell_time_hours || 0).toFixed(2)}h</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>2. Equipment Inventory Status</h2>
+          <table>
+            <thead><tr><th>Asset</th><th>Total</th><th>Available</th></tr></thead>
+            <tbody>
+              ${(equipmentInventory || []).map(i => `<tr><td>${i.asset_name}</td><td>${i.capacity}</td><td>${i.current_stock}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>3. Demand Forecast Data</h2>
+          <table>
+            <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
+            <tbody>
+              ${filteredDemand.map(d => `<tr><td>${d.date}</td><td>${d.vehicle_demand || 0}</td><td>${d.facility_demand || 0}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+  setTimeout(() => printWindow.print(), 500);
+};
+
   return (
     <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden">
       {/* SIDEBAR */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">
         <div>
-        <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
+          <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
             <img 
-                src="/bsu-logo.png" 
-                alt="Batangas State University Logo" 
-                className="h-15 w-auto object-contain drop-shadow-sm" 
-              />
+              src="/bsu-logo.png" 
+              alt="Batangas State University Logo" 
+              className="h-15 w-auto object-contain drop-shadow-sm" 
+            />
             <div>
               <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
               <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">GSO Office</span>
@@ -309,10 +556,10 @@ export default function GSOAdminDashboard() {
           </nav>
         </div>
         <div className="border-t border-neutral-700 pt-4">
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
-              <LogOut size={16} /> Sign Out
-            </button>
-          </div>
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
+            <LogOut size={16} /> Sign Out
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -379,8 +626,8 @@ export default function GSOAdminDashboard() {
               equipmentInventory={equipmentInventory}
               assetBlackouts={assetBlackouts}
               setShowAddAssetModal={setShowAddAssetModal}
-              handleOpenEditModal={console.log}
-              handleDeleteAsset={console.log}
+              handleOpenEditModal={() => {}}
+              handleDeleteAsset={() => {}}
               setSelectedInventoryItem={setSelectedInventoryItem}
               setShowInventoryModal={setShowInventoryModal}
               setShowBlackoutModal={setShowBlackoutModal}
@@ -397,7 +644,7 @@ export default function GSOAdminDashboard() {
               procPage={procPage} setProcPage={setProcPage}
               setShowPrintModal={setShowPrintModal}
               setShowChecklistMakerModal={setShowChecklistMakerModal}
-              handleViewChecklist={console.log}
+              handleViewChecklist={handleViewChecklist}
             />
           )}
 
@@ -405,7 +652,7 @@ export default function GSOAdminDashboard() {
             <OperationalAnalyticsTab
               auditStartDate={auditStartDate} setAuditStartDate={setAuditStartDate}
               auditEndDate={auditEndDate} setAuditEndDate={setAuditEndDate}
-              handleGenerateAuditReport={console.log}
+              handleGenerateAuditReport={handleGenerateAuditReport}
               isAnalyticsLoading={isAnalyticsLoading}
               bottleneckSearch={bottleneckSearch} setBottleneckSearch={setBottleneckSearch}
               bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
@@ -436,8 +683,8 @@ export default function GSOAdminDashboard() {
               profileName={profileName} setProfileName={setProfileName}
               profileEmail={profileEmail} setProfileEmail={setProfileEmail}
               facultyId={facultyId} officeName={gsoOfficeName}
-              twoFaEnabled={twoFaEnabled} toggle2FA={console.log}
-              handleUpdateProfile={console.log} setShowPassModal={setShowPassModal}
+              twoFaEnabled={twoFaEnabled} toggle2FA={() => {}}
+              handleUpdateProfile={() => {}} setShowPassModal={setShowPassModal}
             />
           )}
         </div>
@@ -455,17 +702,17 @@ export default function GSOAdminDashboard() {
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
         scanMode={scanMode} setScanMode={setScanMode}
-        simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload} executeSimulatedScanner={console.log}
+        simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload} executeSimulatedScanner={() => {}}
       />
       <AddAssetModal 
         showAddAssetModal={showAddAssetModal} setShowAddAssetModal={setShowAddAssetModal}
-        handleAddAssetSubmit={console.log} assetForm={assetForm} setAssetForm={setAssetForm}
+        handleAddAssetSubmit={() => {}} assetForm={assetForm} setAssetForm={setAssetForm}
       />
       <ChangePasswordModal 
         isOpen={showPassModal} onClose={() => setShowPassModal(false)}
         currentPassword={currentPassword} setCurrentPassword={setCurrentPassword}
         newPassword={newPassword} setNewPassword={setNewPassword}
-        confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} handleUpdatePassword={console.log}
+        confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} handleUpdatePassword={() => {}}
       />
       <DocumentAuditModal 
         showDetailsModal={showDetailsModal} setShowDetailsModal={setShowDetailsModal}
@@ -475,34 +722,40 @@ export default function GSOAdminDashboard() {
         selectedAdHocOffice={selectedAdHocOffice} setSelectedAdHocOffice={setSelectedAdHocOffice}
         officesList={officesList} gsoOfficeId={gsoOfficeId} isActionProcessing={isActionProcessing}
         returnReason={returnReason} setReturnReason={setReturnReason}
-        handleExecuteAdHocDetour={console.log} handleExecuteReturn={console.log} handleSignDocument={console.log}
+        handleExecuteAdHocDetour={() => {}} handleExecuteReturn={() => {}} handleSignDocument={() => {}}
         setScanMode={setScanMode} setShowScannerModal={setShowScannerModal} setSimulatedQrPayload={setSimulatedQrPayload}
       />
       <MasterChecklistModal
         showChecklistMakerModal={showChecklistMakerModal} setShowChecklistMakerModal={setShowChecklistMakerModal}
         activeChecklistTab={activeChecklistTab} setActiveChecklistTab={setActiveChecklistTab}
-        masterChecklistItems={masterChecklistItems} handleDeleteMasterChecklistItem={console.log} handleAddMasterChecklistItem={console.log}
+        masterChecklistItems={masterChecklistItems} 
+        handleDeleteMasterChecklistItem={handleDeleteMasterChecklistItem} 
+        handleAddMasterChecklistItem={handleAddMasterChecklistItem}
         newChecklistName={newChecklistName} setNewChecklistName={setNewChecklistName}
       />
       <EditAssetModal
         showEditAssetModal={showEditAssetModal} setShowEditAssetModal={setShowEditAssetModal}
-        selectedEditAsset={selectedEditAsset} setSelectedEditAsset={setSelectedEditAsset} handleUpdateAsset={console.log} assetSchedule={assetSchedule}
+        selectedEditAsset={selectedEditAsset} setSelectedEditAsset={setSelectedEditAsset} handleUpdateAsset={() => {}} assetSchedule={assetSchedule}
       />
       <ExportLogsModal
         showPrintModal={showPrintModal} setShowPrintModal={setShowPrintModal}
-        printTargetTab={printTargetTab} setPrintTargetTab={setPrintTargetTab} printStartDate={printStartDate} setPrintStartDate={setPrintStartDate} printEndDate={printEndDate} setPrintEndDate={setPrintEndDate} handleGeneratePDF={console.log}
+        printTargetTab={printTargetTab} setPrintTargetTab={setPrintTargetTab} 
+        printStartDate={printStartDate} setPrintStartDate={setPrintStartDate} 
+        printEndDate={printEndDate} setPrintEndDate={setPrintEndDate} 
+        handleGeneratePDF={handleGeneratePDF}
       />
       <FacilityBlackoutModal
         showBlackoutModal={showBlackoutModal} setShowBlackoutModal={setShowBlackoutModal}
-        handleApplyBlackout={console.log} blackoutForm={blackoutForm} setBlackoutForm={setBlackoutForm} assetsList={assetsList} todayString={todayString}
+        handleApplyBlackout={() => {}} blackoutForm={blackoutForm} setBlackoutForm={setBlackoutForm} assetsList={assetsList} todayString={todayString}
       />
       <InventoryActionModal
         showInventoryModal={showInventoryModal} setShowInventoryModal={setShowInventoryModal}
-        selectedInventoryItem={selectedInventoryItem} inventoryModalMode={inventoryModalMode} setInventoryModalMode={setInventoryModalMode} handleInventorySubmit={console.log} inventoryForm={inventoryForm} setInventoryForm={setInventoryForm} todayString={todayString} isActionProcessing={isActionProcessing}
+        selectedInventoryItem={selectedInventoryItem} inventoryModalMode={inventoryModalMode} setInventoryModalMode={setInventoryModalMode} handleInventorySubmit={() => {}} inventoryForm={inventoryForm} setInventoryForm={setInventoryForm} todayString={todayString} isActionProcessing={isActionProcessing}
       />
       <BookingRequirementsModal
         showActiveChecklistModal={showActiveChecklistModal} setShowActiveChecklistModal={setShowActiveChecklistModal}
-        activeChecklistBooking={activeChecklistBooking} activeChecklistItems={activeChecklistItems} handleToggleChecklistItem={console.log}
+        activeChecklistBooking={activeChecklistBooking} activeChecklistItems={activeChecklistItems} 
+        handleToggleChecklistItem={handleToggleChecklistItem}
       />
     </div>
   );
