@@ -160,6 +160,7 @@ export default function OriginatorResourcesTab({ userId }) {
           if (!day) return <div key={index} className="bg-neutral-50/50 border border-dashed border-neutral-100 rounded-xl min-h-[110px]"></div>;
           
           const dayString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const isPastDate = dayString < todayString; 
           const matches = bookings.filter(b => {
             const dateObj = new Date(b.reservation_date);
             const localDateString = dateObj.toLocaleDateString('en-CA', { 
@@ -191,21 +192,28 @@ export default function OriginatorResourcesTab({ userId }) {
           return (
             <div 
               key={index} 
+              
               className={`border rounded-xl p-2 min-h-[110px] flex flex-col justify-between transition-colors ${
-                activeBlock 
-                  ? 'bg-red-50/50 border-red-200 cursor-not-allowed' 
+                activeBlock || isPastDate 
+                  ? 'bg-neutral-50/50 border-neutral-200 cursor-not-allowed opacity-70' 
                   : 'bg-white border-neutral-200 hover:border-red-300 cursor-pointer'
               }`}
               onClick={() => {
-                if (!activeBlock) {
+                if (!activeBlock && !isPastDate) {
                   setForm({ ...form, reservationDate: dayString });
                   setShowFormModal(true); 
                 }
               }}
             >
               <div className="flex justify-between items-start">
-                <span className={`text-xs font-black block ${
-                  activeBlock ? 'text-red-800' : form.reservationDate === dayString ? 'bg-red-800 text-white w-5 h-5 flex items-center justify-center rounded-full' : 'text-neutral-400'
+              <span className={`text-xs font-black block ${
+                  activeBlock 
+                    ? 'text-red-800' 
+                    : form.reservationDate === dayString 
+                      ? 'bg-red-800 text-white w-5 h-5 flex items-center justify-center rounded-full' 
+                      : isPastDate 
+                        ? 'text-neutral-300' 
+                        : 'text-neutral-400'
                 }`}>
                   {day}
                 </span>

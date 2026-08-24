@@ -2,8 +2,6 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './views/auth/Login';
 import AdminDashboard from './views/portals/ict-admin/AdminDashboard';
-//import AccountManagement from './views/portals/ict-admin/AccountManagement';        <Route path="/admin/accounts" element={<AccountManagement />} />
-//import RolesPermissionsMatrix from './views/portals/ict-admin/RolesPermissionsMatrix';        <Route path="/admin/matrix" element={<RolesPermissionsMatrix />} />
 import OriginatorDashboard from './views/portals/originator/OriginatorDashboard';
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
 import SigneeDashboard from './views/portals/signee/SigneeDashboard';

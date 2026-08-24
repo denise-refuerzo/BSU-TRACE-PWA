@@ -43,8 +43,8 @@ export default function PipelineVerificationModal({
 
               <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs border-t border-b border-neutral-100 py-3">
                 <div>
-                  <span className="text-[9px] font-black text-neutral-400 uppercase tracking-wider block">Origin</span>
-                  <p className="font-bold text-neutral-800 mt-0.5">{selectedDoc.originating_office || selectedDoc.origin || 'University Unit'}</p>
+                  <span className="text-[9px] font-black text-neutral-400 uppercase tracking-wider block">Origin Office </span>
+                  <p className="font-bold text-neutral-800 mt-0.5">{selectedDoc.originating_office || selectedDoc.origin || 'This is the First Office'}</p>
                 </div>
                 <div>
                   <span className="text-[9px] font-black text-neutral-400 uppercase tracking-wider block">Target Delivery</span>

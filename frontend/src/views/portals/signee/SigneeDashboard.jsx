@@ -46,11 +46,15 @@ export default function SigneeDashboard() {
       {/* 2. Sidebar Navigation */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">
         <div>
-          <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
-            <div className="bg-red-800 p-2 rounded-lg text-white font-bold text-xl">🎓</div>
+        <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
+            <img 
+                src="/bsu-logo.png" 
+                alt="Batangas State University Logo" 
+                className="h-15 w-auto object-contain drop-shadow-sm" 
+              />
             <div>
-              <h1 className="font-bold text-white text-sm">Office Signee</h1>
-              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Institutional Portal</span>
+              <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
+              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Office Signee</span>
             </div>
           </div>
           
@@ -76,16 +80,11 @@ export default function SigneeDashboard() {
           </nav>
         </div>
 
-        <div className="border-t border-neutral-700 pt-4 flex items-center gap-3">
-          <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" className="w-10 h-10 rounded-xl object-cover" alt="User Profile" />
-          <div className="flex-1 text-left min-w-0">
-            <p className="text-xs font-black text-white truncate">{userName}</p>
-            <p className="text-[9px] text-neutral-400 font-bold uppercase truncate">{signeeOfficeName}</p>
+        <div className="border-t border-neutral-700 pt-4">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
+              <LogOut size={16} /> Sign Out
+            </button>
           </div>
-          <button onClick={handleLogout} className="text-neutral-400 hover:text-red-400 transition-colors">
-            <LogOut size={16} />
-          </button>
-        </div>
       </div>
 
       {/* 3. Main Content Area */}
