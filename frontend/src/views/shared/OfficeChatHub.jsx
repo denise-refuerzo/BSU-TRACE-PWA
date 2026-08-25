@@ -12,7 +12,7 @@ export default function OfficeChatHub({ userId, roleId, officeId }) {
   const [textInput, setTextInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messageEndRef = useRef(null);
-
+ 
   useEffect(() => {
     fetchActiveDirectory();
   }, []);
@@ -31,7 +31,7 @@ export default function OfficeChatHub({ userId, roleId, officeId }) {
 
   const fetchActiveDirectory = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/chat/active-documents-directory');
+      const res = await fetchWithAuth('/api/chat/active-documents-directory');
       const data = await res.json();
       if (res.ok) setDirectory(data);
     } catch (err) { console.error(err); }
@@ -42,7 +42,7 @@ export default function OfficeChatHub({ userId, roleId, officeId }) {
     setActiveChannel(null);
     setMessages([]);
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/chat/document-channels/${doc.ini_id}`);
+      const res = await fetchWithAuth(`/api/chat/document-channels/${doc.ini_id}`);
       const data = await res.json();
       if (res.ok) {
         setChannels(data);
@@ -61,7 +61,7 @@ export default function OfficeChatHub({ userId, roleId, officeId }) {
   const handleActivateChannel = async (docId, channel) => {
     setLoading(true);
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/chat/get-or-create-room', {
+      const res = await fetchWithAuth('/api/chat/get-or-create-room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ iniId: docId, officeId: channel.officeId })
@@ -76,7 +76,7 @@ export default function OfficeChatHub({ userId, roleId, officeId }) {
 
   const fetchMessageLogs = async (roomId) => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/chat/rooms/${roomId}/messages`);
+      const res = await fetchWithAuth(`/api/chat/rooms/${roomId}/messages`);
       const data = await res.json();
       if (res.ok) setMessages(data);
     } catch (err) { console.error(err); }
@@ -87,7 +87,7 @@ export default function OfficeChatHub({ userId, roleId, officeId }) {
     if (!textInput.trim() || !activeChannel) return;
 
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/chat/messages', {
+      const res = await fetchWithAuth('/api/chat/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId: activeChannel.roomId, messageText: textInput })

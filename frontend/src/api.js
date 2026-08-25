@@ -1,8 +1,21 @@
 import Swal from 'sweetalert2';
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API = axios.create({
+  baseURL: API_BASE_URL,
+});
+
+export default API;
 
 export const fetchWithAuth = async (url, options = {}) => {
   const token = localStorage.getItem('token');
   
+  // Form the full URL if a relative path is passed
+  const targetUrl = url.startsWith('http')
+    ? url
+    : `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+
   // Attach the Authorization header automatically
   const headers = {
     'Content-Type': 'application/json',
@@ -10,7 +23,7 @@ export const fetchWithAuth = async (url, options = {}) => {
     'Authorization': token ? `Bearer ${token}` : ''
   };
 
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(targetUrl, { ...options, headers });
   
   // Clone the response to read it for the interceptor 
   // without locking the data stream for your components.

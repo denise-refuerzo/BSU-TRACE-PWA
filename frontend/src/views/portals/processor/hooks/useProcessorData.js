@@ -19,7 +19,7 @@ export function useProcessorData(userId) {
   const [pipelineDocs, setPipelineDocs] = useState([]);  
   const [actionHistory, setActionHistory] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
-  
+   
   // --- NOTIFICATIONS & CHAT ---
   const [notifications, setNotifications] = useState([]);
   const [hasUnreadChats, setHasUnreadChats] = useState(false);
@@ -37,7 +37,7 @@ export function useProcessorData(userId) {
   const fetchExpectedIncomingCount = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/documents/expected-count/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/documents/expected-count/${officeId}`);
       const data = await res.json();
       if (res.ok) setExpectedIncomingCount(data.count);
     } catch (err) { console.error("Expected incoming sync error:", err); }
@@ -46,7 +46,7 @@ export function useProcessorData(userId) {
   const fetchIncomingDocumentLogs = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/documents/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/documents/${officeId}`);
       const data = await res.json();
       if (res.ok) {
         setIncomingDocs(data);
@@ -65,7 +65,7 @@ export function useProcessorData(userId) {
   const fetchPipelineDocs = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/documents/pipeline/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/documents/pipeline/${officeId}`);
       const data = await res.json();
       if (res.ok) setPipelineDocs(data);
     } catch (err) { console.error("Pipeline sync error:", err); }
@@ -74,7 +74,7 @@ export function useProcessorData(userId) {
   const fetchOfficeActionHistory = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/history/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/history/${officeId}`);
       const data = await res.json();
       if (res.ok) setActionHistory(data);
     } catch (err) { console.error("History transaction log retrieval error:", err); }
@@ -82,7 +82,7 @@ export function useProcessorData(userId) {
 
   const fetchProcessorMeta = async () => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`);
+      const res = await fetchWithAuth(`/api/profile/${userId}`);
       const data = await res.json();
       if (res.ok) {
         setProcessorOfficeName(data.office_name || 'CICS Office');
@@ -105,7 +105,7 @@ export function useProcessorData(userId) {
 
   const fetchWorkflowTemplates = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/process-types');
+      const res = await fetchWithAuth('/api/process-types');
       const data = await res.json();
       if (res.ok) setProcessTypes(data);
     } catch (err) { console.error(err); }
@@ -113,7 +113,7 @@ export function useProcessorData(userId) {
 
   const fetchOfficesList = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/offices'); 
+      const res = await fetchWithAuth('/api/offices'); 
       const data = await res.json();
       if (res.ok) setOfficesList(data);
     } catch (err) { console.error("Error building office lookup:", err); }
@@ -130,7 +130,7 @@ export function useProcessorData(userId) {
     if (!userId || userId === 'undefined') return;
     const checkChatBadgeStatus = async () => {
       try {
-        const res = await fetchWithAuth('http://localhost:5000/api/chat/active-documents-directory');
+        const res = await fetchWithAuth('/api/chat/active-documents-directory');
         const data = await res.json();
         if (res.ok) setHasUnreadChats(data.some(d => d.hasAnyChat === true));
       } catch (err) { console.error(err); }

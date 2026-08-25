@@ -18,7 +18,7 @@ export function useAccountManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [selectedUser, setSelectedUser] = useState(null); // Tracks account loaded into editing modal
-
+ 
   // Sync baseline lookup catalogs upon initial component mount
   useEffect(() => {
     fetchOffices();
@@ -27,7 +27,7 @@ export function useAccountManagement() {
 
   const fetchOffices = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/offices');
+      const res = await fetchWithAuth('/api/offices');
       const data = await res.json();
       if (res.ok) setOffices(data);
     } catch (err) {
@@ -37,7 +37,7 @@ export function useAccountManagement() {
 
   const fetchAccounts = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/accounts');
+      const res = await fetchWithAuth('/api/accounts');
       const data = await res.json();
       if (res.ok) setAccounts(data);
     } catch (err) {
@@ -71,7 +71,7 @@ export function useAccountManagement() {
     }
 
     try {
-      const response = await fetchWithAuth('http://localhost:5000/api/accounts', {
+      const response = await fetchWithAuth('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submissionFormPayload)
@@ -119,7 +119,7 @@ export function useAccountManagement() {
             payloadDeptId = null;
           }
 
-          const response = await fetchWithAuth(`http://localhost:5000/api/accounts/${selectedUser.u_id}`, {
+          const response = await fetchWithAuth(`/api/accounts/${selectedUser.u_id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
