@@ -230,7 +230,7 @@ export default function GSOAdminDashboard() {
         const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
         const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
         try {
-          const res = await fetchWithAuth(`http://localhost:5000/api/procurement/templates/${targetType}`);
+          const res = await fetchWithAuth(`/api/procurement/templates/${targetType}`);
           if (res.ok) setMasterChecklistItems(await res.json());
         } catch (err) { console.error("Error fetching templates:", err); }
       };
@@ -245,14 +245,14 @@ export default function GSOAdminDashboard() {
     const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
 
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/templates`, {
+      const res = await fetchWithAuth('/api/procurement/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookingType: targetType, itemName: newChecklistName.trim() })
       });
       if (res.ok) {
         setNewChecklistName('');
-        const updated = await fetchWithAuth(`http://localhost:5000/api/procurement/templates/${targetType}`);
+        const updated = await fetchWithAuth(`/api/procurement/templates/${targetType}`);
         if (updated.ok) setMasterChecklistItems(await updated.json());
       }
     } catch (err) { console.error("Error adding template item:", err); }
@@ -260,7 +260,7 @@ export default function GSOAdminDashboard() {
 
   const handleDeleteMasterChecklistItem = async (templateId) => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/templates/${templateId}`, {
+      const res = await fetchWithAuth(`/api/procurement/templates/${templateId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -272,7 +272,7 @@ export default function GSOAdminDashboard() {
   const handleViewChecklist = async (booking) => {
     setActiveChecklistBooking(booking);
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/checklists/${booking.booking_id}/${booking.booking_type}`);
+      const res = await fetchWithAuth(`/api/procurement/checklists/${booking.booking_id}/${booking.booking_type}`);
       if (res.ok) {
         setActiveChecklistItems(await res.json());
         setShowActiveChecklistModal(true);
@@ -282,7 +282,7 @@ export default function GSOAdminDashboard() {
 
   const handleToggleChecklistItem = async (checkId, currentStatus) => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/procurement/checklists/${checkId}`, {
+      const res = await fetchWithAuth(`/api/procurement/checklists/${checkId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isChecked: !currentStatus, bookingId: activeChecklistBooking.booking_id })

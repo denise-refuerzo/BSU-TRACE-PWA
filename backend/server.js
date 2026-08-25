@@ -12,7 +12,15 @@ require('dotenv').config();
 // 0. SERVER INITIALIZATION & SETUP
 // ==========================================
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://bsu-trace.vercel.app',
+    /\.vercel\.app$/,            // Allows preview deployments
+    'http://localhost:5173',     // Vite local frontend
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
@@ -2419,7 +2427,7 @@ app.get('/api/admin/dashboard-metrics', async (req, res) => {
 // ==========================================
 // 15. ANALYTICS: PEAK DEMAND MICROSERVICE PROXY
 // ==========================================
-const PYTHON_MICROSERVICE_URL = 'http://localhost:8000'; 
+const PYTHON_MICROSERVICE_URL = process.env.PYTHON_MICROSERVICE_URL || 'http://localhost:8000';
 app.get('/api/analytics/peak-demand', requireAuth, async (req, res) => {
     try {
         const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/peak-demand`);
@@ -2485,8 +2493,8 @@ app.get('/api/analytics/system-health', requireAuth, async (req, res) => {
 // ==========================================
 // 16. SERVER EXECUTION & ENTRY POINT
 // ==========================================
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-  console.log(`🚀 Core backend subsystem running on port ${PORT}`);
-  initDatabaseListener();
+  console.log(`Server running on port ${PORT}`);
 });

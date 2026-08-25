@@ -15,10 +15,10 @@ export function useAdminDashboard() {
     const interval = setInterval(fetchDashboardMetrics, 30000);
     return () => clearInterval(interval);
   }, []);
-
+ 
   const fetchDashboardMetrics = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/admin/dashboard-metrics');
+      const res = await fetchWithAuth('/api/admin/dashboard-metrics');
       const payload = await res.json();
       if (res.ok) setData(payload);
     } catch (err) {

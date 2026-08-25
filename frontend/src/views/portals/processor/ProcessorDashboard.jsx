@@ -129,7 +129,7 @@ export default function ProcessorDashboard() {
     
     setIsAdHocProcessing(true);
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/processor/documents/ad-hoc', {
+      const res = await fetchWithAuth('/api/processor/documents/ad-hoc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -163,8 +163,8 @@ export default function ProcessorDashboard() {
     }
     
     const targetUrl = scanMode === 'time-in' 
-      ? 'http://localhost:5000/api/documents/scan-in' 
-      : 'http://localhost:5000/api/documents/scan-out';
+      ? '/api/documents/scan-in' 
+      : '/api/documents/scan-out';
 
     try {
       const res = await fetchWithAuth(targetUrl, {
@@ -190,7 +190,7 @@ export default function ProcessorDashboard() {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`, {
+      const res = await fetchWithAuth(`/api/profile/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,7 +216,7 @@ export default function ProcessorDashboard() {
       return minimalSwal.fire({ icon: 'warning', title: 'Mismatch', text: 'New passwords do not match.' });
     }
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}/password`, {
+      const res = await fetchWithAuth(`/api/profile/${userId}/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword })
@@ -237,7 +237,7 @@ export default function ProcessorDashboard() {
   const toggle2FA = async (checked) => {
     if (!checked) {
       try {
-        const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`, {
+        const res = await fetchWithAuth(`/api/profile/${userId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fullName: processorData.profileName, email: processorData.profileEmail, twoFaEnabled: false })
@@ -260,7 +260,7 @@ export default function ProcessorDashboard() {
         didOpen: () => { minimalSwal.showLoading(); }
       });
 
-      const requestRes = await fetchWithAuth(`http://localhost:5000/api/users/${userId}/request-profile-otp`, { method: 'POST' });
+      const requestRes = await fetchWithAuth(`/api/users/${userId}/request-profile-otp`, { method: 'POST' });
       if (!requestRes.ok) throw new Error('Failed to dispatch email.');
 
       const { value: otpCode } = await minimalSwal.fire({
@@ -273,7 +273,7 @@ export default function ProcessorDashboard() {
       });
 
       if (otpCode) {
-        const verifyRes = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}/verify-enable-2fa`, {
+        const verifyRes = await fetchWithAuth(`/api/profile/${userId}/verify-enable-2fa`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ otpCode })
@@ -507,7 +507,7 @@ export default function ProcessorDashboard() {
           isAdHocProcessing={isAdHocProcessing}
         />
       )}
-
+ 
       {showPassModal && (
         <ChangePasswordModal 
           setShowPassModal={setShowPassModal}

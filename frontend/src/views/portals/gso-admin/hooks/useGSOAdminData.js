@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth } from "../../../../api";
 
+
 export function useGSOAdminData() {
   const navigate = useNavigate();
   const userId = localStorage.getItem('userId');
@@ -51,7 +52,7 @@ export function useGSOAdminData() {
 
   const fetchGSOMeta = async () => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`);
+      const res = await fetchWithAuth(`/api/profile/${userId}`);
       const data = await res.json();
       if (res.ok) {
         setGsoOfficeName(data.office_name || 'General Services Office');
@@ -74,7 +75,7 @@ export function useGSOAdminData() {
   const fetchExpectedIncomingCount = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/documents/expected-count/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/documents/expected-count/${officeId}`);
       const data = await res.json();
       if (res.ok) setExpectedIncomingCount(data.count);
     } catch (err) { console.error("Expected incoming sync error:", err); }
@@ -83,10 +84,10 @@ export function useGSOAdminData() {
   const fetchGSOCombinedNotificationFeeds = async (officeId) => {
     if (!officeId) return;
     try {
-      const procRes = await fetchWithAuth(`http://localhost:5000/api/notifications/${userId}/2/${officeId}`);
+      const procRes = await fetchWithAuth(`/api/notifications/${userId}/2/${officeId}`);
       const procData = await procRes.json();
   
-      const signRes = await fetchWithAuth(`http://localhost:5000/api/notifications/${userId}/3/${officeId}`);
+      const signRes = await fetchWithAuth(`/api/notifications/${userId}/3/${officeId}`);
       const signData = await signRes.json();
   
       if (procRes.ok && signRes.ok) {
@@ -103,7 +104,7 @@ export function useGSOAdminData() {
   const fetchPipelineDocs = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/documents/pipeline/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/documents/pipeline/${officeId}`);
       const data = await res.json();
       if (res.ok) setPipelineDocs(data);
     } catch (err) { console.error("Pipeline sync error:", err); }
@@ -112,7 +113,7 @@ export function useGSOAdminData() {
   const fetchOfficeActionHistory = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/history/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/history/${officeId}`);
       const data = await res.json();
       if (res.ok) setActionHistory(data);
     } catch (err) { console.error("History log retrieval error:", err); }
@@ -120,7 +121,7 @@ export function useGSOAdminData() {
 
   const fetchWorkflowTemplates = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/process-types');
+      const res = await fetchWithAuth('/api/process-types');
       const data = await res.json();
       if (res.ok) setProcessTypes(data);
     } catch (err) { console.error(err); }
@@ -128,7 +129,7 @@ export function useGSOAdminData() {
 
   const fetchOfficesList = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/offices'); 
+      const res = await fetchWithAuth('/api/offices'); 
       const data = await res.json();
       if (res.ok) setOfficesList(data);
     } catch (err) { console.error("Error building office lookup:", err); }
@@ -136,10 +137,10 @@ export function useGSOAdminData() {
 
   const fetchProcurementData = async () => {
     try {
-      const resBookings = await fetchWithAuth('http://localhost:5000/api/procurement/reservations');
+      const resBookings = await fetchWithAuth('/api/procurement/reservations');
       if (resBookings.ok) setReservationsList(await resBookings.json());
       
-      const resLogistics = await fetchWithAuth('http://localhost:5000/api/procurement/logistics');
+      const resLogistics = await fetchWithAuth('/api/procurement/logistics');
       if (resLogistics.ok) setLogisticsList(await resLogistics.json());
     } catch (err) { console.error("Error fetching procurement data:", err); }
   };
@@ -147,10 +148,10 @@ export function useGSOAdminData() {
   const fetchOperationalAnalytics = async () => {
     setIsAnalyticsLoading(true);
     try {
-      const resBottlenecks = await fetchWithAuth('http://localhost:5000/api/analytics/bottlenecks');
+      const resBottlenecks = await fetchWithAuth('/api/analytics/bottlenecks');
       if (resBottlenecks.ok) setBottleneckData(await resBottlenecks.json());
       
-      const resPeak = await fetchWithAuth('http://localhost:5000/api/analytics/peak-demand');
+      const resPeak = await fetchWithAuth('/api/analytics/peak-demand');
       if (resPeak.ok) {
         const rawPeakData = await resPeak.json();
         const formattedPeakData = rawPeakData.map(item => ({
@@ -168,7 +169,7 @@ export function useGSOAdminData() {
 
   const fetchBlackouts = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/resources/blackouts');
+      const res = await fetchWithAuth('/api/resources/blackouts');
       const data = await res.json();
       if (res.ok) setAssetBlackouts(data);
     } catch (err) { console.error(err); }
@@ -176,7 +177,7 @@ export function useGSOAdminData() {
 
   const fetchMasterAssets = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/resources/assets');
+      const res = await fetchWithAuth('/api/resources/assets');
       const data = await res.json();
       if (res.ok) setAssetsList(data);
     } catch (err) { console.error("Error pulling master assets:", err); }
@@ -184,7 +185,7 @@ export function useGSOAdminData() {
 
   const fetchInventoryMetrics = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/resources/inventory');
+      const res = await fetchWithAuth('/api/resources/inventory');
       const data = await res.json();
       if (res.ok) setEquipmentInventory(data);
     } catch (err) { console.error(err); }
@@ -192,10 +193,10 @@ export function useGSOAdminData() {
 
   const fetchSystemAnalyticsData = async () => {
     try {
-      const routeRes = await fetchWithAuth('http://localhost:5000/api/analytics/route-performance');
+      const routeRes = await fetchWithAuth('/api/analytics/route-performance');
       if (routeRes.ok) setRoutePerf(await routeRes.json());
 
-      const healthRes = await fetchWithAuth('http://localhost:5000/api/analytics/system-health');
+      const healthRes = await fetchWithAuth('/api/analytics/system-health');
       if (healthRes.ok) setSystemHealth(await healthRes.json());
     } catch (err) { console.error("Error connecting to analytics engine:", err); }
   };
@@ -221,7 +222,7 @@ export function useGSOAdminData() {
     if (!userId || userId === 'undefined') return;
     const checkChatBadgeStatus = async () => {
       try {
-        const res = await fetchWithAuth('http://localhost:5000/api/chat/active-documents-directory');
+        const res = await fetchWithAuth('/api/chat/active-documents-directory');
         const data = await res.json();
         if (res.ok) setHasUnreadChats(data.some(d => d.hasAnyChat === true));
       } catch (err) { console.error(err); }

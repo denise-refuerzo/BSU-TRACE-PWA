@@ -95,7 +95,7 @@ export function useSigneeData() {
   const fetchLiveNotificationFeeds = async () => {
     if (!signeeOfficeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/notifications/${userId}/3/${signeeOfficeId}`);
+      const res = await fetchWithAuth(`/api/notifications/${userId}/3/${signeeOfficeId}`);
       const data = await res.json();
       if (res.ok) {
         setNotifications(data.map(n => ({
@@ -110,7 +110,7 @@ export function useSigneeData() {
 
   const fetchSigneeMeta = async () => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`);
+      const res = await fetchWithAuth(`/api/profile/${userId}`);
       const data = await res.json();
       if (res.ok) {
         setSigneeOfficeName(data.office_name || 'CICS Office');
@@ -131,7 +131,7 @@ export function useSigneeData() {
   const fetchPipelineDocs = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/documents/pipeline/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/documents/pipeline/${officeId}`);
       const data = await res.json();
       if (res.ok) {
         setPipelineDocs(data);
@@ -152,7 +152,7 @@ export function useSigneeData() {
   const fetchOfficeActionHistory = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/processor/history/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/history/${officeId}`);
       const data = await res.json();
       if (res.ok) setActionHistory(data);
     } catch (err) { console.error("History transaction log retrieval error:", err); }
@@ -160,7 +160,7 @@ export function useSigneeData() {
 
   const fetchWorkflowTemplates = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/process-types');
+      const res = await fetchWithAuth('/api/process-types');
       const data = await res.json();
       if (res.ok) setProcessTypes(data);
     } catch (err) { console.error(err); }
@@ -168,12 +168,12 @@ export function useSigneeData() {
 
   const fetchOfficesList = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/offices'); 
+      const res = await fetchWithAuth('/api/offices'); 
       const data = await res.json();
       if (res.ok) setOfficesList(data);
     } catch (err) { console.error("Error building office lookup:", err); }
   };
-
+ 
   // Action Handlers
   const handleLogout = () => {
     minimalSwal.fire({
@@ -194,7 +194,7 @@ export function useSigneeData() {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`, {
+      const res = await fetchWithAuth(`/api/profile/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullName: profileName, email: profileEmail, twoFaEnabled, twoFaCode: twoFaCode || null })
@@ -215,7 +215,7 @@ export function useSigneeData() {
       return minimalSwal.fire({ icon: 'warning', title: 'Mismatch', text: 'New passwords do not match.' });
     }
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}/password`, {
+      const res = await fetchWithAuth(`/api/profile/${userId}/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword })
@@ -238,7 +238,7 @@ export function useSigneeData() {
   const toggle2FA = async (checked) => {
     if (!checked) {
       try {
-        const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`, {
+        const res = await fetchWithAuth(`/api/profile/${userId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fullName: profileName, email: profileEmail, twoFaEnabled: false })
@@ -261,7 +261,7 @@ export function useSigneeData() {
         didOpen: () => { minimalSwal.showLoading(); }
       });
 
-      const requestRes = await fetchWithAuth(`http://localhost:5000/api/users/${userId}/request-profile-otp`, { method: 'POST' });
+      const requestRes = await fetchWithAuth(`/api/users/${userId}/request-profile-otp`, { method: 'POST' });
       if (!requestRes.ok) throw new Error('Failed to dispatch email.');
 
       const { value: otpCode } = await minimalSwal.fire({
@@ -274,7 +274,7 @@ export function useSigneeData() {
       });
 
       if (otpCode) {
-        const verifyRes = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}/verify-enable-2fa`, {
+        const verifyRes = await fetchWithAuth(`/api/profile/${userId}/verify-enable-2fa`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ otpCode })
@@ -318,7 +318,7 @@ export function useSigneeData() {
       if (result.isConfirmed) {
         setIsActionProcessing(true);
         try {
-          const res = await fetchWithAuth(`http://localhost:5000/api/signee/sign`, {
+          const res = await fetchWithAuth(`/api/signee/sign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ iniId: selectedDoc.ini_id, currentOfficeId: signeeOfficeId, signeeUserId: parseInt(userId) })
@@ -342,7 +342,7 @@ export function useSigneeData() {
     if (!returnReason.trim()) return;
     setIsActionProcessing(true);
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/signee/return`, {
+      const res = await fetchWithAuth(`/api/signee/return`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ iniId: selectedDoc.ini_id, currentOfficeId: signeeOfficeId, signeeUserId: parseInt(userId), reason: returnReason })
@@ -366,7 +366,7 @@ export function useSigneeData() {
     }
     setIsActionProcessing(true);
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/processor/documents/ad-hoc', {
+      const res = await fetchWithAuth('/api/processor/documents/ad-hoc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ iniId: selectedDoc.ini_id, targetOfficeId: parseInt(selectedAdHocOffice), currentOfficeId: signeeOfficeId, executorUserId: parseInt(userId) })

@@ -14,7 +14,7 @@ const minimalSwal = Swal.mixin({
   },
   buttonsStyling: false
 });
-
+ 
 export default function useOriginatorData() {
   const navigate = useNavigate();
   const notificationRef = useRef(null);
@@ -116,7 +116,7 @@ export default function useOriginatorData() {
   useEffect(() => {
     const fetchEDC = async () => {
       try {
-        const res = await fetchWithAuth('http://localhost:5000/api/analytics/edc');
+        const res = await fetchWithAuth('/api/analytics/edc');
         if (res.ok) {
           const data = await res.json();
           setEdcPredictions(data);
@@ -132,7 +132,7 @@ export default function useOriginatorData() {
 
     const checkChatBadgeStatus = async () => {
       try {
-        const res = await fetchWithAuth('http://localhost:5000/api/chat/active-documents-directory');
+        const res = await fetchWithAuth('/api/chat/active-documents-directory');
         const data = await res.json();
         if (res.ok) {
           const hasAnyActiveOngoingChat = data.some(d => d.hasAnyChat === true);
@@ -165,7 +165,7 @@ export default function useOriginatorData() {
   // -------------------------
   const fetchLiveNotificationFeeds = async () => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/notifications/${userId}/1/0`);
+      const res = await fetchWithAuth(`/api/notifications/${userId}/1/0`);
       const data = await res.json();
       if (res.ok) {
         const alertCollection = data.map(n => ({
@@ -182,7 +182,7 @@ export default function useOriginatorData() {
 
   const fetchUserProfile = async () => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`);
+      const res = await fetchWithAuth(`/api/profile/${userId}`);
       const data = await res.json();
       if (res.ok && data) {
         const loadedProfile = {
@@ -207,7 +207,7 @@ export default function useOriginatorData() {
 
   const fetchDashboardLedger = async () => {
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/documents/${userId}`);
+      const res = await fetchWithAuth(`/api/documents/${userId}`);
       const data = await res.json();
       if (res.ok) {
         setDocuments(data);
@@ -220,7 +220,7 @@ export default function useOriginatorData() {
 
   const fetchWorkflowTemplates = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/process-types');
+      const res = await fetchWithAuth('/api/process-types');
       const data = await res.json();
       if (res.ok) setProcessTypes(data);
     } catch (err) { console.error(err); }
@@ -245,7 +245,7 @@ export default function useOriginatorData() {
     }
     
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`, {
+      const res = await fetchWithAuth(`/api/profile/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profile)
@@ -262,7 +262,7 @@ export default function useOriginatorData() {
     e.preventDefault();
     if (passForm.newPassword !== passForm.confirmNew) return alert("New passwords mismatched.");
     try {
-      const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}/password`, {
+      const res = await fetchWithAuth(`/api/profile/${userId}/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(passForm)
@@ -308,7 +308,7 @@ export default function useOriginatorData() {
     }
   
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/documents', {
+      const res = await fetchWithAuth('/api/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -338,7 +338,7 @@ export default function useOriginatorData() {
   const toggleTwoFactorAuth = async (checked) => {
     if (!checked) {
       try {
-        const res = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}`, {
+        const res = await fetchWithAuth(`/api/profile/${userId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -366,7 +366,7 @@ export default function useOriginatorData() {
     });
 
     try {
-      const requestRes = await fetchWithAuth(`http://localhost:5000/api/users/${userId}/request-profile-otp`, { method: 'POST' });
+      const requestRes = await fetchWithAuth(`/api/users/${userId}/request-profile-otp`, { method: 'POST' });
       if (!requestRes.ok) throw new Error('Failed to dispatch email.');
       minimalSwal.close();
 
@@ -381,7 +381,7 @@ export default function useOriginatorData() {
       });
 
       if (otpCode) {
-        const verifyRes = await fetchWithAuth(`http://localhost:5000/api/profile/${userId}/verify-enable-2fa`, {
+        const verifyRes = await fetchWithAuth(`/api/profile/${userId}/verify-enable-2fa`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ otpCode })

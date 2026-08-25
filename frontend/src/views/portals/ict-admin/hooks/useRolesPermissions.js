@@ -16,7 +16,7 @@ export function useRolesPermissions() {
 
   // --- TRACKING METADATA CONTROLLER ---
   const [formMeta, setFormMeta] = useState({ currentProcessId: null, currentRouteId: null, is_active: true });
-
+ 
   // --- CAMPUS STRUCTURES FORM STATES ---
   const [newDeptName, setNewDeptName] = useState('');
   const [newOfficeName, setNewOfficeName] = useState('');
@@ -27,15 +27,15 @@ export function useRolesPermissions() {
 
   const fetchBaselineCatalogs = async () => {
     try {
-      const officeRes = await fetchWithAuth('http://localhost:5000/api/offices');
+      const officeRes = await fetchWithAuth('/api/offices');
       const officeData = await officeRes.json();
       if (officeRes.ok) setOffices(officeData);
 
-      const processRes = await fetchWithAuth('http://localhost:5000/api/process-types');
+      const processRes = await fetchWithAuth('/api/process-types');
       const processData = await processRes.json();
       if (processRes.ok) setProcessTypes(processData);
 
-      const summaryRes = await fetchWithAuth('http://localhost:5000/api/admin/infrastructure-summary');
+      const summaryRes = await fetchWithAuth('/api/admin/infrastructure-summary');
       const summaryData = await summaryRes.json();
       if (summaryRes.ok) setInfraSummary(summaryData);
     } catch (err) {
@@ -95,8 +95,8 @@ export function useRolesPermissions() {
 
     const isEditing = formMeta.currentProcessId !== null;
     const targetUrl = isEditing 
-      ? `http://localhost:5000/api/process-types/${formMeta.currentProcessId}`
-      : 'http://localhost:5000/api/process-types';
+      ? `/api/process-types/${formMeta.currentProcessId}`
+      : '/api/process-types';
     const targetMethod = isEditing ? 'PUT' : 'POST';
 
     Swal.fire({
@@ -140,7 +140,7 @@ export function useRolesPermissions() {
   const handleCreateDepartment = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetchWithAuth('http://localhost:5000/api/departments', {
+      const response = await fetchWithAuth('/api/departments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ departmentName: newDeptName })
@@ -159,7 +159,7 @@ export function useRolesPermissions() {
   const handleCreateOffice = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetchWithAuth('http://localhost:5000/api/offices', {
+      const response = await fetchWithAuth('/api/offices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ officeName: newOfficeName })

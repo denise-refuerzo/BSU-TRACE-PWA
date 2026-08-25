@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -41,7 +42,7 @@ export default function Login() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })  
@@ -79,7 +80,7 @@ export default function Login() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/login/verify-2fa', {
+      const response = await fetch(`${API_BASE_URL}/api/login/verify-2fa`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: tempUserId, otpCode: otpCode })
@@ -126,7 +127,7 @@ export default function Login() {
     e.preventDefault();  
     setForgotError('');  
     try {
-      const res = await fetch('http://localhost:5000/api/auth/forgot-password/identify', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password/identify`, {
         method: 'POST',  
         headers: { 'Content-Type': 'application/json' },  
         body: JSON.stringify({ username: forgotUsername })  
@@ -146,7 +147,7 @@ export default function Login() {
     e.preventDefault();  
     setForgotError('');  
     try {
-      const res = await fetch('http://localhost:5000/api/auth/forgot-password/verify-email', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password/verify-email`, {
         method: 'POST',  
         headers: { 'Content-Type': 'application/json' },  
         body: JSON.stringify({ username: forgotUsername, fullEmail: typedEmail })  
@@ -171,7 +172,7 @@ export default function Login() {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/forgot-password/reset', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password/reset`, {
         method: 'POST',  
         headers: { 'Content-Type': 'application/json' },  
         body: JSON.stringify({ username: forgotUsername, code: resetCode, newPassword })  
