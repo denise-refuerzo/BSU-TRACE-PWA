@@ -6,7 +6,6 @@ import OriginatorDashboard from './views/portals/originator/OriginatorDashboard'
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
 import SigneeDashboard from './views/portals/signee/SigneeDashboard';
 import GSOAdminDashboard from './views/portals/gso-admin/GSOAdminDashboard';
-import OperationalAnalytics from './views/portals/ict-admin/OperationalAnalytics';
 
 function App() {
   return (
@@ -14,7 +13,6 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/analytics" element={<OperationalAnalytics />} />
         <Route path="/gso-dashboard" element={<GSOAdminDashboard />} />
         <Route path="/dashboard" element={<OriginatorDashboard />} />
         <Route path="/processor/dashboard" element={<ProcessorDashboard />} />

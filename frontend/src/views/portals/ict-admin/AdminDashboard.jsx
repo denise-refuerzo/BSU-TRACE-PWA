@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { LogOut } from 'lucide-react';
 
@@ -13,6 +13,7 @@ import DashboardOverviewTab from './components/DashboardOverviewTab';
 import AccountManagementTab from './components/AccountManagementTab';
 import InteractiveVisualizerTab from './components/InteractiveVisualizerTab';
 import CampusInfrastructureTab from './components/CampusInfrastructureTab';
+import OperationalAnalytics from './components/OperationalAnalyticsTab';
 
 // --- MODALS ---
 import ManageAccountModal from './modals/ManageAccountModal';
@@ -30,11 +31,10 @@ const minimalSwal = Swal.mixin({
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
   const adminName = localStorage.getItem('user') || 'Admin User';
   
   // Master State to control which portal view is active
-  const [activeSidebar, setActiveSidebar] = useState('dashboard'); // 'dashboard' | 'accounts' | 'matrix'
+  const [activeSidebar, setActiveSidebar] = useState('dashboard'); // 'dashboard' | 'accounts' | 'matrix' | 'analytics'
 
   // Initialize Custom Hooks
   const { data: dashboardData } = useAdminDashboard();
@@ -46,9 +46,11 @@ export default function AdminDashboard() {
     switch (activeSidebar) {
       case 'accounts': return "Account Management & Access Controller";
       case 'matrix': return "Roles & Permissions Matrix Dashboard Node";
+      case 'analytics': return "Operational & Service Analytics Engine";
       default: return "Infrastructure Overview Dashboard Controller";
     }
   };
+
   const handleLogout = () => {
     minimalSwal.fire({
       title: 'Sign Out?',
@@ -69,12 +71,16 @@ export default function AdminDashboard() {
       {/* Sidebar Navigation Panel */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 shrink-0">
         <div>
-          <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
-            <div className="bg-red-700 p-2 rounded-lg text-white text-xl">🎓</div>
+        <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
+            <img 
+              src="/bsu-logo.png" 
+              alt="Batangas State University Logo" 
+              className="h-15 w-auto object-contain drop-shadow-sm" 
+            />
             <div>
-              <h1 className="font-bold text-white text-sm leading-none">BSU Portal</h1>
-              <span className="text-[10px] text-neutral-400 uppercase tracking-widest">Admin Console</span>
-            </div> 
+              <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
+              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">ICT Admin</span>
+            </div>
           </div>
           <nav className="space-y-1 text-sm">
             <button 
@@ -82,38 +88,37 @@ export default function AdminDashboard() {
               onClick={() => setActiveSidebar('dashboard')} 
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'dashboard' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
             >
-              📊 Dashboard
+              Dashboard
             </button>
             <button 
               type="button" 
               onClick={() => setActiveSidebar('accounts')} 
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
             >
-              👥 Accounts
+              Accounts
             </button>
             <button 
               type="button" 
               onClick={() => setActiveSidebar('matrix')} 
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'matrix' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
             >
-              🛡️ Roles & Matrix
+              Roles & Matrix
             </button>
             
-            {/* Operational Analytics remains standalone and navigates to its distinct route */}
             <button 
               type="button" 
-              onClick={() => navigate('/admin/analytics')} 
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${ location.pathname === '/admin/analytics' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white' }`}
+              onClick={() => setActiveSidebar('analytics')} 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'analytics' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
             >
-              📈 Operational Analytics 
+              Operational Analytics 
             </button>
           </nav>
         </div>
         <div className="border-t border-neutral-700 pt-4">
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
-              <LogOut size={16} /> Sign Out
-            </button>
-          </div>
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
+            <LogOut size={16} /> Sign Out
+          </button>
+        </div>
       </div>
 
       {/* Main Panel Content Scroll Area */}
@@ -153,10 +158,12 @@ export default function AdminDashboard() {
               {matrixProps.activeTab === 'infrastructure' && <CampusInfrastructureTab {...matrixProps} />}
             </div>
           )}
+
+          {activeSidebar === 'analytics' && <OperationalAnalytics />}
         </main>
       </div>
 
-      {/* GLOBAL MODALS (Rendered outside normal document flow) */}
+      {/* GLOBAL MODALS */}
       <ManageAccountModal 
         selectedUser={accountProps.selectedUser}
         setSelectedUser={accountProps.setSelectedUser}
