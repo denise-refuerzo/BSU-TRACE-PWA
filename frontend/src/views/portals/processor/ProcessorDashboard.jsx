@@ -17,10 +17,11 @@ import ScannerModal from "./modals/ScannerModal";
 import DocumentDetailsModal from "./modals/DocumentDetailsModal";
 import PipelineVerificationModal from "./modals/PipelineVerificationModal";
 
-// --- SHARED COMPONENTS (Assuming these paths based on your file tree) ---
+// --- SHARED COMPONENTS  ---
 import UserProfileTab from "../../shared/components/UserProfileTab";
 import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
 import OfficeChatHub from "../../shared/OfficeChatHub";
+import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -90,6 +91,7 @@ export default function ProcessorDashboard() {
       confirmButtonText: 'Yes, Sign Out'
     }).then((result) => {
       if (result.isConfirmed) {
+        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
         localStorage.clear();
         navigate('/login');
       }
@@ -316,6 +318,8 @@ export default function ProcessorDashboard() {
 
   return (
     <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden">
+      
+      <PWAInstallBanner />
       
       {/* SIDEBAR NAVIGATION */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">

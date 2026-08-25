@@ -13,6 +13,7 @@ import OriginatorResourcesTab from './components/OriginatorResourcesTab';
 import UserProfileTab from '../../shared/components/UserProfileTab';
 import OfficeChatHub from '../../shared/OfficeChatHub';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
+import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 
 // Modals
 import DocumentSubmissionModal from './modals/DocumentSubmissionModal';
@@ -44,6 +45,8 @@ export default function OriginatorDashboard() {
   return (
     <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden">
       
+      <PWAInstallBanner />
+
       {/* SIDEBAR NAVIGATION */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0">
         <div>
@@ -79,7 +82,7 @@ export default function OriginatorDashboard() {
           </nav>
         </div>
         <div className="border-t border-neutral-700 pt-4">
-          <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-400 hover:bg-red-950/40 hover:text-red-400 font-semibold rounded-lg transition-colors">
+          <button onClick={() => { sessionStorage.removeItem('bsu_pwa_banner_dismissed'); localStorage.clear(); navigate('/login'); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-400 hover:bg-red-950/40 hover:text-red-400 font-semibold rounded-lg transition-colors">
           <LogOut size={16} /> Sign Out
           </button>
         </div>

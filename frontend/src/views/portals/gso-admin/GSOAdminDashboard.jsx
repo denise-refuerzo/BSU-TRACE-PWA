@@ -19,6 +19,7 @@ import OperationalAnalyticsTab from './components/OperationalAnalyticsTab';
 // Shared Components
 import UserProfileTab from '../../shared/components/UserProfileTab';
 import OfficeChatHub from '../../shared/OfficeChatHub';
+import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 
 // Modals
 import QRScannerModal from './modals/QRScannerModal';
@@ -420,6 +421,7 @@ export default function GSOAdminDashboard() {
       confirmButtonText: 'Yes, Sign Out'
     }).then((result) => {
       if (result.isConfirmed) {
+        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
         localStorage.clear();
         navigate('/login');
       }
@@ -519,6 +521,9 @@ const handleGenerateAuditReport = () => {
 
   return (
     <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden">
+
+      <PWAInstallBanner />
+
       {/* SIDEBAR */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">
         <div>

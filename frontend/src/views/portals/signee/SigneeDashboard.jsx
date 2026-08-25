@@ -14,6 +14,8 @@ import UserProfileTab from '../../shared/components/UserProfileTab';
 import DocumentDetailsModal from './modals/DocumentDetailsModal';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 
+import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+
 export default function SigneeDashboard() {
   // 1. Initialize all state and logic from our custom hook
   const signeeData = useSigneeData();
@@ -42,6 +44,8 @@ export default function SigneeDashboard() {
 
   return (
     <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden">
+      
+      <PWAInstallBanner />
       
       {/* 2. Sidebar Navigation */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">

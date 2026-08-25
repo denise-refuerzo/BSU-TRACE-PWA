@@ -18,6 +18,9 @@ import OperationalAnalytics from './components/OperationalAnalyticsTab';
 // --- MODALS ---
 import ManageAccountModal from './modals/ManageAccountModal';
 
+//--shared component
+import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+
 const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
@@ -60,6 +63,7 @@ export default function AdminDashboard() {
       confirmButtonText: 'Yes, Sign Out'
     }).then((result) => {
       if (result.isConfirmed) {
+        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
         localStorage.clear();
         navigate('/login');
       }
@@ -68,6 +72,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex h-screen w-screen bg-[#FDFBF9] overflow-hidden text-neutral-800 font-sans">
+      
+      <PWAInstallBanner />
+
       {/* Sidebar Navigation Panel */}
       <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 shrink-0">
         <div>
