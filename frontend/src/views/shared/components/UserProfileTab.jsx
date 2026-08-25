@@ -1,5 +1,6 @@
 import React from 'react';
-import { Camera, Building, User, ShieldCheck, Landmark } from 'lucide-react';
+import { Camera, Building, User, ShieldCheck, Landmark, Download, CheckCircle2 } from 'lucide-react';
+import { usePWA } from '../context/PWAContext';
 
 export default function UserProfileTab({
   profileName,
@@ -13,6 +14,8 @@ export default function UserProfileTab({
   handleUpdateProfile,
   setShowPassModal
 }) {
+  const { isInstallable, isInstalled, installApp } = usePWA();
+
   return (
     <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 text-left animate-in fade-in duration-200">
       {/* Header Profile Banner */}
@@ -92,6 +95,38 @@ export default function UserProfileTab({
       </div>
 
       <div className="space-y-6">
+        {/* Application Access & PWA Installation */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-neutral-100 pb-3">
+            <Download size={16} className="text-red-800" />
+            <h4 className="text-xs uppercase font-black text-neutral-900 tracking-wider">Application Access</h4>
+          </div>
+
+          {isInstalled ? (
+            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-green-50 border border-green-200 text-green-800 text-xs font-bold">
+              <CheckCircle2 size={16} className="text-green-600 flex-shrink-0" />
+              <span>BSU-Trace is installed on this device.</span>
+            </div>
+          ) : isInstallable ? (
+            <div className="space-y-3">
+              <p className="text-xs text-neutral-500 leading-relaxed font-medium">
+                Install BSU-Trace as a standalone desktop/mobile application for quick launch and offline access.
+              </p>
+              <button
+                type="button"
+                onClick={installApp}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-800 hover:bg-red-900 text-white font-bold text-xs rounded-xl uppercase tracking-wide transition-all shadow-sm"
+              >
+                <Download size={14} /> Install BSU-Trace App
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 text-neutral-400 text-xs font-medium">
+              Application installation is already complete or not supported in this browser mode.
+            </div>
+          )}
+        </div>
+
         {/* Institutional Data Panel */}
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-2 border-b border-neutral-100 pb-3 mb-4">
@@ -109,6 +144,7 @@ export default function UserProfileTab({
             </div>
           </div>
         </div>
+
         <div className="bg-red-50/40 border border-red-100 rounded-2xl p-4 text-[11px] leading-relaxed text-neutral-500 font-medium">
           ℹ️ <span className="font-bold text-neutral-800">Note:</span> Maintaining institutional profile bindings and role configurations falls under the jurisdiction of the University Central Registry Database console. Contact <span className="text-red-800 font-bold hover:underline">Campus IT Support</span> for configuration adjustments.
         </div>

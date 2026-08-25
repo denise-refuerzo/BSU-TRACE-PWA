@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
-  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, MessageSquare 
+  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, MessageSquare, Menu, X 
 } from 'lucide-react';
 import { fetchWithAuth } from '../../../api';
 
@@ -19,6 +19,7 @@ import OperationalAnalyticsTab from './components/OperationalAnalyticsTab';
 // Shared Components
 import UserProfileTab from '../../shared/components/UserProfileTab';
 import OfficeChatHub from '../../shared/OfficeChatHub';
+import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 
 // Modals
 import QRScannerModal from './modals/QRScannerModal';
@@ -46,7 +47,9 @@ const minimalSwal = Swal.mixin({
 export default function GSOAdminDashboard() {
   const navigate = useNavigate();
   const notificationRef = useRef(null);
+  
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
   // Initialize Custom Hook Data
@@ -61,7 +64,6 @@ export default function GSOAdminDashboard() {
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
 
-  // Tab Sync Listener
   useEffect(() => {
     if (activeTab === 'analytics') {
       fetchOperationalAnalytics();
@@ -75,7 +77,6 @@ export default function GSOAdminDashboard() {
     }
   }, [activeTab]);
 
-  // --- UI STATES ---
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All'); 
   const [historyFilter, setHistoryFilter] = useState('All');
@@ -97,7 +98,6 @@ export default function GSOAdminDashboard() {
   const [simulatedQrInput, setSimulatedQrPayload] = useState('');
   const [showPassModal, setShowPassModal] = useState(false);
 
-  // Resource States
   const todayObj = new Date();
   const todayString = todayObj.toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
   const [showAddAssetModal, setShowAddAssetModal] = useState(false);
@@ -113,7 +113,6 @@ export default function GSOAdminDashboard() {
   const [blackoutForm, setBlackoutForm] = useState({ asd_id: '', start_time: '', end_time: '', reason: '' });
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
 
-  // Procurement States
   const [showChecklistMakerModal, setShowChecklistMakerModal] = useState(false);
   const [activeChecklistTab, setActiveChecklistTab] = useState('Vehicle');
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -141,12 +140,15 @@ export default function GSOAdminDashboard() {
   const [masterChecklistItems, setMasterChecklistItems] = useState([]);
   const [newChecklistName, setNewChecklistName] = useState('');
 
-  // Password Update States
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // --- DERIVED DATA ---
+  const handleTabSelect = (tab) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false);
+  };
+
   const pendingDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'pending' && d.time_in !== null && !d.time_out);
   const archivedDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'action required');
   const completedDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'signed' || d.status?.toLowerCase() === 'completed' || d.time_out !== null);
@@ -173,7 +175,6 @@ export default function GSOAdminDashboard() {
   const currentHistoryPageRows = filteredHistoryLogs.slice((historyPage - 1) * itemsPerPage, historyPage * itemsPerPage);
   const totalHistoryTabPages = Math.ceil(filteredHistoryLogs.length / itemsPerPage);
 
-  // Procurement Processing
   const processProcurementData = (type, dataArray, searchKey, filterKey, pageKey) => {
     let filtered = type !== 'Logistics' ? dataArray.filter(item => item.booking_type === type) : dataArray;
     if (procSearch[searchKey]) {
@@ -196,7 +197,6 @@ export default function GSOAdminDashboard() {
   const gymData = processProcurementData('Gymnasium', reservationsList, 'gym', 'gym', 'gym');
   const logData = processProcurementData('Logistics', logisticsList, 'logistics', 'logistics', 'logistics');
 
-  // Analytics Processing
   const processedBottleneckData = [...(bottleneckData || [])]
     .filter(d => (d.office_name || '').toLowerCase().includes((bottleneckSearch || '').toLowerCase()))
     .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
@@ -224,7 +224,6 @@ export default function GSOAdminDashboard() {
   const isInVerification = selectedDoc?.status?.toLowerCase() === 'in verification' || ((selectedDoc?.current_step_is_adhoc || selectedDoc?.is_adhoc) && selectedDoc?.current_office !== gsoOfficeName);
   const isActionAltered = selectedDoc && (selectedDoc.status?.toLowerCase() === 'signed' || selectedDoc.status?.toLowerCase() === 'completed' || selectedDoc.status?.toLowerCase() === 'action required' || selectedDoc.time_out);
 
-  // --- MASTER CHECKLIST HANDLERS ---
   useEffect(() => {
     if (showChecklistMakerModal) {
       const fetchTemplates = async () => {
@@ -270,7 +269,6 @@ export default function GSOAdminDashboard() {
     } catch (err) { console.error("Error deleting template item:", err); }
   };
 
-  // --- BOOKING CHECKLIST HANDLERS ---
   const handleViewChecklist = async (booking) => {
     setActiveChecklistBooking(booking);
     try {
@@ -298,7 +296,6 @@ export default function GSOAdminDashboard() {
     } catch (err) { console.error("Error updating checklist:", err); }
   };
 
-  // --- PDF EXPORT GENERATOR ---
   const handleGeneratePDF = () => {
     let dataToPrint = [];
     if (printTargetTab === 'Logistics History') {
@@ -402,7 +399,6 @@ export default function GSOAdminDashboard() {
     setTimeout(() => { printWindow.print(); }, 250);
   };
 
-  // --- GENERAL EVENT HANDLERS ---
   useEffect(() => {
     function handleClickOutside(event) {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) setShowNotifications(false);
@@ -420,6 +416,7 @@ export default function GSOAdminDashboard() {
       confirmButtonText: 'Yes, Sign Out'
     }).then((result) => {
       if (result.isConfirmed) {
+        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
         localStorage.clear();
         navigate('/login');
       }
@@ -448,108 +445,126 @@ export default function GSOAdminDashboard() {
     else return `${Math.round(elapsed / 86400000)} days ago`;   
   };
 
-  // --- AUDIT REPORT GENERATOR ---
-const handleGenerateAuditReport = () => {
-  const printWindow = window.open('', '_blank');
-  
-  // Filter peak demand data based on selected start and end dates
-  const filteredDemand = (peakDemandData || []).filter(d => {
-    const dDate = d.date;
-    return (!auditStartDate || dDate >= auditStartDate) && (!auditEndDate || dDate <= auditEndDate);
-  });
+  const handleGenerateAuditReport = () => {
+    const printWindow = window.open('', '_blank');
+    
+    const filteredDemand = (peakDemandData || []).filter(d => {
+      const dDate = d.date;
+      return (!auditStartDate || dDate >= auditStartDate) && (!auditEndDate || dDate <= auditEndDate);
+    });
 
-  const htmlContent = `
-    <html>
-      <head>
-        <title>Full Operational Audit Report</title>
-        <style>
-          body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #333; }
-          .report-header { border-bottom: 2px solid #991b1b; padding-bottom: 20px; margin-bottom: 30px; }
-          .section { margin-bottom: 40px; }
-          h2 { color: #991b1b; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
-          th { background: #f9fafb; padding: 10px; border: 1px solid #ddd; text-align: left; }
-          td { padding: 8px; border: 1px solid #ddd; }
-        </style>
-      </head>
-      <body>
-        <div class="report-header">
-          <h1>BSU GSO Operational Audit</h1>
-          <p>Generated on: ${new Date().toLocaleString()}</p>
-          <p>Range: ${auditStartDate || 'Start'} to ${auditEndDate || 'Present'}</p>
-        </div>
+    const htmlContent = `
+      <html>
+        <head>
+          <title>Full Operational Audit Report</title>
+          <style>
+            body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #333; }
+            .report-header { border-bottom: 2px solid #991b1b; padding-bottom: 20px; margin-bottom: 30px; }
+            .section { margin-bottom: 40px; }
+            h2 { color: #991b1b; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+            th { background: #f9fafb; padding: 10px; border: 1px solid #ddd; text-align: left; }
+            td { padding: 8px; border: 1px solid #ddd; }
+          </style>
+        </head>
+        <body>
+          <div class="report-header">
+            <h1>BSU GSO Operational Audit</h1>
+            <p>Generated on: ${new Date().toLocaleString()}</p>
+            <p>Range: ${auditStartDate || 'Start'} to ${auditEndDate || 'Present'}</p>
+          </div>
 
-        <div class="section">
-          <h2>1. Bottleneck Analytics</h2>
-          <table>
-            <thead><tr><th>Office Name</th><th>Dwell Time (Hours)</th></tr></thead>
-            <tbody>
-              ${(bottleneckData || []).map(b => `<tr><td>${b.office_name}</td><td>${Number(b.dwell_time_hours || 0).toFixed(2)}h</td></tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
+          <div class="section">
+            <h2>1. Bottleneck Analytics</h2>
+            <table>
+              <thead><tr><th>Office Name</th><th>Dwell Time (Hours)</th></tr></thead>
+              <tbody>
+                ${(bottleneckData || []).map(b => `<tr><td>${b.office_name}</td><td>${Number(b.dwell_time_hours || 0).toFixed(2)}h</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
 
-        <div class="section">
-          <h2>2. Equipment Inventory Status</h2>
-          <table>
-            <thead><tr><th>Asset</th><th>Total</th><th>Available</th></tr></thead>
-            <tbody>
-              ${(equipmentInventory || []).map(i => `<tr><td>${i.asset_name}</td><td>${i.capacity}</td><td>${i.current_stock}</td></tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
+          <div class="section">
+            <h2>2. Equipment Inventory Status</h2>
+            <table>
+              <thead><tr><th>Asset</th><th>Total</th><th>Available</th></tr></thead>
+              <tbody>
+                ${(equipmentInventory || []).map(i => `<tr><td>${i.asset_name}</td><td>${i.capacity}</td><td>${i.current_stock}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
 
-        <div class="section">
-          <h2>3. Demand Forecast Data</h2>
-          <table>
-            <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
-            <tbody>
-              ${filteredDemand.map(d => `<tr><td>${d.date}</td><td>${d.vehicle_demand || 0}</td><td>${d.facility_demand || 0}</td></tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </body>
-    </html>
-  `;
+          <div class="section">
+            <h2>3. Demand Forecast Data</h2>
+            <table>
+              <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
+              <tbody>
+                ${filteredDemand.map(d => `<tr><td>${d.date}</td><td>${d.vehicle_demand || 0}</td><td>${d.facility_demand || 0}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </body>
+      </html>
+    `;
 
-  printWindow.document.write(htmlContent);
-  printWindow.document.close();
-  setTimeout(() => printWindow.print(), 500);
-};
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 500);
+  };
 
   return (
-    <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden">
+    <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+
+      <PWAInstallBanner />
+
+      {/* Mobile Backdrop */}
+      {isSidebarOpen && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)} 
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden transition-opacity"
+        />
+      )}
+
       {/* SIDEBAR */}
-      <div className="w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div>
-          <div className="flex items-center gap-3 border-b border-neutral-700 pb-4 mb-6">
-            <img 
-              src="/bsu-logo.png" 
-              alt="Batangas State University Logo" 
-              className="h-15 w-auto object-contain drop-shadow-sm" 
-            />
-            <div>
-              <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
-              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">GSO Office</span>
+          <div className="flex items-center justify-between border-b border-neutral-700 pb-4 mb-6">
+            <div className="flex items-center gap-3">
+              <img 
+                src="/bsu-logo.png" 
+                alt="Batangas State University Logo" 
+                className="h-10 w-auto object-contain drop-shadow-sm" 
+              />
+              <div>
+                <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
+                <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">GSO Office</span>
+              </div>
             </div>
+            <button 
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden"
+            >
+              <X size={20} />
+            </button>
           </div>
+          
           <nav className="space-y-1 text-sm">
-            <button onClick={() => { setActiveTab('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+            <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
-            <button onClick={() => setActiveTab('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'resources' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'resources' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <Archive size={18} /> School Resources
             </button>
-            <button onClick={() => setActiveTab('procurement')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'procurement' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+            <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'procurement' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <ShoppingCart size={18} /> Procurement
             </button>
-            <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+            <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <BarChart3 size={18} /> Operational Analytics
             </button>
-            <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'history' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+            <button onClick={() => handleTabSelect('history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'history' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <History size={18} /> History
             </button>
-            <button onClick={() => { setActiveTab('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'messages' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+            <button onClick={() => { handleTabSelect('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'messages' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <div className="flex items-center gap-3"><MessageSquare size={18} /> Chat Inbox</div>
               {hasUnreadChats && <span className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></span>}
             </button>
@@ -560,19 +575,27 @@ const handleGenerateAuditReport = () => {
             <LogOut size={16} /> Sign Out
           </button>
         </div>
-      </div>
+      </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* HEADER */}
-        <header className="h-16 border-b border-neutral-200 bg-white px-8 flex items-center justify-end shadow-sm flex-shrink-0 relative">
-          <div className="flex items-center gap-4 text-neutral-600">
+        <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+            aria-label="Open menu"
+          >
+            <Menu size={22} />
+          </button>
+
+          <div className="flex items-center gap-2 md:gap-4 text-neutral-600 ml-auto">
             <div className="relative" ref={notificationRef}>
               <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 relative transition-colors">
                 <Bell size={20} />
                 {notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></span>}
               </button>
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white border border-neutral-200 rounded-2xl shadow-xl z-50 overflow-hidden text-left">
+                <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white border border-neutral-200 rounded-2xl shadow-xl z-50 overflow-hidden text-left">
                   <div className="p-4 border-b border-neutral-100 bg-[#FDFBF9] font-bold text-xs uppercase text-neutral-900 tracking-wide">Notifications</div>
                   <div className="max-h-64 overflow-y-auto divide-y divide-neutral-100">
                     {notifications.map(n => (
@@ -592,15 +615,15 @@ const handleGenerateAuditReport = () => {
                 </div>
               )}
             </div>
-            <button onClick={() => setActiveTab('profile')} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 transition-colors border">
+            <button onClick={() => setActiveTab('profile')} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 transition-colors border text-xs font-bold text-neutral-800">
               <User size={16} />
-              <span className="text-xs font-bold text-neutral-800">GSO Admin Portal</span>
+              <span className="hidden sm:inline">GSO Admin Portal</span>
             </button>
           </div>
         </header>
 
         {/* MAIN WORKSPACE TABS */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'dashboard' && (
             <GSODashboardTab
               userName={userName}
@@ -692,9 +715,9 @@ const handleGenerateAuditReport = () => {
         {/* FLOATING QR SCANNER BUTTON */}
         <button 
           onClick={() => { setScanMode('time-in'); setShowScannerModal(true); }}
-          className="absolute bottom-8 right-8 w-14 h-14 bg-red-800 hover:bg-red-900 text-white rounded-2xl shadow-xl flex items-center justify-center transition-transform hover:scale-105 z-40"
+          className="absolute bottom-6 right-6 md:bottom-8 md:right-8 w-12 h-12 md:w-14 md:h-14 bg-red-800 hover:bg-red-900 text-white rounded-2xl shadow-xl flex items-center justify-center transition-transform hover:scale-105 z-40"
         >
-          <QrCode size={24} />
+          <QrCode size={22} />
         </button>
       </div>
 

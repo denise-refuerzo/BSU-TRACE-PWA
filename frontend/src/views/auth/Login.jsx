@@ -101,6 +101,7 @@ export default function Login() {
 
   // --- FINAL ROUTING ---
   const completeLogin = (data) => {
+    sessionStorage.removeItem('bsu_pwa_banner_dismissed');
     localStorage.setItem('token', data.token);  
     localStorage.setItem('user', data.fullName);  
     const cleanUserId = String(data.userId || data.u_id).split(':')[0].trim();  

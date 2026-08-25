@@ -184,6 +184,7 @@ export function useSigneeData() {
       confirmButtonText: 'Yes, Sign Out'
     }).then((result) => {
       if (result.isConfirmed) {
+        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
         localStorage.clear();
         navigate('/login');
       }
