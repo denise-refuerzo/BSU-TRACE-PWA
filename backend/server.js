@@ -1333,6 +1333,65 @@ app.get('/api/processor/documents/expected-count/:officeId', requireAuth, async 
     res.status(500).json({ error: "Failed to compile incoming documents KPI." });
   }
 });
+// ==========================================
+// 7.5 FETCH INCOMING DOCUMENTS LIST ENDPOINT
+// ==========================================
+app.get('/api/processor/documents/expected-list/:officeId', requireAuth, async (req, res) => {
+  const { officeId } = req.params;
+  try {
+    const query = `
+      SELECT DISTINCT ON (idoc.ini_id)
+        idoc.ini_id,
+        idoc.title,
+        idoc.qr_code,
+        idoc.created_at,
+        pt.process_name,
+        creator.full_name AS requestor_name,
+        CASE 
+          WHEN COALESCE(pdoc_active.current_office_id, r.stop_1) = 999 THEN (
+            SELECT off_dyn.office_name 
+            FROM public.offices off_dyn 
+            WHERE off_dyn.o_id = CASE creator.d_id
+              WHEN 1 THEN 11
+              WHEN 2 THEN 12
+              WHEN 3 THEN 13
+              WHEN 4 THEN 14
+              WHEN 5 THEN 14
+              WHEN 6 THEN 24
+              ELSE 11
+            END
+          )
+          ELSE COALESCE(
+            curr_o.office_name, 
+            (SELECT off_fallback.office_name FROM public.offices off_fallback WHERE off_fallback.o_id = r.stop_1),
+            'Origin Station'
+          )
+        END AS current_office
+      FROM public.initial_document idoc
+      JOIN public.process_type pt ON idoc.p_id = pt.p_id
+      JOIN public.route r ON pt.r_id = r.r_id
+      JOIN public."User" creator ON idoc.u_id = creator.u_id
+      LEFT JOIN public.processed_document pdoc_active 
+        ON idoc.ini_id = pdoc_active.ini_id AND pdoc_active.time_out IS NULL
+      LEFT JOIN public.offices curr_o 
+        ON pdoc_active.current_office_id = curr_o.o_id
+      WHERE $1 IN (r.stop_1, r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7)
+        AND COALESCE(pdoc_active.s_id, 1) NOT IN (4, 5)
+        AND NOT EXISTS (
+          SELECT 1 FROM public.processed_document pd_past 
+          WHERE pd_past.ini_id = idoc.ini_id 
+            AND pd_past.current_office_id = $1 
+            AND pd_past.time_out IS NOT NULL
+        )
+      ORDER BY idoc.ini_id DESC;
+    `;
+    const result = await pool.query(query, [parseInt(officeId)]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Expected incoming documents list error:", err);
+    res.status(500).json({ error: "Failed to pull expected documents list." });
+  }
+});
 
 // ==========================================
 // 8. SIGNEE: APPROVE & SIGN ENDPOINT
