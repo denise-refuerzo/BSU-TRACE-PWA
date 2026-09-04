@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { User, Building, Car, Landmark, Archive, Search, Filter, Download, FileText, Eye, Folder, Inbox, Clock, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function GSODashboardTab({
@@ -21,8 +21,20 @@ export default function GSODashboardTab({
   currentDashDocs,
   totalDashPages,
   handleOpenDetails,
-  setActiveTab
+  setActiveTab,
+  handleNavigateToProcurement,
+  handleOpenIncomingModal
 }) {
+  const documentTableRef = useRef(null);
+
+  const handleKpiCardClick = (statusFilter) => {
+    setFilterStatus(statusFilter);
+    setDashboardPage(1);
+    if (documentTableRef.current) {
+      documentTableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
       
@@ -63,22 +75,36 @@ export default function GSODashboardTab({
         {/* KPI Metrics List */}
         <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
-            { label: 'Total Docs', count: pipelineDocs.length, icon: <Folder size={20} strokeWidth={2.5} />, color: 'text-gray-900', border: 'border-t-gray-500', bg: 'bg-gray-50', iconColor: 'text-gray-600' },
-            { label: 'Incoming', count: expectedIncomingCount, icon: <Inbox size={20} strokeWidth={2.5} />, color: 'text-blue-600', border: 'border-t-blue-500', bg: 'bg-blue-50', iconColor: 'text-blue-600' },
-            { label: 'Pending', count: pendingDocsList.length, icon: <Clock size={20} strokeWidth={2.5} />, color: 'text-amber-500', border: 'border-t-amber-500', bg: 'bg-amber-50', iconColor: 'text-amber-500' },
-            { label: 'Action Reqd', count: archivedDocsList.length, icon: <AlertTriangle size={20} strokeWidth={2.5} />, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]', bg: 'bg-red-50', iconColor: 'text-[#D32F2F]' },
-            { label: 'Completed', count: completedDocsList.length, icon: <CheckCircle size={20} strokeWidth={2.5} />, color: 'text-emerald-600', border: 'border-t-emerald-500', bg: 'bg-emerald-50', iconColor: 'text-emerald-600' }
-          ].map((kpi, idx) => (
-            <div key={idx} className={`bg-white border-t-4 ${kpi.border} border-x border-b border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all transform hover:-translate-y-0.5`}>
-              <div className="flex flex-col items-center">
-                <div className={`w-10 h-10 ${kpi.bg} ${kpi.iconColor} rounded-xl flex items-center justify-center mb-3 shadow-sm`}>
-                  {kpi.icon}
+            { label: 'Total Docs', count: pipelineDocs.length, icon: <Folder size={20} strokeWidth={2.5} />, color: 'text-gray-900', border: 'border-t-gray-500', bg: 'bg-gray-50', iconColor: 'text-gray-600', filterTarget: 'All' },
+            { label: 'Incoming', count: expectedIncomingCount, icon: <Inbox size={20} strokeWidth={2.5} />, color: 'text-blue-600', border: 'border-t-blue-500', bg: 'bg-blue-50', iconColor: 'text-blue-600', isIncoming: true },            
+            { label: 'Pending', count: pendingDocsList.length, icon: <Clock size={20} strokeWidth={2.5} />, color: 'text-amber-500', border: 'border-t-amber-500', bg: 'bg-amber-50', iconColor: 'text-amber-500', filterTarget: 'Pending' },
+            { label: 'Action Reqd', count: archivedDocsList.length, icon: <AlertTriangle size={20} strokeWidth={2.5} />, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]', bg: 'bg-red-50', iconColor: 'text-[#D32F2F]', filterTarget: 'Archived' },
+            { label: 'Completed', count: completedDocsList.length, icon: <CheckCircle size={20} strokeWidth={2.5} />, color: 'text-emerald-600', border: 'border-t-emerald-500', bg: 'bg-emerald-50', iconColor: 'text-emerald-600', filterTarget: 'Completed' }
+          ].map((kpi, idx) => {
+            const isClickable = kpi.filterTarget !== null;
+
+            return (
+              <div 
+                key={idx} 
+                onClick={() => {
+                  if (kpi.isIncoming) {
+                    handleOpenIncomingModal();
+                  } else if (kpi.filterTarget !== null) {
+                    handleKpiCardClick(kpi.filterTarget);
+                  }
+                }}
+                className={`bg-white border-t-4 ${kpi.border} border-x border-b border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all transform hover:-translate-y-0.5 select-none cursor-pointer`}
+              >
+                <div className="flex flex-col items-center">
+                  <div className={`w-10 h-10 ${kpi.bg} ${kpi.iconColor} rounded-xl flex items-center justify-center mb-3 shadow-sm`}>
+                    {kpi.icon}
+                  </div>
+                  <span className="text-[9px] font-bold uppercase text-gray-500 tracking-wider text-center">{kpi.label}</span>
                 </div>
-                <span className="text-[9px] font-bold uppercase text-gray-500 tracking-wider text-center">{kpi.label}</span>
+                <p className={`text-3xl font-black text-center mt-3 ${kpi.color}`}>{String(kpi.count).padStart(2, '0')}</p>
               </div>
-              <p className={`text-3xl font-black text-center mt-3 ${kpi.color}`}>{String(kpi.count).padStart(2, '0')}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -90,13 +116,17 @@ export default function GSODashboardTab({
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
-            { label: 'Van Scheduling', val: reservationsList.filter(r => r.booking_type === 'Vehicle').length, icon: <Car size={20} />, bg: 'bg-blue-50', color: 'text-blue-600' },
-            { label: 'Gym Reservations', val: reservationsList.filter(r => r.booking_type === 'Gymnasium').length, icon: <Landmark size={20} />, bg: 'bg-orange-50', color: 'text-orange-600' },
-            { label: 'Multimedia Reservations', val: reservationsList.filter(r => r.booking_type === 'Room').length, icon: <Building size={20} />, bg: 'bg-purple-50', color: 'text-purple-600' },
-            { label: 'Stackable Chairs', val: equipmentInventory.find(i => i.asset_name.toLowerCase().includes('chair'))?.capacity || 0, icon: <Archive size={20} />, bg: 'bg-teal-50', color: 'text-teal-600' },
-            { label: 'Folding Tables', val: equipmentInventory.find(i => i.asset_name.toLowerCase().includes('table'))?.capacity || 0, icon: <Archive size={20} />, bg: 'bg-gray-100', color: 'text-gray-600' }
+            { label: 'Van Scheduling', val: reservationsList.filter(r => r.booking_type === 'Vehicle').length, icon: <Car size={20} />, bg: 'bg-blue-50', color: 'text-blue-600', targetSection: 'vehicle' },
+            { label: 'Gym Reservations', val: reservationsList.filter(r => r.booking_type === 'Gymnasium').length, icon: <Landmark size={20} />, bg: 'bg-orange-50', color: 'text-orange-600', targetSection: 'gym' },
+            { label: 'Multimedia Reservations', val: reservationsList.filter(r => r.booking_type === 'Room').length, icon: <Building size={20} />, bg: 'bg-purple-50', color: 'text-purple-600', targetSection: 'multimedia' },
+            { label: 'Stackable Chairs', val: equipmentInventory.find(i => i.asset_name.toLowerCase().includes('chair'))?.capacity || 0, icon: <Archive size={20} />, bg: 'bg-teal-50', color: 'text-teal-600', targetSection: 'logistics' },
+            { label: 'Folding Tables', val: equipmentInventory.find(i => i.asset_name.toLowerCase().includes('table'))?.capacity || 0, icon: <Archive size={20} />, bg: 'bg-gray-100', color: 'text-gray-600', targetSection: 'logistics' }
           ].map((item, idx) => (
-            <div key={idx} className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm flex items-center gap-3.5 hover:shadow-md transition-shadow group">
+            <div 
+              key={idx} 
+              onClick={() => handleNavigateToProcurement && handleNavigateToProcurement(item.targetSection)}
+              className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm flex items-center gap-3.5 hover:shadow-md transition-all transform hover:-translate-y-0.5 group cursor-pointer select-none"
+            >
               <div className={`w-12 h-12 rounded-xl ${item.bg} ${item.color} flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
                 {item.icon}
               </div>
@@ -112,7 +142,7 @@ export default function GSODashboardTab({
       </div>
 
       {/* UNIFIED GSO MASTER TABLE */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      <div ref={documentTableRef} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col scroll-mt-6">
         
         {/* Table Header Controls */}
         <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-gray-50/50">

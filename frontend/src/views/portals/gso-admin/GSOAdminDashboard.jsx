@@ -20,6 +20,7 @@ import OperationalAnalyticsTab from './components/OperationalAnalyticsTab';
 import UserProfileTab from '../../shared/components/UserProfileTab';
 import OfficeChatHub from '../../shared/OfficeChatHub';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 
 // Modals
 import QRScannerModal from './modals/QRScannerModal';
@@ -51,6 +52,35 @@ export default function GSOAdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [procurementTargetSection, setProcurementTargetSection] = useState(null);
+  const [chatTargetDoc, setChatTargetDoc] = useState(null);
+
+  const handleNavigateToChat = (doc) => {
+    setShowDetailsModal(false);
+    setChatTargetDoc(doc);
+    setActiveTab('messages');
+    setIsSidebarOpen(false);
+  };
+
+  const [showIncomingModal, setShowIncomingModal] = useState(false);
+  const [incomingDocsList, setIncomingDocsList] = useState([]);
+  const [isIncomingLoading, setIsIncomingLoading] = useState(false);
+
+  const handleOpenIncomingModal = async () => {
+    if (!gsoOfficeId) return;
+    setShowIncomingModal(true);
+    setIsIncomingLoading(true);
+    try {
+      const res = await fetchWithAuth(`/api/processor/documents/expected-list/${gsoOfficeId}`);
+      if (res.ok) {
+        setIncomingDocsList(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch incoming documents list:", err);
+    } finally {
+      setIsIncomingLoading(false);
+    }
+  };
 
   // Initialize Custom Hook Data
   const {
@@ -146,6 +176,12 @@ export default function GSOAdminDashboard() {
 
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
+    setIsSidebarOpen(false);
+  };
+
+  const handleNavigateToProcurement = (sectionKey) => {
+    setProcurementTargetSection(sectionKey);
+    setActiveTab('procurement');
     setIsSidebarOpen(false);
   };
 
@@ -640,6 +676,8 @@ export default function GSOAdminDashboard() {
               dashboardPage={dashboardPage} setDashboardPage={setDashboardPage}
               filteredMasterDocs={filteredMasterDocs} currentDashDocs={currentDashDocs} totalDashPages={totalDashPages}
               handleOpenDetails={handleOpenDetails} setActiveTab={setActiveTab}
+              handleNavigateToProcurement={handleNavigateToProcurement}
+              handleOpenIncomingModal={handleOpenIncomingModal}
             />
           )}
 
@@ -668,6 +706,8 @@ export default function GSOAdminDashboard() {
               setShowPrintModal={setShowPrintModal}
               setShowChecklistMakerModal={setShowChecklistMakerModal}
               handleViewChecklist={handleViewChecklist}
+              targetSection={procurementTargetSection}
+              setTargetSection={setProcurementTargetSection}
             />
           )}
 
@@ -698,7 +738,13 @@ export default function GSOAdminDashboard() {
           )}
 
           {activeTab === 'messages' && (
-            <OfficeChatHub userId={userId} roleId={2} officeId={gsoOfficeId} />
+            <OfficeChatHub 
+              userId={userId} 
+              roleId={2} 
+              officeId={gsoOfficeId} 
+              targetDoc={chatTargetDoc}
+              onClearTargetDoc={() => setChatTargetDoc(null)}
+            />
           )}
 
           {activeTab === 'profile' && (
@@ -747,6 +793,7 @@ export default function GSOAdminDashboard() {
         returnReason={returnReason} setReturnReason={setReturnReason}
         handleExecuteAdHocDetour={() => {}} handleExecuteReturn={() => {}} handleSignDocument={() => {}}
         setScanMode={setScanMode} setShowScannerModal={setShowScannerModal} setSimulatedQrPayload={setSimulatedQrPayload}
+        handleNavigateToChat={handleNavigateToChat}
       />
       <MasterChecklistModal
         showChecklistMakerModal={showChecklistMakerModal} setShowChecklistMakerModal={setShowChecklistMakerModal}
@@ -779,6 +826,12 @@ export default function GSOAdminDashboard() {
         showActiveChecklistModal={showActiveChecklistModal} setShowActiveChecklistModal={setShowActiveChecklistModal}
         activeChecklistBooking={activeChecklistBooking} activeChecklistItems={activeChecklistItems} 
         handleToggleChecklistItem={handleToggleChecklistItem}
+      />
+      <IncomingDocumentsModal
+        isOpen={showIncomingModal}
+        onClose={() => setShowIncomingModal(false)}
+        documents={incomingDocsList}
+        isLoading={isIncomingLoading}
       />
     </div>
   );

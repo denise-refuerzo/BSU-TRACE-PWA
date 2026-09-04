@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, ChevronRight, Hash } from 'lucide-react';
 import { fetchWithAuth } from "../../api";
 
-export default function OfficeChatHub({ userId, roleId, officeId }) {
+export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = null, onClearTargetDoc = null }) {
   const [directory, setDirectory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -36,6 +36,14 @@ export default function OfficeChatHub({ userId, roleId, officeId }) {
       if (res.ok) setDirectory(data);
     } catch (err) { console.error(err); }
   };
+
+  useEffect(() => {
+    if (targetDoc && directory.length > 0) {
+      const matchedDoc = directory.find(d => d.ini_id === targetDoc.ini_id) || targetDoc;
+      handleSelectDocument(matchedDoc);
+      if (onClearTargetDoc) onClearTargetDoc();
+    }
+  }, [targetDoc, directory]);
 
   const handleSelectDocument = async (doc) => {
     // Optimistically clear the unread notification dot for the document in the directory
