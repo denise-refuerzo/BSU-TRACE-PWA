@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, FileText, GitBranch, Camera } from 'lucide-react';
+import { X, FileText, GitBranch, Camera, MessageSquare } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function DocumentAuditModal({
@@ -26,7 +26,8 @@ export default function DocumentAuditModal({
   handleSignDocument,
   setScanMode,
   setShowScannerModal,
-  setSimulatedQrPayload
+  setSimulatedQrPayload,
+  handleNavigateToChat
 }) {
   if (!showDetailsModal || !selectedDoc) return null;
 
@@ -134,8 +135,22 @@ export default function DocumentAuditModal({
               </div>
             ) : (
               <div className="space-y-4 pt-2">
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => { setShowAdHocForm(!showAdHocForm); setShowSendBackForm(false); }} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-xl font-bold text-xs flex items-center gap-2 transition-all"><GitBranch size={14} /> Ad-hoc Detour</button>
+                <div className="flex flex-wrap gap-2">
+                  <button 
+                    type="button" 
+                    onClick={() => { setShowAdHocForm(!showAdHocForm); setShowSendBackForm(false); }} 
+                    className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <GitBranch size={14} /> Ad-hoc Detour
+                  </button>
+                  
+                  <button 
+                    type="button" 
+                    onClick={() => handleNavigateToChat && handleNavigateToChat(selectedDoc)} 
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <MessageSquare size={14} /> Chat with this file
+                  </button>
                 </div>
 
                 {showAdHocForm && (

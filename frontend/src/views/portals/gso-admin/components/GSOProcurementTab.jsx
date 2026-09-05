@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Search, Download, Edit, Car, Building, Landmark, Archive, FileText, Filter, Inbox, ChevronLeft, ChevronRight, CheckSquare } from 'lucide-react';
 
 export default function GSOProcurementTab({
@@ -14,8 +14,40 @@ export default function GSOProcurementTab({
   setProcPage,
   setShowPrintModal,
   setShowChecklistMakerModal,
-  handleViewChecklist
+  handleViewChecklist,
+  targetSection,
+  setTargetSection
 }) {
+  const vehicleRef = useRef(null);
+  const multimediaRef = useRef(null);
+  const gymRef = useRef(null);
+  const logisticsRef = useRef(null);
+
+  useEffect(() => {
+    if (!targetSection) return;
+
+    const refMap = {
+      vehicle: vehicleRef,
+      multimedia: multimediaRef,
+      gym: gymRef,
+      logistics: logisticsRef
+    };
+
+    const targetRef = refMap[targetSection];
+    if (targetRef && targetRef.current) {
+      setTimeout(() => {
+        targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (setTargetSection) setTargetSection(null);
+      }, 100);
+    }
+  }, [targetSection, setTargetSection]);
+
+  const blockRefs = {
+    vehicle: vehicleRef,
+    multimedia: multimediaRef,
+    gym: gymRef
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
       
@@ -47,8 +79,11 @@ export default function GSOProcurementTab({
         { title: 'Multimedia Room', icon: <Building size={18} />, data: multimediaData, sKey: 'multimedia', border: 'border-t-purple-500', iconColor: 'text-purple-600', bg: 'bg-purple-50' },
         { title: 'Gymnasium Reservations', icon: <Landmark size={18} />, data: gymData, sKey: 'gym', border: 'border-t-orange-500', iconColor: 'text-orange-600', bg: 'bg-orange-50' }
       ].map((block, idx) => (
-        <div key={idx} className={`bg-white border-t-4 ${block.border} border-x border-b border-gray-200 rounded-2xl shadow-sm flex flex-col overflow-hidden`}>
-          
+        <div 
+          key={idx} 
+          ref={blockRefs[block.sKey]} 
+          className={`bg-white border-t-4 ${block.border} border-x border-b border-gray-200 rounded-2xl shadow-sm flex flex-col overflow-hidden scroll-mt-6`}
+        >
           <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50">
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-3">
               <div className={`p-2 rounded-lg ${block.bg} ${block.iconColor} shadow-sm`}>
@@ -181,9 +216,11 @@ export default function GSOProcurementTab({
         </div>
       ))}
 
-      {/* LOGISTICS HISTORY (Matches style of mapped blocks above) */}
-      <div className="bg-white border-t-4 border-t-teal-500 border-x border-b border-gray-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
-        
+      {/* LOGISTICS HISTORY */}
+      <div 
+        ref={logisticsRef}
+        className="bg-white border-t-4 border-t-teal-500 border-x border-b border-gray-200 rounded-2xl shadow-sm flex flex-col overflow-hidden scroll-mt-6"
+      >
         <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50">
           <h3 className="text-base font-bold text-gray-900 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-teal-50 text-teal-600 shadow-sm">
