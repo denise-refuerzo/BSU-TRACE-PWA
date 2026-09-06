@@ -45,10 +45,10 @@ export default function AdminDashboard() {
 
   const getHeaderTitle = () => {
     switch (activeSidebar) {
-      case 'accounts': return "Account Management & Access";
-      case 'matrix': return "Roles & Permissions Matrix";
-      case 'analytics': return "Operational Analytics Engine";
-      default: return "Infrastructure Overview Controller";
+      case 'accounts': return "";
+      case 'matrix': return "";
+      case 'analytics': return "";
+      default: return "";
     }
   };
 
