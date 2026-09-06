@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, ChevronRight, Hash } from 'lucide-react';
+import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, ChevronRight, Hash, ChevronLeft } from 'lucide-react';
 import { fetchWithAuth } from "../../api";
 
 export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = null, onClearTargetDoc = null }) {
@@ -113,19 +113,26 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
     } catch (err) { console.error(err); }
   };
 
-  // FILTER DIRECTORY ENTRIES DYNAMICALLY BY TITLE SEARCH INPUT
+  const handleMobileBack = (level) => {
+    if (level === 'directory') {
+      setSelectedDoc(null);
+      setActiveChannel(null);
+    } else if (level === 'channels') {
+      setActiveChannel(null);
+    }
+  };
+
   const filteredDirectory = directory.filter(doc => 
     doc.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // DETECT IF AN ACTIVE AD-HOC DETOUR IS EXTANT ON THE CURRENT LIFECYCLE
   const adHocDetourChannel = roleId === 2 && channels.find(c => c.officeId !== parseInt(officeId));
 
   return (
     <div className="max-w-6xl mx-auto h-[calc(100vh-12rem)] border border-gray-200 bg-white rounded-2xl shadow-sm flex overflow-hidden text-left animate-in fade-in duration-200">
       
-      {/* LEFT COLUMN: SYSTEM DATA DIRECTORIES (With search integration) */}
-      <div className="w-72 md:w-80 border-r border-gray-200 flex flex-col bg-gray-50 flex-shrink-0">
+      {/* LEFT COLUMN: SYSTEM DATA DIRECTORIES */}
+      <div className={`flex-col flex-shrink-0 w-full md:w-72 lg:w-80 border-r border-gray-200 bg-gray-50 ${selectedDoc ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-gray-200 bg-white space-y-3 shrink-0">
           <div className="flex justify-between items-center">
             <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
@@ -141,7 +148,6 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
             </button>
           </div>
           
-          {/* INTERACTIVE SEARCH BAR COMPONENT */}
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
             <input 
@@ -184,8 +190,11 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
 
       {/* CENTER COLUMN: RENDERED FOR ORIGINATORS (ROLE 1) ONLY */}
       {roleId === 1 && selectedDoc && (
-        <div className="w-64 border-r border-gray-200 flex flex-col flex-shrink-0 bg-white animate-in slide-in-from-left-4 duration-200">
-          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
+        <div className={`flex-col flex-shrink-0 w-full md:w-64 border-r border-gray-200 bg-white animate-in slide-in-from-left-4 duration-200 ${!activeChannel ? 'flex' : 'hidden md:flex'}`}>
+          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0 flex items-center gap-2">
+            <button onClick={() => handleMobileBack('directory')} className="md:hidden p-1.5 -ml-1.5 text-gray-500 hover:bg-gray-200 rounded-lg transition-colors">
+              <ChevronLeft size={18} />
+            </button>
             <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
               <Hash size={14} className="text-gray-400" />
               Station Channels
@@ -219,45 +228,53 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         </div>
       )}
 
-      {/* RIGHT COLUMN: INTERACTIVE MESSENGER WORKSPACE CONTEXT */}
-      <div className="flex-1 flex flex-col bg-gray-50/50 relative">
+      {/* RIGHT COLUMN: INTERACTIVE MESSENGER WORKSPACE */}
+      <div className={`relative flex-col flex-1 w-full bg-gray-50/50 ${activeChannel ? 'flex' : 'hidden md:flex'}`}>
         {activeChannel ? (
           <>
             <div className="p-4 md:p-5 border-b border-gray-200 bg-white flex flex-col gap-4 shrink-0 shadow-sm z-10">
               <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Hash size={16} className="text-gray-400" />
-                    <h4 className="text-base font-bold text-gray-900">{activeChannel.officeName}</h4>
+                <div className="flex items-start gap-2">
+                  <button 
+                    onClick={() => handleMobileBack(roleId === 1 ? 'channels' : 'directory')} 
+                    className="md:hidden p-1.5 -ml-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors mt-0.5"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Hash size={16} className="text-gray-400" />
+                      <h4 className="text-base font-bold text-gray-900">{activeChannel.officeName}</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 font-medium flex items-center gap-1.5">
+                      Subject: <span className="text-[#D32F2F] font-bold truncate max-w-[200px] sm:max-w-[300px]">{selectedDoc.title}</span>
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500 font-medium flex items-center gap-1.5">
-                    Subject: <span className="text-[#D32F2F] font-bold truncate max-w-[300px]">{selectedDoc.title}</span>
-                  </p>
                 </div>
               </div>
 
-              {/* CROSS-OFFICE AD-HOC VERIFICATION CHAT SUB-TABS (Only visible to processors under detour states) */}
+              {/* CROSS-OFFICE AD-HOC VERIFICATION CHAT SUB-TABS */}
               {roleId === 2 && adHocDetourChannel && (
-                <div className="flex bg-gray-100 p-1.5 rounded-lg text-xs font-bold w-max max-w-full overflow-x-auto custom-scrollbar">
+                <div className="flex bg-gray-100 p-1.5 rounded-lg text-xs font-bold w-full overflow-x-auto custom-scrollbar">
                   <button 
                     onClick={() => handleSelectDocument(selectedDoc)}
-                    className={`px-4 py-2 rounded-md transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeChannel.officeId === parseInt(officeId) ? 'bg-white text-[#D32F2F] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                    className={`px-4 py-2 rounded-md transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer flex-1 justify-center ${activeChannel.officeId === parseInt(officeId) ? 'bg-white text-[#D32F2F] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     <MessageSquare size={14} />
-                    Chat with Originator
+                    Originator
                   </button>
                   <button 
                     onClick={() => handleActivateChannel(selectedDoc.ini_id, adHocDetourChannel)}
-                    className={`px-4 py-2 rounded-md transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeChannel.officeId !== parseInt(officeId) ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                    className={`px-4 py-2 rounded-md transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer flex-1 justify-center ${activeChannel.officeId !== parseInt(officeId) ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     <RefreshCw size={14} />
-                    Detour Office ({adHocDetourChannel.officeName.split(' ')[0]})
+                    Detour ({adHocDetourChannel.officeName.split(' ')[0]})
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5 bg-gray-50/80">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-5 space-y-5 bg-gray-50/80">
               {messages.map(msg => {
                 const isMe = msg.sender_id === parseInt(userId);
                 return (
@@ -283,18 +300,18 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                 <Lock size={16} className="text-gray-400" /> {activeChannel.statusMessage}
               </div>
             ) : (
-              <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200 bg-white flex gap-3 shrink-0">
+              <form onSubmit={handleSendMessage} className="p-3 md:p-4 border-t border-gray-200 bg-white flex gap-2 md:gap-3 shrink-0">
                 <input 
                   type="text" 
-                  placeholder="Type your message..." 
+                  placeholder="Type a message..." 
                   value={textInput} 
                   onChange={e => setTextInput(e.target.value)}
-                  className="flex-1 border border-gray-300 px-4 py-3 text-sm rounded-xl outline-none focus:ring-2 focus:ring-red-100 focus:border-[#D32F2F] bg-gray-50 focus:bg-white transition-all shadow-sm" 
+                  className="flex-1 border border-gray-300 px-3 md:px-4 py-2.5 md:py-3 text-sm rounded-xl outline-none focus:ring-2 focus:ring-red-100 focus:border-[#D32F2F] bg-gray-50 focus:bg-white transition-all shadow-sm" 
                 />
                 <button 
                   type="submit" 
                   disabled={!textInput.trim()} 
-                  className="p-3 bg-[#D32F2F] hover:bg-[#b71c1c] text-white rounded-xl shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0 disabled:shadow-sm cursor-pointer flex items-center justify-center"
+                  className="p-2.5 md:p-3 bg-[#D32F2F] hover:bg-[#b71c1c] text-white rounded-xl shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0 disabled:shadow-sm cursor-pointer flex items-center justify-center"
                 >
                   <Send size={18} />
                 </button>
@@ -306,7 +323,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-100 shadow-sm">
               <MessageSquare size={28} className="text-gray-300" />
             </div>
-            <div className="text-center">
+            <div className="text-center px-4">
               <p className="text-sm font-bold text-gray-600">No Chat Selected</p>
               <p className="text-xs font-medium mt-1">Select a reference file to establish conversation metrics.</p>
             </div>

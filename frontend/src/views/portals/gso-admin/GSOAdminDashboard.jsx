@@ -50,6 +50,7 @@ export default function GSOAdminDashboard() {
   const notificationRef = useRef(null);
   
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [previousTab, setPreviousTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [procurementTargetSection, setProcurementTargetSection] = useState(null);
@@ -95,7 +96,10 @@ export default function GSOAdminDashboard() {
   } = useGSOAdminData();
 
   useEffect(() => {
-    if (activeTab === 'analytics') {
+    if (activeTab === 'dashboard') {
+      fetchOperationalAnalytics();
+      fetchInventoryMetrics();
+    } else if (activeTab === 'analytics') {
       fetchOperationalAnalytics();
       fetchSystemAnalyticsData();
     } else if (activeTab === 'resources') {
@@ -651,7 +655,7 @@ export default function GSOAdminDashboard() {
                 </div>
               )}
             </div>
-            <button onClick={() => setActiveTab('profile')} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 transition-colors border text-xs font-bold text-neutral-800">
+            <button onClick={() => { setPreviousTab(activeTab); setActiveTab('profile'); }} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 transition-colors border text-xs font-bold text-neutral-800">
               <User size={16} />
               <span className="hidden sm:inline">GSO Admin Portal</span>
             </button>
@@ -678,12 +682,9 @@ export default function GSOAdminDashboard() {
               handleOpenDetails={handleOpenDetails} setActiveTab={setActiveTab}
               handleNavigateToProcurement={handleNavigateToProcurement}
               handleOpenIncomingModal={handleOpenIncomingModal}
-              // Analytics Props passed down for the compact dashboard charts
               processedBottleneckData={processedBottleneckData}
-              demandTimeFilter={demandTimeFilter}
-              setDemandTimeFilter={setDemandTimeFilter}
-              chartReadyDemandData={chartReadyDemandData}
-              transitionDate={transitionDate}
+              demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
+              chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
             />
           )}
 
@@ -760,6 +761,7 @@ export default function GSOAdminDashboard() {
               facultyId={facultyId} officeName={gsoOfficeName}
               twoFaEnabled={twoFaEnabled} toggle2FA={() => {}}
               handleUpdateProfile={() => {}} setShowPassModal={setShowPassModal}
+              handleBack={() => setActiveTab(previousTab)} // Add this line!
             />
           )}
         </div>
