@@ -678,6 +678,12 @@ export default function GSOAdminDashboard() {
               handleOpenDetails={handleOpenDetails} setActiveTab={setActiveTab}
               handleNavigateToProcurement={handleNavigateToProcurement}
               handleOpenIncomingModal={handleOpenIncomingModal}
+              // Analytics Props passed down for the compact dashboard charts
+              processedBottleneckData={processedBottleneckData}
+              demandTimeFilter={demandTimeFilter}
+              setDemandTimeFilter={setDemandTimeFilter}
+              chartReadyDemandData={chartReadyDemandData}
+              transitionDate={transitionDate}
             />
           )}
 

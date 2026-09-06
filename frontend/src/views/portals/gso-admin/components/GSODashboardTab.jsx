@@ -1,5 +1,13 @@
 import React, { useRef } from 'react';
-import { User, Building, Car, Landmark, Archive, Search, Filter, Download, FileText, Eye, Folder, Inbox, Clock, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  User, Building, Car, Landmark, Archive, Search, Filter, 
+  Download, FileText, Eye, Folder, Inbox, Clock, AlertTriangle, 
+  CheckCircle, ChevronLeft, ChevronRight, BarChart2, Package, Activity 
+} from 'lucide-react';
+import { 
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  BarChart, Bar, ReferenceLine 
+} from 'recharts';
 
 export default function GSODashboardTab({
   userName,
@@ -23,7 +31,13 @@ export default function GSODashboardTab({
   handleOpenDetails,
   setActiveTab,
   handleNavigateToProcurement,
-  handleOpenIncomingModal
+  handleOpenIncomingModal,
+  // Analytics Props
+  processedBottleneckData,
+  demandTimeFilter,
+  setDemandTimeFilter,
+  chartReadyDemandData,
+  transitionDate
 }) {
   const documentTableRef = useRef(null);
 
@@ -81,8 +95,6 @@ export default function GSODashboardTab({
             { label: 'Action Reqd', count: archivedDocsList.length, icon: <AlertTriangle size={20} strokeWidth={2.5} />, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]', bg: 'bg-red-50', iconColor: 'text-[#D32F2F]', filterTarget: 'Archived' },
             { label: 'Completed', count: completedDocsList.length, icon: <CheckCircle size={20} strokeWidth={2.5} />, color: 'text-emerald-600', border: 'border-t-emerald-500', bg: 'bg-emerald-50', iconColor: 'text-emerald-600', filterTarget: 'Completed' }
           ].map((kpi, idx) => {
-            const isClickable = kpi.filterTarget !== null;
-
             return (
               <div 
                 key={idx} 
@@ -105,6 +117,98 @@ export default function GSODashboardTab({
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* COMPACT ANALYTICS WIDGETS */}
+      <div className="pt-2">
+        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide flex items-center gap-2 mb-4">
+          <Activity size={16} className="text-gray-400" />
+          Analytics Overview
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          
+          {/* Descriptive Analytics */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
+            <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 mb-3 tracking-wide">
+              <BarChart2 className="text-purple-600" size={14} /> Bottleneck Delay Evaluation
+            </h3>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={processedBottleneckData || []} layout="vertical" margin={{ top: 0, right: 10, left: -25, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="office_name" type="category" tick={{fontSize: 9, fill: '#4b5563', fontWeight: 600}} width={80} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{fill: '#f9fafb'}} contentStyle={{ borderRadius: '6px', fontSize: '10px', padding: '6px' }} />
+                  <Bar dataKey="dwell_time_hours" fill="#9333ea" radius={[0, 4, 4, 0]} barSize={12} name="Delay (Hrs)" />
+                </BarChart>
+              </ResponsiveContainer>
+              {(!processedBottleneckData || processedBottleneckData.length === 0) && (
+                <div className="text-center text-[10px] text-gray-400 font-bold -mt-24">No bottleneck data.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Prescriptive Analytics */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
+            <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 mb-3 tracking-wide">
+              <Package className="text-[#D32F2F]" size={14} /> Equipment Inventory Status
+            </h3>
+            <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 space-y-3 min-h-0">
+              {equipmentInventory?.map(item => {
+                const pAvail = Math.round((item.current_stock / item.capacity) * 100) || 0;
+                return (
+                  <div key={item.asd_id}>
+                    <div className="flex justify-between text-[9px] uppercase tracking-wider font-bold mb-1 text-gray-700">
+                      <span className="truncate">{item.asset_name}</span>
+                      <span>{pAvail}% Avail</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2.5 flex overflow-hidden shadow-inner">
+                      <div className="h-full bg-[#D32F2F]" style={{ width: `${pAvail}%` }}></div>
+                      <div className="h-full bg-red-100 border-l border-white/50" style={{ width: `${100-pAvail}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+              {(!equipmentInventory || equipmentInventory.length === 0) && (
+                <div className="text-center text-[10px] text-gray-400 font-bold mt-16">No equipment data.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Predictive Analytics */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 tracking-wide">
+                <Activity className="text-indigo-600" size={14} /> Demand Forecast
+              </h3>
+              <select 
+                value={demandTimeFilter} 
+                onChange={e => setDemandTimeFilter && setDemandTimeFilter(Number(e.target.value))} 
+                className="text-[9px] font-bold uppercase bg-gray-50 border border-gray-200 rounded p-1 outline-none cursor-pointer"
+              >
+                <option value={3}>3 Months</option>
+                <option value={6}>6 Months</option>
+                <option value={12}>12 Months</option>
+              </select>
+            </div>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartReadyDemandData || []} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
+                  <XAxis dataKey="date" tick={{fontSize: 9, fill: '#6b7280'}} axisLine={false} tickLine={false} minTickGap={20} />
+                  <YAxis tick={{fontSize: 9, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '6px', fontSize: '10px', padding: '6px' }} />
+                  {transitionDate && (
+                    <ReferenceLine x={transitionDate} stroke="#D32F2F" strokeDasharray="3 3" />
+                  )}
+                  <Area type="monotone" dataKey="van_hist" name="Van Hist" stroke="#2563eb" fill="#2563eb" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="fac_hist" name="Fac Hist" stroke="#16a34a" fill="#16a34a" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="van_fore" name="Van Forecast" stroke="#2563eb" strokeDasharray="3 3" fill="none" strokeWidth={1.5} />
+                  <Area type="monotone" dataKey="fac_fore" name="Fac Forecast" stroke="#16a34a" strokeDasharray="3 3" fill="none" strokeWidth={1.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
         </div>
       </div>
 
