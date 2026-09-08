@@ -22,13 +22,6 @@ export default function UserProfileTab({
       
       {/* Navigation & Header */}
       <div className="flex items-center gap-3">
-        <button 
-          onClick={handleBack} 
-          className="p-2 rounded-xl border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 transition-colors shadow-sm focus:outline-none"
-          title="Go Back"
-        >
-          <ArrowLeft size={18} strokeWidth={2.5} />
-        </button>
         <div>
           <h2 className="text-xl font-black tracking-tight text-neutral-900 leading-none">Profile Settings</h2>
           <p className="text-xs text-neutral-500 font-medium mt-1">Manage your administrative credentials and security preferences.</p>

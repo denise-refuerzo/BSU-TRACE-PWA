@@ -1791,18 +1791,24 @@ app.post('/api/chat/messages', requireAuth, async (req, res) => {
 });
 
 // ==========================================
-// 10.4 CHAT: FETCH ACTIVE DOCUMENTS DIRECTORY
+// 10.4 CHAT: FETCH ACTIVE DOCUMENTS DIRECTORY (OPTIMIZED)
 // ==========================================
 app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) => {
   const userId = req.user.u_id;
   const roleId = req.user.a_id;
+
   try {
     let query = '';
     let params = [];
 
     if (roleId === 1) {
       query = `
-        SELECT DISTINCT ON (idoc.ini_id) idoc.ini_id, idoc.title, idoc.created_at
+        SELECT idoc.ini_id, idoc.title, idoc.created_at,
+          EXISTS (
+            SELECT 1 FROM public.chat_rooms cr
+            JOIN public.chat_messages cm ON cr.room_id = cm.room_id
+            WHERE cr.ini_id = idoc.ini_id
+          ) AS "hasAnyChat"
         FROM public.initial_document idoc
         WHERE idoc.u_id = $1
         ORDER BY idoc.ini_id DESC;
@@ -1815,7 +1821,13 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
       if (!officeId) return res.json([]);
 
       query = `
-        SELECT DISTINCT ON (idoc.ini_id) idoc.ini_id, idoc.title, idoc.created_at
+        SELECT DISTINCT ON (idoc.ini_id) 
+          idoc.ini_id, idoc.title, idoc.created_at,
+          EXISTS (
+            SELECT 1 FROM public.chat_rooms cr
+            JOIN public.chat_messages cm ON cr.room_id = cm.room_id
+            WHERE cr.ini_id = idoc.ini_id
+          ) AS "hasAnyChat"
         FROM public.initial_document idoc
         JOIN public.processed_document pd ON idoc.ini_id = pd.ini_id
         WHERE pd.current_office_id = $1
@@ -1827,35 +1839,9 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
     }
 
     const result = await pool.query(query, params);
-    const rows = result.rows;
-
-    const finalDirectory = [];
-    for (const doc of rows) {
-      // Look to see if any station channel under this document contains active records
-      const checkRooms = await pool.query(
-        `SELECT room_id FROM public.chat_rooms WHERE ini_id = $1`,
-        [doc.ini_id]
-      );
-      
-      let hasAnyChat = false;
-      if (checkRooms.rows.length > 0) {
-        const roomIds = checkRooms.rows.map(r => r.room_id);
-        const checkMsgs = await pool.query(
-          `SELECT COUNT(message_id)::int FROM public.chat_messages WHERE room_id = ANY($1)`,
-          [roomIds]
-        );
-        hasAnyChat = checkMsgs.rows[0].count > 0;
-      }
-
-      finalDirectory.push({
-        ...doc,
-        hasAnyChat: hasAnyChat
-      });
-    }
-
-    res.json(finalDirectory);
+    res.json(result.rows);
   } catch (err) {
-    console.error("Error compilation active track selection hub array:", err);
+    console.error("Error compiling active chat directory:", err);
     res.status(500).json({ error: 'Failed extraction of operational document parameters directory loops.' });
   }
 });

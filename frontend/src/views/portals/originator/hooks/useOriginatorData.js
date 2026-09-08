@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; 
 import { fetchWithAuth } from "../../../../api";
 
-// Extracted minimalSwal configuration for 2FA toggles
 const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
@@ -17,7 +16,6 @@ const minimalSwal = Swal.mixin({
  
 export default function useOriginatorData() {
   const navigate = useNavigate();
-  const notificationRef = useRef(null);
   
   const userId = localStorage.getItem('userId');
   const userName = localStorage.getItem('user') || 'Faculty User';
@@ -33,7 +31,6 @@ export default function useOriginatorData() {
   const [hasUnreadChats, setHasUnreadChats] = useState(false);
   const itemsPerPage = 5;
 
-  const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   
   const [profile, setProfile] = useState({
@@ -104,16 +101,6 @@ export default function useOriginatorData() {
   }, [documents, processTypes, profile.departmentName]);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
-        setShowNotifications(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
     const fetchEDC = async () => {
       try {
         const res = await fetchWithAuth('/api/analytics/edc');
@@ -152,13 +139,6 @@ export default function useOriginatorData() {
   useEffect(() => {
     setCurrentPage(1);
   }, [search, filterStatus]);
-
-  useEffect(() => {
-    const pendingRedirectId = localStorage.getItem('redirect_target_doc_id');
-    if (pendingRedirectId && activeTab !== 'messages') {
-      setActiveTab('messages');
-    }
-  }, [activeTab]);
 
   // -------------------------
   // API FETCHERS
@@ -229,13 +209,6 @@ export default function useOriginatorData() {
   // -------------------------
   // EVENT HANDLERS
   // -------------------------
-  const handleNotificationClick = (notif) => {
-    setShowNotifications(false);
-    if (!notif.ini_id) return;
-    localStorage.setItem('redirect_target_doc_id', String(notif.ini_id));
-    setActiveTab('documents');
-  };
-
   const saveProfileChanges = async (e) => {
     if (e) e.preventDefault();
     setStatusMsg('');
@@ -423,38 +396,12 @@ export default function useOriginatorData() {
     ? (JSON.stringify(profile) !== JSON.stringify(initialProfile) && profile.fullName.trim() !== '' && profile.email.trim() !== '')
     : false;
 
-  const formatRelativeTime = (timestamp) => {
-    if (!timestamp) return 'Just now';
-    const localizedString = String(timestamp).replace(/(\+00:00|\+00|Z)$/i, '');
-    const now = new Date();
-    const past = new Date(localizedString);
-    const msPerMinute = 60 * 1000;
-    const msPerHour = msPerMinute * 60;
-    const msPerDay = msPerHour * 24;
-    
-    const elapsed = now - past;
-    
-    if (elapsed < msPerMinute) {
-       return 'Just now';
-    } else if (elapsed < msPerHour) {
-       const minutes = Math.round(elapsed / msPerMinute);
-       return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;   
-    } else if (elapsed < msPerDay) {
-       const hours = Math.round(elapsed / msPerHour);
-       return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;   
-    } else {
-       const days = Math.round(elapsed / msPerDay);
-       return `${days} ${days === 1 ? 'day' : 'days'} ago`;   
-    }
-  };
-
   return {
-    userId, userName, navigate, notificationRef,
+    userId, userName, navigate,
     activeTab, setActiveTab,
     search, setSearch, filterStatus, setFilterStatus,
     currentPage, setCurrentPage, itemsPerPage,
     hasUnreadChats, setHasUnreadChats,
-    showNotifications, setShowNotifications,
     notifications,
     profile, setProfile, isProfileChanged,
     showModal, setShowModal,
@@ -465,8 +412,8 @@ export default function useOriginatorData() {
     selectedRoutePreview, estimatedDate, statusMsg,
     recentDocStops, documents, processTypes,
     filteredDocuments, currentLedgerDocs, totalPages, pendingCount, mostRecentDoc,
-    handleNotificationClick, saveProfileChanges, updatePasswordRequest,
+    saveProfileChanges, updatePasswordRequest,
     handleProcessChange, submitDocument, toggleTwoFactorAuth,
-    formatRelativeTime, fetchDashboardLedger, fetchUserProfile
+    fetchDashboardLedger, fetchUserProfile
   };
 }
