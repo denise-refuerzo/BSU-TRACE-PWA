@@ -1311,7 +1311,7 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
   const officeId = parseInt(req.params.officeId);
 
   try {
-    // 1. INCOMING: Routed to this office, hasn't checked in yet, not halted (s_id != 4) anywhere, not completed (s_id != 5)
+    // 1. INCOMING
     const incomingRes = await pool.query(`
       WITH mapped_routes AS (
         SELECT 
@@ -1338,12 +1338,10 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
       SELECT COUNT(DISTINCT mr.ini_id)::int as incoming_count
       FROM mapped_routes mr
       WHERE $1 IN (mr.stop_1_mapped, mr.stop_2, mr.stop_3, mr.stop_4, mr.stop_5, mr.stop_6, mr.stop_7)
-        -- Not halted or completed globally
         AND NOT EXISTS (
           SELECT 1 FROM public.processed_document pd_halt 
           WHERE pd_halt.ini_id = mr.ini_id AND pd_halt.s_id IN (4, 5)
         )
-        -- Has never signed in to this specific office yet
         AND NOT EXISTS (
           SELECT 1 FROM public.processed_document pd_here 
           WHERE pd_here.ini_id = mr.ini_id 
@@ -1352,7 +1350,7 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
         );
     `, [officeId]);
 
-    // 2. AWAITING SCAN-IN: Physically at this office (current_office_id = $1) but time_in IS NULL and not halted
+    // 2. AWAITING SCAN-IN
     const awaitingScanRes = await pool.query(`
       SELECT COUNT(pd_id)::int as awaiting_count
       FROM public.processed_document
@@ -1362,32 +1360,26 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
         AND s_id != 4;
     `, [officeId]);
 
-    // 3. PENDING: Has signed in (time_in IS NOT NULL) at this office and has NOT signed out yet (time_out IS NULL)
+    // 3. PENDING (All signed in, not signed out, including in-verification)
     const pendingRes = await pool.query(`
       SELECT COUNT(DISTINCT ini_id)::int as pending_count
       FROM public.processed_document
       WHERE current_office_id = $1 
         AND time_in IS NOT NULL 
         AND time_out IS NULL 
-        AND is_adhoc = false 
         AND s_id != 4;
     `, [officeId]);
 
-    // 4. IN VERIFICATION: Active document in this office currently on detour (s_id = 2) waiting for detour time_out
+    // 4. IN VERIFICATION (Documents marked as s_id = 2 in this office with no time_out)
     const inVerificationRes = await pool.query(`
-      SELECT COUNT(DISTINCT pd_orig.ini_id)::int as in_verification_count
-      FROM public.processed_document pd_orig
-      JOIN public.processed_document pd_adhoc 
-        ON pd_orig.ini_id = pd_adhoc.ini_id 
-        AND pd_adhoc.is_adhoc = true 
-        AND pd_adhoc.adhoc_return_office_id = $1
-      WHERE pd_orig.current_office_id = $1 
-        AND pd_orig.s_id = 2 
-        AND pd_orig.time_out IS NULL 
-        AND pd_adhoc.time_out IS NULL;
+      SELECT COUNT(DISTINCT ini_id)::int as in_verification_count
+      FROM public.processed_document
+      WHERE current_office_id = $1 
+        AND s_id = 2 
+        AND time_out IS NULL;
     `, [officeId]);
 
-    // 5. COMPLETED: Has recorded both a time_in AND a time_out in this specific office
+    // 5. COMPLETED (Has time_in and time_out in this office)
     const completedRes = await pool.query(`
       SELECT COUNT(DISTINCT ini_id)::int as completed_count
       FROM public.processed_document
@@ -1398,11 +1390,11 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
     `, [officeId]);
 
     res.json({
-      incomingCount: incomingRes.rows[0].incoming_count || 0,
-      awaitingScanInCount: awaitingScanRes.rows[0].awaiting_count || 0,
-      pendingCount: pendingRes.rows[0].pending_count || 0,
-      inVerificationCount: inVerificationRes.rows[0].in_verification_count || 0,
-      completedProcessingCount: completedRes.rows[0].completed_count || 0
+      incomingCount: incomingRes.rows[0]?.incoming_count || 0,
+      awaitingScanInCount: awaitingScanRes.rows[0]?.awaiting_count || 0,
+      pendingCount: pendingRes.rows[0]?.pending_count || 0,
+      inVerificationCount: inVerificationRes.rows[0]?.in_verification_count || 0,
+      completedProcessingCount: completedRes.rows[0]?.completed_count || 0
     });
 
   } catch (err) {

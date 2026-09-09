@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchWithAuth } from "../../../../api";
+import { fetchWithAuth } from '../../../../api';
 
 export function useProcessorData(userId) {
   // --- USER & OFFICE STATE ---
@@ -13,10 +13,18 @@ export function useProcessorData(userId) {
   const [twoFaCode, setTwoFaCode] = useState('');
   const [officesList, setOfficesList] = useState([]);
 
-  // --- DOCUMENT DATA STATE ---
-  const [incomingDocs, setIncomingDocs] = useState([]);
+  // --- KPI COUNTER STATE ---
   const [expectedIncomingCount, setExpectedIncomingCount] = useState(0);
+  const [awaitingScanInCount, setAwaitingScanInCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [inVerificationCount, setInVerificationCount] = useState(0);
+  const [completedProcessingCount, setCompletedProcessingCount] = useState(0);
+
+  // --- DOCUMENT DATA STATE ---
   const [pipelineDocs, setPipelineDocs] = useState([]);  
+  const [expectedIncomingList, setExpectedIncomingList] = useState([]);
+  const [isIncomingModalOpen, setIsIncomingModalOpen] = useState(false);
+  const [isIncomingLoading, setIsIncomingLoading] = useState(false);
   const [actionHistory, setActionHistory] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
    
@@ -31,7 +39,7 @@ export function useProcessorData(userId) {
   const [dashboardPage, setDashboardPage] = useState(1);
   const [pipelinePage, setPipelinePage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 7; // 7 rows per page
 
   // --- API FETCHING FUNCTIONS ---
   const fetchLiveNotifications = async (officeId) => {
@@ -47,24 +55,36 @@ export function useProcessorData(userId) {
     }
   };
 
-  const fetchExpectedIncomingCount = async (officeId) => {
+  const fetchKpis = async (officeId) => {
     if (!officeId) return;
     try {
-      const res = await fetchWithAuth(`/api/processor/documents/expected-count/${officeId}`);
-      const data = await res.json();
-      if (res.ok) setExpectedIncomingCount(data.count);
-    } catch (err) { console.error("Expected incoming sync error:", err); }
+      const res = await fetchWithAuth(`/api/processor/documents/kpi-metrics/${officeId}`);
+      if (res.ok) {
+        const kpiData = await res.json();
+        setExpectedIncomingCount(kpiData.incomingCount || 0);
+        setAwaitingScanInCount(kpiData.awaitingScanInCount || 0);
+        setPendingCount(kpiData.pendingCount || 0);
+        setInVerificationCount(kpiData.inVerificationCount || 0);
+        setCompletedProcessingCount(kpiData.completedProcessingCount || 0);
+      }
+    } catch (err) {
+      console.error("Failed fetching processor KPI metrics", err);
+    }
   };
 
-  const fetchIncomingDocumentLogs = async (officeId) => {
-    if (!officeId) return;
+  const fetchExpectedIncomingList = async (officeId) => {
+    const targetOffice = officeId || processorOfficeId;
+    if (!targetOffice) return;
+    setIsIncomingLoading(true);
     try {
-      const res = await fetchWithAuth(`/api/processor/documents/${officeId}`);
+      const res = await fetchWithAuth(`/api/processor/documents/expected-list/${targetOffice}`);
       const data = await res.json();
-      if (res.ok) {
-        setIncomingDocs(data);
-      }
-    } catch (err) { console.error("Frontend document log sync error:", err); }
+      if (res.ok) setExpectedIncomingList(data);
+    } catch (err) {
+      console.error("Failed fetching expected incoming list:", err);
+    } finally {
+      setIsIncomingLoading(false);
+    }
   };
 
   const fetchPipelineDocs = async (officeId) => {
@@ -73,7 +93,9 @@ export function useProcessorData(userId) {
       const res = await fetchWithAuth(`/api/processor/documents/pipeline/${officeId}`);
       const data = await res.json();
       if (res.ok) setPipelineDocs(data);
-    } catch (err) { console.error("Pipeline sync error:", err); }
+    } catch (err) { 
+      console.error("Pipeline sync error:", err); 
+    }
   };
 
   const fetchOfficeActionHistory = async (officeId) => {
@@ -82,7 +104,9 @@ export function useProcessorData(userId) {
       const res = await fetchWithAuth(`/api/processor/history/${officeId}`);
       const data = await res.json();
       if (res.ok) setActionHistory(data);
-    } catch (err) { console.error("History transaction log retrieval error:", err); }
+    } catch (err) { 
+      console.error("History transaction log retrieval error:", err); 
+    }
   };
 
   const fetchProcessorMeta = async () => {
@@ -90,41 +114,25 @@ export function useProcessorData(userId) {
       const res = await fetchWithAuth(`/api/profile/${userId}`);
       const data = await res.json();
       if (res.ok) {
-        setProcessorOfficeName(data.office_name || 'CICS Office');
+        setProcessorOfficeName(data.office_name || 'HRMO');
         setProcessorOfficeId(data.o_id);
-  
+
         setProfileName(data.full_name || '');
         setProfileEmail(data.uni_email || '');
         setFacultyId(data.faculty_id || 'NOT ASSIGNED');
-        setDepartmentName(data.department_name || 'CICS');
+        setDepartmentName(data.department_name || 'Administration');
         setTwoFaEnabled(data.two_fa_enabled || false);
         setTwoFaCode(data.two_fa_code || '');
-  
-        // 1. Declare fetchKpis FIRST
-        const fetchKpis = async (officeId) => {
-          try {
-            const res = await fetchWithAuth(`/api/processor/documents/kpi-metrics/${officeId}`);
-            if (res.ok) {
-              const kpiData = await res.json();
-              setExpectedIncomingCount(kpiData.incomingCount);
-              setAwaitingScanInCount(kpiData.awaitingScanInCount);
-              setPendingCount(kpiData.pendingCount);
-              setInVerificationCount(kpiData.inVerificationCount);
-              setCompletedProcessingCount(kpiData.completedProcessingCount);
-            }
-          } catch (err) {
-            console.error("Failed fetching processor KPI metrics", err);
-          }
-        };
-  
-        // 2. Call it along with the rest (notice line 103 is removed)
+
         fetchKpis(data.o_id);
-        fetchIncomingDocumentLogs(data.o_id);
         fetchPipelineDocs(data.o_id);
         fetchOfficeActionHistory(data.o_id);
         fetchLiveNotifications(data.o_id);
+        fetchExpectedIncomingList(data.o_id);
       }
-    } catch (err) { console.error("Error connecting metadata:", err); }
+    } catch (err) { 
+      console.error("Error connecting metadata:", err); 
+    }
   };
 
   const fetchWorkflowTemplates = async () => {
@@ -175,56 +183,86 @@ export function useProcessorData(userId) {
     };
   }, [userId, processorOfficeId]);
 
-  // --- DERIVED DATA (Filters & Pagination) ---
-  const filteredDocs = incomingDocs.filter(doc => {
-    const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) || doc.qr_code.toLowerCase().includes(search.toLowerCase());
-    if (filterStatus === 'Awaiting Scan-In') return matchesSearch && (doc.time_in === null || doc.time_in === undefined);
-    if (filterStatus === 'Pending') return matchesSearch; 
-    if (filterStatus === 'In Verification') return matchesSearch && doc.status?.toLowerCase() === 'in verification';
-    return matchesSearch;
+  // --- UNIFIED OFFICE STATUS FILTERING ---
+  // Evaluates status relative to THIS office (matching KPI definitions)
+  const resolveOfficeStatus = (doc) => {
+    if (doc.pdoc_office_time_out || doc.time_out) return 'Completed';
+    if (doc.status?.toLowerCase() === 'in verification' || doc.current_step_is_adhoc) return 'In Verification';
+    if (!doc.time_in && !doc.pdoc_office_time_in) return 'Awaiting Scan-In';
+    return 'Pending';
+  };
+
+  // --- FILTER DOCS LIST ---
+  const filterDocsList = (docs) => docs.filter(doc => {
+    const q = search.toLowerCase();
+    const matchesSearch = (doc.title && doc.title.toLowerCase().includes(q)) || 
+                          (doc.qr_code && doc.qr_code.toLowerCase().includes(q));
+    if (!matchesSearch) return false;
+
+    if (filterStatus === 'All') return true;
+
+    const hasTimeIn = Boolean(doc.time_in || doc.pdoc_office_time_in);
+    const hasTimeOut = Boolean(doc.time_out || doc.pdoc_office_time_out);
+    const isVerification = doc.status?.toLowerCase() === 'in verification' || doc.current_step_is_adhoc;
+
+    // 1. Awaiting Scan-In: At this office, but no Time-In yet
+    if (filterStatus === 'Awaiting Scan-In') {
+      return !hasTimeIn && !hasTimeOut;
+    }
+
+    // 2. Pending: Has Time-In and NO Time-Out (INCLUDES In Verification items)
+    if (filterStatus === 'Pending') {
+      return hasTimeIn && !hasTimeOut;
+    }
+
+    // 3. In Verification: Only the subset currently on ad-hoc detour without time-out
+    if (filterStatus === 'In Verification') {
+      return isVerification && !hasTimeOut;
+    }
+
+    // 4. Completed: Has clocked out of this office
+    if (filterStatus === 'Completed') {
+      return hasTimeOut;
+    }
+
+    return true;
   });
 
-  const filteredPipelineDocs = pipelineDocs.filter(doc => {
-    const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) || doc.qr_code.toLowerCase().includes(search.toLowerCase());
-    if (filterStatus === 'Awaiting Scan-In') return matchesSearch && (doc.time_in === null || doc.time_in === undefined) && !doc.time_out;
-    if (filterStatus === 'Pending') return matchesSearch && !doc.time_out; 
-    if (filterStatus === 'In Verification') return matchesSearch && doc.status?.toLowerCase() === 'in verification';
-    if (filterStatus === 'Completed') return matchesSearch && doc.time_out !== null && doc.time_out !== undefined; 
-    return matchesSearch;
-  });
+  const filteredPipelineDocs = filterDocsList(pipelineDocs);
+
+  const currentDashDocs = filteredPipelineDocs.slice((dashboardPage - 1) * itemsPerPage, dashboardPage * itemsPerPage);
+  const totalDashPages = Math.ceil(filteredPipelineDocs.length / itemsPerPage) || 1;
+
+  const currentPipeDocs = filteredPipelineDocs.slice((pipelinePage - 1) * itemsPerPage, pipelinePage * itemsPerPage);
+  const totalPipePages = Math.ceil(filteredPipelineDocs.length / itemsPerPage) || 1;
 
   const filteredHistoryLogs = actionHistory.filter(log => {
-    const matchesSearch = log.title.toLowerCase().includes(search.toLowerCase()) || log.full_name.toLowerCase().includes(search.toLowerCase()) || log.qr_code.toLowerCase().includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    const matchesSearch = (log.title && log.title.toLowerCase().includes(q)) || 
+                          (log.full_name && log.full_name.toLowerCase().includes(q)) || 
+                          (log.qr_code && log.qr_code.toLowerCase().includes(q));
     if (historyFilter !== 'All') return matchesSearch && log.action_type === historyFilter;
     return matchesSearch;
   });
 
-  const currentDashDocs = filteredDocs.slice((dashboardPage - 1) * itemsPerPage, dashboardPage * itemsPerPage);
-  const totalDashPages = Math.ceil(filteredDocs.length / itemsPerPage);
-
-  const currentPipeDocs = filteredPipelineDocs.slice((pipelinePage - 1) * itemsPerPage, pipelinePage * itemsPerPage);
-  const totalPipePages = Math.ceil(filteredPipelineDocs.length / itemsPerPage);
-
   const currentHistoryPageRows = filteredHistoryLogs.slice((historyPage - 1) * itemsPerPage, historyPage * itemsPerPage);
-  const totalHistoryTabPages = Math.ceil(filteredHistoryLogs.length / itemsPerPage);
-
-  const awaitingScanInCount = incomingDocs.filter(d => d.time_in === null || d.time_in === undefined).length;
-  const pendingCount = incomingDocs.filter(d => d.time_in !== null && d.time_out === null).length;
-  const completedProcessingCount = pipelineDocs.filter(d => d.time_out !== null && d.time_out !== undefined).length;
-  const inVerificationCount = pipelineDocs.filter(d => d.status?.toLowerCase() === 'in verification' && (d.time_out === null || d.time_out === undefined)).length;
+  const totalHistoryTabPages = Math.ceil(filteredHistoryLogs.length / itemsPerPage) || 1;
 
   return {
     processorOfficeName, processorOfficeId,
     profileName, setProfileName, profileEmail, setProfileEmail,
     facultyId, departmentName, twoFaEnabled, setTwoFaEnabled, twoFaCode, setTwoFaCode,
     expectedIncomingCount, awaitingScanInCount, pendingCount, completedProcessingCount, inVerificationCount,
+    expectedIncomingList, isIncomingModalOpen, setIsIncomingModalOpen, isIncomingLoading,
+    fetchExpectedIncomingList,
     notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
-    processTypes, officesList, incomingDocs, pipelineDocs,
+    processTypes, officesList, pipelineDocs,
     search, setSearch, filterStatus, setFilterStatus, historyFilter, setHistoryFilter,
     dashboardPage, setDashboardPage, pipelinePage, setPipelinePage, historyPage, setHistoryPage,
-    filteredDocs, currentDashDocs, totalDashPages,
+    filteredDocs: filteredPipelineDocs, currentDashDocs, totalDashPages,
     filteredPipelineDocs, currentPipeDocs, totalPipePages,
     filteredHistoryLogs, currentHistoryPageRows, totalHistoryTabPages,
+    resolveOfficeStatus,
     fetchProcessorMeta, fetchOfficesList
   };
 }

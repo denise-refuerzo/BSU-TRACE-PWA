@@ -22,6 +22,7 @@ import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
 import OfficeChatHub from "../../shared/OfficeChatHub";
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
+import IncomingDocumentsModal from "../../shared/modals/IncomingDocumentsModal";
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -426,6 +427,8 @@ export default function ProcessorDashboard() {
           {activeTab === 'documents' && (
             <ProcessorPipelineTab 
               {...processorData} 
+              setActiveTab={setActiveTab}
+              setIsIncomingModalOpen={processorData.setIsIncomingModalOpen}
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
           )}
@@ -484,6 +487,15 @@ export default function ProcessorDashboard() {
           handleUpdatePassword={handleUpdatePassword}
         />
       )}
+
+    {processorData.isIncomingModalOpen && (
+      <IncomingDocumentsModal 
+        isOpen={processorData.isIncomingModalOpen}
+        onClose={() => processorData.setIsIncomingModalOpen(false)}
+        documents={processorData.expectedIncomingList}
+        isLoading={processorData.isIncomingLoading}
+      />
+    )}
 
     </div>
   );

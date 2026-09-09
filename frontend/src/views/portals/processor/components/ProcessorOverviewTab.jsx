@@ -9,6 +9,7 @@ export default function ProcessorOverviewTab({
   pendingCount,
   completedProcessingCount,
   inVerificationCount,
+  setIsIncomingModalOpen,
   filterStatus,
   setFilterStatus,
   search,
@@ -19,17 +20,17 @@ export default function ProcessorOverviewTab({
   dashboardPage,
   totalDashPages,
   handleRowDocumentClick,
+  resolveOfficeStatus,
   setActiveTab
 }) {
-  const kpiCards = [
-    { label: 'Incoming Docs', filterKey: 'Incoming', val: expectedIncomingCount, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-t-blue-500', icon: Inbox },
-    { label: 'Awaiting Scan-In', filterKey: 'Awaiting Scan-In', val: awaitingScanInCount, color: 'text-[#D32F2F]', bg: 'bg-red-50', border: 'border-t-[#D32F2F]', icon: Scan },
-    { label: 'Pending Docs', filterKey: 'Pending', val: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-t-amber-500', icon: Clock },
-    { label: 'In Verification', filterKey: 'In Verification', val: inVerificationCount, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-t-purple-500', icon: Scale },
-    { label: 'Completed Docs', filterKey: 'Completed', val: completedProcessingCount, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-t-emerald-500', icon: CheckCircle }
+  const filterKpiCards = [
+    { label: 'Awaiting Scan-In', filterKey: 'Awaiting Scan-In', val: awaitingScanInCount, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]', icon: <Scan size={18} /> },
+    { label: 'Pending Docs', filterKey: 'Pending', val: pendingCount, color: 'text-amber-500', border: 'border-t-amber-500', icon: <Clock size={18} /> },
+    { label: 'In Verification', filterKey: 'In Verification', val: inVerificationCount, color: 'text-purple-600', border: 'border-t-purple-500', icon: <Scale size={18} /> },
+    { label: 'Completed Docs', filterKey: 'Completed', val: completedProcessingCount, color: 'text-emerald-600', border: 'border-t-emerald-500', icon: <CheckCircle size={18} /> }
   ];
 
-  const handleKpiClick = (filterKey) => {
+  const handleKpiFilterClick = (filterKey) => {
     setFilterStatus(prev => prev === filterKey ? 'All' : filterKey);
     setDashboardPage(1);
   };
@@ -69,34 +70,57 @@ export default function ProcessorOverviewTab({
 
         {/* 5 KPI Metric Counters */}
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {kpiCards.map((kpi, idx) => {
+          
+          {/* Card 1: Incoming Docs (Triggers Modal Directly) */}
+          <div 
+            onClick={() => setIsIncomingModalOpen(true)}
+            className="bg-white p-3.5 sm:p-4 rounded-2xl border-t-4 border-t-blue-500 border-x border-b border-gray-200 shadow-sm text-center flex flex-col justify-between transition-all cursor-pointer select-none active:scale-95 hover:shadow-md hover:border-blue-300"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && setIsIncomingModalOpen(true)}
+          >
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider block leading-tight truncate">
+                Incoming Docs
+              </span>
+              <span className="text-blue-500 hidden sm:block"><Inbox size={18} /></span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-black my-0.5 text-blue-600">
+              {String(expectedIncomingCount ?? 0).padStart(2, '0')}
+            </p>
+            <span className="text-[8px] sm:text-[9px] font-bold text-blue-600 uppercase tracking-tight">
+              View Modal &rarr;
+            </span>
+          </div>
+
+          {/* Cards 2-5: Interactive Table Filters */}
+          {filterKpiCards.map((kpi, idx) => {
             const isSelected = filterStatus === kpi.filterKey;
-            const Icon = kpi.icon;
             return (
               <div 
                 key={idx}
-                onClick={() => handleKpiClick(kpi.filterKey)}
-                className={`bg-white p-3.5 sm:p-4 rounded-2xl border-t-4 ${kpi.border} border-x border-b shadow-sm text-center flex flex-col items-center justify-center transition-all cursor-pointer transform hover:-translate-y-0.5 active:scale-95 select-none touch-manipulation ${
+                onClick={() => handleKpiFilterClick(kpi.filterKey)}
+                className={`bg-white p-3.5 sm:p-4 rounded-2xl border-t-4 ${kpi.border} border-x border-b shadow-sm text-center flex flex-col justify-between transition-all cursor-pointer select-none active:scale-95 touch-manipulation ${
                   isSelected 
-                    ? 'ring-2 ring-neutral-800 border-b-neutral-400 bg-neutral-50/70 shadow-md' 
+                    ? 'ring-2 ring-neutral-800 border-b-neutral-400 bg-neutral-50/80 shadow-md' 
                     : 'border-gray-200 hover:shadow-md'
                 }`}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleKpiClick(kpi.filterKey)}
+                onKeyDown={(e) => e.key === 'Enter' && handleKpiFilterClick(kpi.filterKey)}
               >
-                <div className={`mb-2.5 sm:mb-3 p-2.5 sm:p-3 rounded-full ${kpi.bg}`}>
-                  <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${kpi.color}`} strokeWidth={2.5} />
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider block leading-tight truncate">
+                    {kpi.label}
+                  </span>
+                  <span className="text-gray-400 hidden sm:block">{kpi.icon}</span>
                 </div>
-                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1 sm:mb-1.5 leading-tight truncate max-w-full">
-                  {kpi.label}
-                </p>
-                <p className={`text-2xl sm:text-3xl font-black ${kpi.color}`}>
+                <p className={`text-2xl sm:text-3xl font-black my-0.5 ${kpi.color}`}>
                   {String(kpi.val ?? 0).padStart(2, '0')}
                 </p>
-                {isSelected && (
-                  <span className="text-[8px] sm:text-[9px] font-bold text-neutral-500 mt-1.5 sm:mt-2 uppercase tracking-tight">Active Filter</span>
-                )}
+                <span className={`text-[8px] sm:text-[9px] font-bold uppercase tracking-tight ${isSelected ? 'text-neutral-600' : 'text-transparent'}`}>
+                  Active Filter
+                </span>
               </div>
             );
           })}
@@ -146,19 +170,20 @@ export default function ProcessorOverviewTab({
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-wider">
                 <th className="p-3 sm:p-4">Title</th>
                 <th className="p-3 sm:p-4">Form Type</th>
-                <th className="p-3 sm:p-4">Status</th>
+                <th className="p-3 sm:p-4">Office Status</th>
                 <th className="p-3 sm:p-4">Next Office</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {currentDashDocs.map((doc, index) => {
-                const statusLower = doc.status?.toLowerCase();
-                const isCompleted = statusLower === 'completed' || doc.time_out;
-                const isInVerification = statusLower === 'in verification';
+                const officeStatus = resolveOfficeStatus ? resolveOfficeStatus(doc) : (doc.status || 'Pending');
+                const isCompleted = officeStatus === 'Completed';
+                const isInVerification = officeStatus === 'In Verification';
+                const isAwaiting = officeStatus === 'Awaiting Scan-In';
 
                 return (
                   <tr 
-                    key={index} 
+                    key={doc.ini_id || index} 
                     onClick={() => handleRowDocumentClick(doc)}
                     className="hover:bg-red-50/40 cursor-pointer transition-colors group"
                   >
@@ -175,7 +200,7 @@ export default function ProcessorOverviewTab({
                     </td>
                     <td className="p-3 sm:p-4 whitespace-nowrap">
                       <span className="px-2 py-0.5 bg-red-50 text-[#D32F2F] border border-red-100 font-bold text-[9px] uppercase tracking-wider rounded-md">
-                        {doc.process_name || 'REGISTRAR FORM'}
+                        {doc.process_name || 'GENERAL FORM'}
                       </span>
                     </td>
                     <td className="p-3 sm:p-4 whitespace-nowrap">
@@ -184,12 +209,14 @@ export default function ProcessorOverviewTab({
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                           : isInVerification
                             ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : isAwaiting
+                              ? 'bg-red-50 text-[#D32F2F] border border-red-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
-                          isCompleted ? 'bg-emerald-500' : isInVerification ? 'bg-purple-500' : 'bg-amber-500'
+                          isCompleted ? 'bg-emerald-500' : isInVerification ? 'bg-purple-500' : isAwaiting ? 'bg-[#D32F2F]' : 'bg-amber-500'
                         }`}></span>
-                        {doc.status || 'Incoming'}
+                        {officeStatus}
                       </span>
                     </td>
                     <td className="p-3 sm:p-4 whitespace-nowrap text-xs text-gray-600 font-medium">
