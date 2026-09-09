@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Filter, Search, Inbox, FileText } from 'lucide-react';
 
 export default function ProcessorPipelineTab({
@@ -9,15 +9,33 @@ export default function ProcessorPipelineTab({
   setFilterStatus,
   currentPipeDocs,
   filteredPipelineDocs,
+  pipelineDocs,
   pipelinePage,
   totalPipePages,
   handleOpenPipelineDetails,
   setActiveTab,
-  setIsIncomingModalOpen
+  setIsIncomingModalOpen,
+  targetDocId = null,
+  onClearTargetDocId = null
 }) {
+  const tableRef = useRef(null);
+
+  // Deep link handler: triggers verification modal and smooth scrolls
+  useEffect(() => {
+    if (targetDocId && pipelineDocs && pipelineDocs.length > 0) {
+      const matched = pipelineDocs.find(d => d.ini_id === parseInt(targetDocId));
+      if (matched) {
+        handleOpenPipelineDetails(matched, false);
+        if (tableRef.current) {
+          tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+      if (onClearTargetDocId) onClearTargetDocId();
+    }
+  }, [targetDocId, pipelineDocs]);
+
   const handleFilterChange = (val) => {
     if (val === 'Incoming') {
-      // Redirect to Dashboard tab and open the incoming document modal
       if (setActiveTab) setActiveTab('dashboard');
       if (setIsIncomingModalOpen) setIsIncomingModalOpen(true);
       return;
@@ -36,7 +54,10 @@ export default function ProcessorPipelineTab({
       </div>
 
       {/* ACTIVE REQUESTS MATRIX TABLE */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      <div 
+        ref={tableRef}
+        className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col scroll-mt-6"
+      >
         
         {/* Table Controls Header */}
         <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-gray-50/50">

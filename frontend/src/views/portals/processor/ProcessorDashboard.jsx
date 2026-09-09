@@ -22,7 +22,7 @@ import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
 import OfficeChatHub from "../../shared/OfficeChatHub";
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
-import IncomingDocumentsModal from "../../shared/modals/IncomingDocumentsModal";
+import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -42,6 +42,7 @@ export default function ProcessorDashboard() {
   // --- CORE UI STATE ---
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   
   // --- MODAL & ACTION STATE ---
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -97,26 +98,45 @@ export default function ProcessorDashboard() {
     setShowPipelineModal(true);
   };
 
-  // Row click transition from Dashboard: switches to documents tab and opens modal
-  const handleRowDocumentClick = (doc) => {
-    setActiveTab('documents');
-    handleOpenPipelineDetails(doc, false);
-  };
+// Row click transition: switches view to 'documents' and opens the Document Verification Detail modal
+const handleRowDocumentClick = (doc) => {
+  setActiveTab('documents');
+  handleOpenPipelineDetails(doc, false);
+};
 
-  // Notification click handler
-  const handleNotificationClick = (notif) => {
-    const allKnownDocs = [...(processorData.incomingDocs || []), ...(processorData.pipelineDocs || [])];
-    const matchedDoc = allKnownDocs.find(d => 
-      (notif.ini_id && d.ini_id === notif.ini_id) || 
-      (notif.title && d.title?.toLowerCase() === notif.title?.toLowerCase())
-    );
+// Notification click: switches view to 'documents' and deep-links to that specific document's modal
+const handleNotificationClick = async (notif) => {
+  setActiveTab('documents');
 
-    if (matchedDoc) {
-      handleOpenPipelineDetails(matchedDoc, false);
-    } else {
-      setActiveTab('documents');
+  const targetIniId = notif.ini_id;
+  const allKnownDocs = processorData.pipelineDocs || [];
+
+  // 1. Try finding in loaded pipeline documents
+  let matchedDoc = allKnownDocs.find(d => 
+    (targetIniId && d.ini_id === targetIniId) || 
+    (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
+  );
+
+  // 2. If found, open the verification modal immediately
+  if (matchedDoc) {
+    handleOpenPipelineDetails(matchedDoc, false);
+    return;
+  }
+
+  // 3. Fallback: If the document isn't in pipelineDocs yet, fetch it directly
+  if (targetIniId) {
+    try {
+      const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
+      const freshDocs = await res.json();
+      const docFromFresh = Array.isArray(freshDocs) ? freshDocs.find(d => d.ini_id === targetIniId) : null;
+      if (docFromFresh) {
+        handleOpenPipelineDetails(docFromFresh, false);
+      }
+    } catch (err) {
+      console.error("Error opening notification document:", err);
     }
-  };
+  }
+};
 
   const getRouteStopsArray = (doc) => {
     const match = processorData.processTypes.find(p => p.process_name === doc.process_name);
@@ -428,6 +448,8 @@ export default function ProcessorDashboard() {
             <ProcessorPipelineTab 
               {...processorData} 
               setActiveTab={setActiveTab}
+              targetDocId={activeNotificationDocId}
+              onClearTargetDocId={() => setActiveNotificationDocId(null)}
               setIsIncomingModalOpen={processorData.setIsIncomingModalOpen}
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
@@ -488,14 +510,14 @@ export default function ProcessorDashboard() {
         />
       )}
 
-    {processorData.isIncomingModalOpen && (
-      <IncomingDocumentsModal 
-        isOpen={processorData.isIncomingModalOpen}
-        onClose={() => processorData.setIsIncomingModalOpen(false)}
-        documents={processorData.expectedIncomingList}
-        isLoading={processorData.isIncomingLoading}
-      />
-    )}
+      {processorData.isIncomingModalOpen && (
+        <IncomingDocumentsModal 
+          isOpen={processorData.isIncomingModalOpen}
+          onClose={() => processorData.setIsIncomingModalOpen(false)}
+          documents={processorData.expectedIncomingList}
+          isLoading={processorData.isIncomingLoading}
+        />
+      )}
 
     </div>
   );

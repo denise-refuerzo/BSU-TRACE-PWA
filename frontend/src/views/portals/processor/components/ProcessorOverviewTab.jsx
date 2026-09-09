@@ -225,18 +225,6 @@ export default function ProcessorOverviewTab({
                   </tr>
                 );
               })}
-              
-              {filteredDocs.length === 0 && (
-                <tr>
-                  <td colSpan="4" className="p-8 sm:p-12 text-center bg-gray-50">
-                    <div className="flex flex-col items-center justify-center">
-                      <Inbox className="w-7 h-7 text-gray-300 mb-2" />
-                      <p className="text-xs sm:text-sm font-bold text-gray-600">No Documents Found</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">Workspace queue contains no records for filter "{filterStatus}".</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

@@ -1642,10 +1642,11 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
       }));
 
     } else if (roleId === 2) {
-      // 2. PROCESSOR: Alerts when an incoming document is created, showing title and requestor name
+      // 2. PROCESSOR: Alerts when an incoming document is created
       const query = `
         SELECT 
           pd.pd_id as id,
+          idoc.ini_id,
           idoc.title,
           u.full_name as requestor,
           idoc.created_at as time
@@ -1658,6 +1659,8 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
       const result = await pool.query(query, [officeId]);
       alertRows = result.rows.map(row => ({
         id: row.id,
+        ini_id: row.ini_id, // <-- CRITICAL: Pass ini_id directly!
+        doc_title: row.title,
         title: "Incoming Document",
         message: `"${row.title}" submitted by ${row.requestor}`,
         time: row.time
