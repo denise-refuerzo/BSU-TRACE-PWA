@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, ChevronLeft, ChevronRight, Filter, Files, Clock, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function OriginatorOverviewTab({
   profile,
@@ -8,13 +8,36 @@ export default function OriginatorOverviewTab({
   pendingCount,
   mostRecentDoc,
   recentDocStops,
-  currentLedgerDocs,
-  currentPage,
-  totalPages,
-  setCurrentPage,
   setShowModal,
-  setActiveTab
+  setActiveTab,
+  onSelectDocumentDetails
 }) {
+  // 'All', 'Pending', 'Action Required', 'Completed'
+  const [selectedKpiFilter, setSelectedKpiFilter] = useState('All');
+  const [matrixPage, setMatrixPage] = useState(1);
+  const itemsPerPage = 5;
+
+  const kpiCards = [
+    { label: 'Total Documents', filterKey: 'All', val: documents.length, color: 'text-gray-900', bg: 'bg-gray-100', border: 'border-t-gray-700', icon: Files }, 
+    { label: 'Pending Process', filterKey: 'Pending', val: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-t-amber-500', icon: Clock }, 
+    { label: 'Action Required', filterKey: 'Action Required', val: documents.filter(d => d.status?.toLowerCase() === 'action required').length, color: 'text-[#D32F2F]', bg: 'bg-red-50', border: 'border-t-[#D32F2F]', icon: AlertCircle }, 
+    { label: 'Completed Log', filterKey: 'Completed', val: documents.filter(d => d.status?.toLowerCase() === 'completed').length, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-t-emerald-500', icon: CheckCircle }
+  ];
+
+  const handleKpiCardClick = (key) => {
+    setSelectedKpiFilter(prev => prev === key ? 'All' : key);
+    setMatrixPage(1);
+  };
+
+  // Filter Document Ledger Matrix based on KPI selected
+  const filteredLedger = documents.filter(doc => {
+    if (selectedKpiFilter === 'All') return true;
+    return doc.status?.toLowerCase() === selectedKpiFilter.toLowerCase();
+  });
+
+  const totalPages = Math.ceil(filteredLedger.length / itemsPerPage) || 1;
+  const currentLedgerDocs = filteredLedger.slice((matrixPage - 1) * itemsPerPage, matrixPage * itemsPerPage);
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-200">
       
@@ -38,7 +61,7 @@ export default function OriginatorOverviewTab({
           </div>
           <button 
             onClick={() => setActiveTab('profile')} 
-            className="mt-5 px-4 py-2 w-max bg-gray-900 text-white rounded-lg text-xs font-bold hover:bg-black transition-colors shadow-sm flex items-center gap-1.5"
+            className="mt-5 px-4 py-2 w-max bg-gray-900 text-white rounded-lg text-xs font-bold hover:bg-black transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
             View Profile
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
@@ -47,38 +70,62 @@ export default function OriginatorOverviewTab({
         
         {/* 4 KPI Counters Grid */}
         <div className="xl:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Documents', val: documents.length, color: 'text-gray-900', border: 'border-t-gray-700' }, 
-            { label: 'Pending Process', val: pendingCount, color: 'text-amber-600', border: 'border-t-amber-500' }, 
-            { label: 'Action Required', val: documents.filter(d => d.status?.toLowerCase() === 'action required').length, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]' }, 
-            { label: 'Completed Log', val: documents.filter(d => d.status?.toLowerCase() === 'completed').length, color: 'text-emerald-600', border: 'border-t-emerald-500' }
-          ].map((kpi, idx) => (
-            <div key={idx} className={`bg-white p-5 rounded-2xl border-t-4 ${kpi.border} border-x border-b border-gray-200 shadow-sm text-center flex flex-col justify-center hover:shadow-md transition-all transform hover:-translate-y-0.5`}>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">{kpi.label}</p>
-              <p className={`text-4xl font-black ${kpi.color}`}>{String(kpi.val).padStart(2, '0')}</p>
-            </div>
-          ))}
+          {kpiCards.map((kpi, idx) => {
+            const isSelected = selectedKpiFilter === kpi.filterKey;
+            const Icon = kpi.icon;
+            return (
+              <div 
+                key={idx} 
+                onClick={() => handleKpiCardClick(kpi.filterKey)}
+                className={`bg-white p-5 rounded-2xl border-t-4 ${kpi.border} border-x border-b shadow-sm text-center flex flex-col items-center justify-center transition-all cursor-pointer transform hover:-translate-y-0.5 active:scale-95 select-none ${
+                  isSelected 
+                    ? 'ring-2 ring-neutral-800 border-b-neutral-400 bg-neutral-50/70 shadow-md' 
+                    : 'border-gray-200 hover:shadow-md'
+                }`}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleKpiCardClick(kpi.filterKey)}
+              >
+                <div className={`mb-3 p-3 rounded-full ${kpi.bg}`}>
+                  <Icon className={`w-5 h-5 ${kpi.color}`} strokeWidth={2.5} />
+                </div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5">{kpi.label}</p>
+                <p className={`text-3xl sm:text-4xl font-black ${kpi.color}`}>{String(kpi.val).padStart(2, '0')}</p>
+                {isSelected && (
+                  <span className="text-[9px] font-bold text-neutral-500 mt-2 uppercase tracking-tight">Active Filter</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* RECENT DOCUMENT TRACKER */}
       {mostRecentDoc && (
-        <div className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200 shadow-sm text-left relative overflow-hidden">
-          <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-3">
+        <div 
+          onClick={() => setActiveTab('documents')}
+          className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200 shadow-sm text-left relative overflow-hidden cursor-pointer hover:shadow-md transition-all group"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && setActiveTab('documents')}
+        >
+          <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-3 pb-5 border-b border-gray-100">
             <div>
-              <h4 className="text-xs font-black tracking-widest text-gray-400 uppercase mb-1">Active Pipeline Monitoring</h4>
+              <h4 className="text-xs font-black tracking-widest text-gray-400 uppercase mb-1.5 group-hover:text-[#D32F2F] transition-colors">
+                Active Pipeline Monitoring &rarr;
+              </h4>
               <p className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <svg className="w-5 h-5 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <svg className="w-5 h-5 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 {mostRecentDoc.title}
               </p>
             </div>
             
             {/* Ad-Hoc Top Badge */}
             {mostRecentDoc.history_logs?.some(l => (l.is_adhoc === true || String(l.is_adhoc) === 'true' || l.is_adhoc === 1) && !l.time_out) && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm">
-                <span className="relative flex h-2 w-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm mt-1 md:mt-0">
+                <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500"></span>
                 </span>
                 Ad-Hoc Detour Active
               </span>
@@ -87,12 +134,14 @@ export default function OriginatorOverviewTab({
 
           {/* Ad-Hoc Warning Message */}
           {mostRecentDoc.history_logs?.some(l => (l.is_adhoc === true || String(l.is_adhoc) === 'true' || l.is_adhoc === 1) && !l.time_out) && (
-            <div className="mb-8 p-4 bg-purple-50 border border-purple-100 rounded-xl text-xs text-purple-800 font-medium flex items-start gap-3 shadow-sm">
-              <svg className="w-5 h-5 text-purple-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="leading-relaxed">
-                This document has been temporarily routed to <strong className="font-bold text-purple-900 border-b border-purple-300">{mostRecentDoc.current_office}</strong> for an unscheduled ad-hoc verification detour. The standard routing pipeline will resume once cleared by this station.
+            <div className="mb-10 p-5 bg-gradient-to-r from-purple-50 to-white border border-purple-100 rounded-xl text-xs text-purple-800 font-medium flex items-start gap-4 shadow-sm">
+              <div className="p-2 bg-purple-100 rounded-lg shrink-0">
+                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <span className="leading-relaxed mt-0.5">
+                This document has been temporarily routed to <strong className="font-bold text-purple-900 border-b border-purple-300 pb-0.5">{mostRecentDoc.current_office}</strong> for an unscheduled ad-hoc verification detour. The standard routing pipeline will resume once cleared by this station.
               </span>
             </div>
           )}
@@ -100,7 +149,7 @@ export default function OriginatorOverviewTab({
           {/* Progress Timeline */}
           <div className="relative flex items-start justify-between mt-8 px-4 sm:px-8">
             {/* Background Line */}
-            <div className="absolute left-4 sm:left-8 right-4 sm:right-8 h-1 bg-gray-200 top-4 -z-10 rounded-full"></div>
+            <div className="absolute left-4 sm:left-8 right-4 sm:right-8 h-1.5 bg-gray-100 top-[17px] -z-10 rounded-full"></div>
             
             {(() => {
               const historyLogs = mostRecentDoc.history_logs || [];
@@ -135,7 +184,7 @@ export default function OriginatorOverviewTab({
                 <>
                   {/* Active Fill Line */}
                   <div 
-                    className={`absolute left-4 sm:left-8 h-1 top-4 -z-10 rounded-full transition-all duration-700 ease-in-out ${resultStops.some(n => n.isAdhocNode && n.logRef && !n.logRef.time_out) ? 'bg-purple-500' : 'bg-[#D32F2F]'}`}
+                    className={`absolute left-4 sm:left-8 h-1.5 top-[17px] -z-10 rounded-full transition-all duration-700 ease-in-out ${resultStops.some(n => n.isAdhocNode && n.logRef && !n.logRef.time_out) ? 'bg-purple-500' : 'bg-[#D32F2F]'}`}
                     style={{ width: `calc(${mostRecentDoc.status?.toLowerCase() === 'completed' ? 100 : percentage}% - ${window.innerWidth < 640 ? '32px' : '64px'})` }}
                   ></div>
                   
@@ -153,20 +202,20 @@ export default function OriginatorOverviewTab({
 
                     return (
                       <div key={index} className="text-center flex flex-col items-center flex-1 z-10">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                          isCurrent && node.isAdhocNode ? 'bg-purple-600 text-white shadow-[0_0_0_6px_rgba(147,51,234,0.15)] animate-pulse' :
-                          isCurrent ? 'bg-[#D32F2F] text-white shadow-[0_0_0_6px_rgba(211,47,47,0.15)] animate-pulse' :
-                          isPast ? 'bg-[#D32F2F] text-white shadow-sm' : 'bg-white border-2 border-gray-300 text-gray-400'
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${
+                          isCurrent && node.isAdhocNode ? 'bg-purple-600 text-white ring-4 ring-purple-100 shadow-lg shadow-purple-200 animate-pulse' :
+                          isCurrent ? 'bg-[#D32F2F] text-white ring-4 ring-red-50 shadow-lg shadow-red-200 animate-pulse' :
+                          isPast ? 'bg-[#D32F2F] text-white shadow-md' : 'bg-gray-50 border-2 border-gray-200 text-gray-400'
                         }`}>
                           {isPast && !isCurrent ? (
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
                           ) : node.isAdhocNode ? (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                           ) : (
                             index - resultStops.slice(0, index).filter(n => n.isAdhocNode).length + 1
                           )}
                         </div>
-                        <p className={`text-[10px] sm:text-[11px] font-bold mt-3 sm:mt-4 truncate w-[60px] sm:w-[100px] leading-tight ${
+                        <p className={`text-[10px] sm:text-xs font-bold mt-4 sm:mt-5 truncate w-[64px] sm:w-[110px] leading-tight ${
                           isCurrent && node.isAdhocNode ? 'text-purple-700' : 
                           isCurrent ? 'text-[#D32F2F]' : 
                           isPast ? 'text-gray-900' : 'text-gray-400'
@@ -185,12 +234,23 @@ export default function OriginatorOverviewTab({
 
       {/* DOCUMENT LEDGER MATRIX TABLE */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden text-left flex flex-col">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-          <div>
+        <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50/50">
+          <div className="flex items-center gap-3">
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               Document Ledger Matrix
             </h3>
+            {selectedKpiFilter !== 'All' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-neutral-200 text-neutral-800">
+                <Filter size={11} /> {selectedKpiFilter}
+                <button 
+                  onClick={() => setSelectedKpiFilter('All')} 
+                  className="ml-1 hover:text-red-600 cursor-pointer font-black"
+                >
+                  ×
+                </button>
+              </span>
+            )}
           </div>
           <button 
             onClick={() => setShowModal(true)} 
@@ -212,8 +272,12 @@ export default function OriginatorOverviewTab({
             </thead>
             <tbody className="divide-y divide-gray-100">
               {currentLedgerDocs.map(doc => (
-                <tr key={doc.ini_id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="p-4 font-bold text-gray-900">{doc.title}</td>
+                <tr 
+                  key={doc.ini_id} 
+                  onClick={() => onSelectDocumentDetails?.(doc)}
+                  className="hover:bg-red-50/40 cursor-pointer transition-colors group"
+                >
+                  <td className="p-4 font-bold text-gray-900 group-hover:text-[#D32F2F] transition-colors">{doc.title}</td>
                   <td className="p-4 text-gray-600 font-medium">
                     <span className="flex items-center gap-1.5">
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
@@ -237,7 +301,7 @@ export default function OriginatorOverviewTab({
                 <tr>
                   <td colSpan="3" className="p-10 text-center text-gray-500 text-sm bg-gray-50">
                     <svg className="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    No documents found in ledger.
+                    No documents found matching "{selectedKpiFilter}".
                   </td>
                 </tr>
               )}
@@ -249,19 +313,19 @@ export default function OriginatorOverviewTab({
         {totalPages > 1 && (
           <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-white">
             <span className="text-xs font-medium text-gray-500">
-              Page <span className="font-bold text-gray-900">{currentPage}</span> of <span className="font-bold text-gray-900">{totalPages}</span>
+              Page <span className="font-bold text-gray-900">{matrixPage}</span> of <span className="font-bold text-gray-900">{totalPages}</span>
             </span>
             <div className="flex gap-2">
               <button 
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                disabled={currentPage === 1}
+                onClick={() => setMatrixPage(prev => Math.max(prev - 1, 1))} 
+                disabled={matrixPage === 1}
                 className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-sm"
               >
                 <ChevronLeft size={16} strokeWidth={2.5} />
               </button>
               <button 
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                disabled={currentPage === totalPages}
+                onClick={() => setMatrixPage(prev => Math.min(prev + 1, totalPages))} 
+                disabled={matrixPage === totalPages}
                 className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-sm"
               >
                 <ChevronRight size={16} strokeWidth={2.5} />

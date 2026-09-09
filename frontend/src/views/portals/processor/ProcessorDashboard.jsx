@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, Bell, User, Camera, LogOut, MessageSquare, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X } from 'lucide-react';
 import { fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -14,14 +14,15 @@ import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
 
 // --- EXTRACTED MODALS ---
 import ScannerModal from "./modals/ScannerModal";
-import DocumentDetailsModal from "./modals/DocumentDetailsModal";
 import PipelineVerificationModal from "./modals/PipelineVerificationModal";
 
-// --- SHARED COMPONENTS  ---
+// --- SHARED COMPONENTS ---
 import UserProfileTab from "../../shared/components/UserProfileTab";
 import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
 import OfficeChatHub from "../../shared/OfficeChatHub";
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import NotificationDropdown from '../../shared/components/NotificationDropdown';
+import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -36,18 +37,16 @@ const minimalSwal = Swal.mixin({
 
 export default function ProcessorDashboard() {
   const navigate = useNavigate();
-  const notificationRef = useRef(null);
   const userId = localStorage.getItem('userId');
   
   // --- CORE UI STATE ---
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   
   // --- MODAL & ACTION STATE ---
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [isHistoryDetails, setIsHistoryDetails] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
@@ -70,16 +69,6 @@ export default function ProcessorDashboard() {
       navigate('/login');
     }
   }, [userId, navigate]);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
-        setShowNotifications(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
@@ -108,6 +97,46 @@ export default function ProcessorDashboard() {
     processorData.fetchOfficesList();
     setShowPipelineModal(true);
   };
+
+// Row click transition: switches view to 'documents' and opens the Document Verification Detail modal
+const handleRowDocumentClick = (doc) => {
+  setActiveTab('documents');
+  handleOpenPipelineDetails(doc, false);
+};
+
+// Notification click: switches view to 'documents' and deep-links to that specific document's modal
+const handleNotificationClick = async (notif) => {
+  setActiveTab('documents');
+
+  const targetIniId = notif.ini_id;
+  const allKnownDocs = processorData.pipelineDocs || [];
+
+  // 1. Try finding in loaded pipeline documents
+  let matchedDoc = allKnownDocs.find(d => 
+    (targetIniId && d.ini_id === targetIniId) || 
+    (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
+  );
+
+  // 2. If found, open the verification modal immediately
+  if (matchedDoc) {
+    handleOpenPipelineDetails(matchedDoc, false);
+    return;
+  }
+
+  // 3. Fallback: If the document isn't in pipelineDocs yet, fetch it directly
+  if (targetIniId) {
+    try {
+      const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
+      const freshDocs = await res.json();
+      const docFromFresh = Array.isArray(freshDocs) ? freshDocs.find(d => d.ini_id === targetIniId) : null;
+      if (docFromFresh) {
+        handleOpenPipelineDetails(docFromFresh, false);
+      }
+    } catch (err) {
+      console.error("Error opening notification document:", err);
+    }
+  }
+};
 
   const getRouteStopsArray = (doc) => {
     const match = processorData.processTypes.find(p => p.process_name === doc.process_name);
@@ -295,30 +324,6 @@ export default function ProcessorDashboard() {
     }
   };
 
-  const formatRelativeTime = (timestamp) => {
-    if (!timestamp) return 'Just now';
-    const localizedString = String(timestamp).replace(/(\+00:00|\+00|Z)$/i, '');
-    const now = new Date();
-    const past = new Date(localizedString);
-    const msPerMinute = 60 * 1000;
-    const msPerHour = msPerMinute * 60;
-    const msPerDay = msPerHour * 24;
-    
-    const elapsed = now - past;
-    
-    if (elapsed < msPerMinute) return 'Just now';
-    else if (elapsed < msPerHour) {
-       const minutes = Math.round(elapsed / msPerMinute);
-       return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;   
-    } else if (elapsed < msPerDay) {
-       const hours = Math.round(elapsed / msPerHour);
-       return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;   
-    } else {
-       const days = Math.round(elapsed / msPerDay);
-       return `${days} ${days === 1 ? 'day' : 'days'} ago`;   
-    }
-  };
-
   return (
     <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
       
@@ -349,23 +354,23 @@ export default function ProcessorDashboard() {
             </div>
             <button 
               onClick={() => setIsSidebarOpen(false)}
-              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden"
+              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden cursor-pointer"
             >
               <X size={20} />
             </button>
           </div>
           
           <nav className="space-y-1 text-sm">
-            <button onClick={() => { handleTabSelect('dashboard'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => { handleTabSelect('dashboard'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'dashboard' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <LayoutDashboard size={18} /> Dashboard
             </button>
-            <button onClick={() => { handleTabSelect('documents'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setPipelinePage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'documents' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => { handleTabSelect('documents'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setPipelinePage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'documents' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <FileText size={18} /> Documents
             </button>
-            <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <History size={18} /> History
             </button>
-            <button onClick={() => { handleTabSelect('messages'); processorData.setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'messages' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => { handleTabSelect('messages'); processorData.setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'messages' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <div className="flex items-center gap-3">
                 <MessageSquare size={18} /> Chat Inbox
               </div>
@@ -379,13 +384,13 @@ export default function ProcessorDashboard() {
         <div className="space-y-4">
           <button 
             onClick={() => { setScanMode('time-in'); setShowScannerModal(true); setIsSidebarOpen(false); }}
-            className="w-full py-3 bg-red-700 hover:bg-red-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider"
+            className="w-full py-3 bg-red-700 hover:bg-red-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider cursor-pointer"
           >
             <Camera size={16} /> Scan Document
           </button>
           
           <div className="border-t border-neutral-700 pt-4">
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
               <LogOut size={16} /> Sign Out
             </button>
           </div>
@@ -400,7 +405,7 @@ export default function ProcessorDashboard() {
           <div className="flex items-center gap-3 text-left">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden cursor-pointer"
               aria-label="Open menu"
             >
               <Menu size={22} />
@@ -414,35 +419,15 @@ export default function ProcessorDashboard() {
           </div>
           
           <div className="flex items-center gap-2 md:gap-4 text-neutral-600">
-            <div className="relative" ref={notificationRef}>
-              <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 relative transition-colors">
-                <Bell size={20} />
-                {processorData.notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></span>}
-              </button>
-              
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white border border-neutral-200 rounded-2xl shadow-xl z-50 overflow-hidden text-left">
-                  <div className="p-4 border-b border-neutral-100 bg-[#FDFBF9] font-bold text-xs uppercase text-neutral-900 tracking-wide">Notifications</div>
-                  <div className="max-h-64 overflow-y-auto divide-y divide-neutral-100">
-                    {processorData.notifications.map(n => (
-                      <div key={n.id} className="p-4 text-xs border-b last:border-b-0">
-                        <div className="flex justify-between items-start gap-2">
-                          <p className="font-bold text-neutral-900">{n.title}</p>
-                          <span className="text-[10px] text-neutral-400 whitespace-nowrap">
-                            {formatRelativeTime(n.time)}
-                          </span>
-                        </div>
-                        <p className="text-neutral-500 mt-1">{n.message}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <NotificationDropdown 
+              userId={userId}
+              notifications={processorData.notifications}
+              onNotificationClick={handleNotificationClick}
+            />
             
             <button 
               onClick={() => setActiveTab(activeTab === 'profile' ? 'dashboard' : 'profile')} 
-              className={`p-2 rounded-full transition-colors ${activeTab === 'profile' ? 'bg-red-50 text-red-700' : 'hover:bg-neutral-100'}`}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-red-50 text-red-700' : 'hover:bg-neutral-100'}`}
             >
               <User size={20} />
             </button>
@@ -452,13 +437,28 @@ export default function ProcessorDashboard() {
         {/* TAB RENDERING */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'dashboard' && (
-            <ProcessorOverviewTab {...processorData} handleOpenPipelineDetails={handleOpenPipelineDetails} />
+            <ProcessorOverviewTab 
+              {...processorData} 
+              setActiveTab={setActiveTab}
+              handleRowDocumentClick={handleRowDocumentClick}
+              handleOpenPipelineDetails={handleOpenPipelineDetails} 
+            />
           )}
           {activeTab === 'documents' && (
-            <ProcessorPipelineTab {...processorData} handleOpenPipelineDetails={handleOpenPipelineDetails} />
+            <ProcessorPipelineTab 
+              {...processorData} 
+              setActiveTab={setActiveTab}
+              targetDocId={activeNotificationDocId}
+              onClearTargetDocId={() => setActiveNotificationDocId(null)}
+              setIsIncomingModalOpen={processorData.setIsIncomingModalOpen}
+              handleOpenPipelineDetails={handleOpenPipelineDetails} 
+            />
           )}
           {activeTab === 'history' && (
-            <ProcessorHistoryTab {...processorData} handleOpenPipelineDetails={handleOpenPipelineDetails} />
+            <ProcessorHistoryTab 
+              {...processorData} 
+              handleOpenPipelineDetails={handleOpenPipelineDetails} 
+            />
           )}
           {activeTab === 'messages' && (
             <OfficeChatHub userId={userId} roleId={2} officeId={processorData.processorOfficeId} />
@@ -485,14 +485,6 @@ export default function ProcessorDashboard() {
         />
       )}
 
-      {showDetailsModal && selectedDoc && (
-        <DocumentDetailsModal 
-          setShowDetailsModal={setShowDetailsModal} 
-          selectedDoc={selectedDoc} 
-          getRouteStopsArray={getRouteStopsArray}
-        />
-      )}
-
       {showPipelineModal && selectedDoc && (
         <PipelineVerificationModal 
           setShowPipelineModal={setShowPipelineModal}
@@ -515,6 +507,15 @@ export default function ProcessorDashboard() {
           newPassword={newPassword} setNewPassword={setNewPassword}
           confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
           handleUpdatePassword={handleUpdatePassword}
+        />
+      )}
+
+      {processorData.isIncomingModalOpen && (
+        <IncomingDocumentsModal 
+          isOpen={processorData.isIncomingModalOpen}
+          onClose={() => processorData.setIsIncomingModalOpen(false)}
+          documents={processorData.expectedIncomingList}
+          isLoading={processorData.isIncomingLoading}
         />
       )}
 
