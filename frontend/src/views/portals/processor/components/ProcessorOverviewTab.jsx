@@ -22,11 +22,11 @@ export default function ProcessorOverviewTab({
   setActiveTab
 }) {
   const kpiCards = [
-    { label: 'Incoming Docs', filterKey: 'Incoming', val: expectedIncomingCount, color: 'text-blue-600', border: 'border-t-blue-500', icon: <Inbox size={18} /> },
-    { label: 'Awaiting Scan-In', filterKey: 'Awaiting Scan-In', val: awaitingScanInCount, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]', icon: <Scan size={18} /> },
-    { label: 'Pending Docs', filterKey: 'Pending', val: pendingCount, color: 'text-amber-500', border: 'border-t-amber-500', icon: <Clock size={18} /> },
-    { label: 'In Verification', filterKey: 'In Verification', val: inVerificationCount, color: 'text-purple-600', border: 'border-t-purple-500', icon: <Scale size={18} /> },
-    { label: 'Completed Docs', filterKey: 'Completed', val: completedProcessingCount, color: 'text-emerald-600', border: 'border-t-emerald-500', icon: <CheckCircle size={18} /> }
+    { label: 'Incoming Docs', filterKey: 'Incoming', val: expectedIncomingCount, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-t-blue-500', icon: Inbox },
+    { label: 'Awaiting Scan-In', filterKey: 'Awaiting Scan-In', val: awaitingScanInCount, color: 'text-[#D32F2F]', bg: 'bg-red-50', border: 'border-t-[#D32F2F]', icon: Scan },
+    { label: 'Pending Docs', filterKey: 'Pending', val: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-t-amber-500', icon: Clock },
+    { label: 'In Verification', filterKey: 'In Verification', val: inVerificationCount, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-t-purple-500', icon: Scale },
+    { label: 'Completed Docs', filterKey: 'Completed', val: completedProcessingCount, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-t-emerald-500', icon: CheckCircle }
   ];
 
   const handleKpiClick = (filterKey) => {
@@ -71,31 +71,32 @@ export default function ProcessorOverviewTab({
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {kpiCards.map((kpi, idx) => {
             const isSelected = filterStatus === kpi.filterKey;
+            const Icon = kpi.icon;
             return (
               <div 
                 key={idx}
                 onClick={() => handleKpiClick(kpi.filterKey)}
-                className={`bg-white p-3.5 sm:p-4 rounded-2xl border-t-4 ${kpi.border} border-x border-b shadow-sm text-center flex flex-col justify-between transition-all cursor-pointer select-none active:scale-95 touch-manipulation ${
+                className={`bg-white p-3.5 sm:p-4 rounded-2xl border-t-4 ${kpi.border} border-x border-b shadow-sm text-center flex flex-col items-center justify-center transition-all cursor-pointer transform hover:-translate-y-0.5 active:scale-95 select-none touch-manipulation ${
                   isSelected 
-                    ? 'ring-2 ring-neutral-800 border-b-neutral-400 bg-neutral-50/80 shadow-md' 
+                    ? 'ring-2 ring-neutral-800 border-b-neutral-400 bg-neutral-50/70 shadow-md' 
                     : 'border-gray-200 hover:shadow-md'
                 }`}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleKpiClick(kpi.filterKey)}
               >
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider block leading-tight truncate">
-                    {kpi.label}
-                  </span>
-                  <span className="text-gray-400 hidden sm:block">{kpi.icon}</span>
+                <div className={`mb-2.5 sm:mb-3 p-2.5 sm:p-3 rounded-full ${kpi.bg}`}>
+                  <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${kpi.color}`} strokeWidth={2.5} />
                 </div>
-                <p className={`text-2xl sm:text-3xl font-black my-0.5 ${kpi.color}`}>
+                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1 sm:mb-1.5 leading-tight truncate max-w-full">
+                  {kpi.label}
+                </p>
+                <p className={`text-2xl sm:text-3xl font-black ${kpi.color}`}>
                   {String(kpi.val ?? 0).padStart(2, '0')}
                 </p>
-                <span className={`text-[8px] sm:text-[9px] font-bold uppercase tracking-tight ${isSelected ? 'text-neutral-600' : 'text-transparent'}`}>
-                  Active Filter
-                </span>
+                {isSelected && (
+                  <span className="text-[8px] sm:text-[9px] font-bold text-neutral-500 mt-1.5 sm:mt-2 uppercase tracking-tight">Active Filter</span>
+                )}
               </div>
             );
           })}

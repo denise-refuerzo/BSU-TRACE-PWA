@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Filter, Files, Clock, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function OriginatorOverviewTab({
   profile,
@@ -18,10 +18,10 @@ export default function OriginatorOverviewTab({
   const itemsPerPage = 5;
 
   const kpiCards = [
-    { label: 'Total Documents', filterKey: 'All', val: documents.length, color: 'text-gray-900', border: 'border-t-gray-700' }, 
-    { label: 'Pending Process', filterKey: 'Pending', val: pendingCount, color: 'text-amber-600', border: 'border-t-amber-500' }, 
-    { label: 'Action Required', filterKey: 'Action Required', val: documents.filter(d => d.status?.toLowerCase() === 'action required').length, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]' }, 
-    { label: 'Completed Log', filterKey: 'Completed', val: documents.filter(d => d.status?.toLowerCase() === 'completed').length, color: 'text-emerald-600', border: 'border-t-emerald-500' }
+    { label: 'Total Documents', filterKey: 'All', val: documents.length, color: 'text-gray-900', bg: 'bg-gray-100', border: 'border-t-gray-700', icon: Files }, 
+    { label: 'Pending Process', filterKey: 'Pending', val: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-t-amber-500', icon: Clock }, 
+    { label: 'Action Required', filterKey: 'Action Required', val: documents.filter(d => d.status?.toLowerCase() === 'action required').length, color: 'text-[#D32F2F]', bg: 'bg-red-50', border: 'border-t-[#D32F2F]', icon: AlertCircle }, 
+    { label: 'Completed Log', filterKey: 'Completed', val: documents.filter(d => d.status?.toLowerCase() === 'completed').length, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-t-emerald-500', icon: CheckCircle }
   ];
 
   const handleKpiCardClick = (key) => {
@@ -72,11 +72,12 @@ export default function OriginatorOverviewTab({
         <div className="xl:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
           {kpiCards.map((kpi, idx) => {
             const isSelected = selectedKpiFilter === kpi.filterKey;
+            const Icon = kpi.icon;
             return (
               <div 
                 key={idx} 
                 onClick={() => handleKpiCardClick(kpi.filterKey)}
-                className={`bg-white p-5 rounded-2xl border-t-4 ${kpi.border} border-x border-b shadow-sm text-center flex flex-col justify-center transition-all cursor-pointer transform hover:-translate-y-0.5 active:scale-95 select-none ${
+                className={`bg-white p-5 rounded-2xl border-t-4 ${kpi.border} border-x border-b shadow-sm text-center flex flex-col items-center justify-center transition-all cursor-pointer transform hover:-translate-y-0.5 active:scale-95 select-none ${
                   isSelected 
                     ? 'ring-2 ring-neutral-800 border-b-neutral-400 bg-neutral-50/70 shadow-md' 
                     : 'border-gray-200 hover:shadow-md'
@@ -85,12 +86,13 @@ export default function OriginatorOverviewTab({
                 tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleKpiCardClick(kpi.filterKey)}
               >
-                <div className="flex items-center justify-center gap-1 mb-2">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{kpi.label}</p>
+                <div className={`mb-3 p-3 rounded-full ${kpi.bg}`}>
+                  <Icon className={`w-5 h-5 ${kpi.color}`} strokeWidth={2.5} />
                 </div>
-                <p className={`text-4xl font-black ${kpi.color}`}>{String(kpi.val).padStart(2, '0')}</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5">{kpi.label}</p>
+                <p className={`text-3xl sm:text-4xl font-black ${kpi.color}`}>{String(kpi.val).padStart(2, '0')}</p>
                 {isSelected && (
-                  <span className="text-[9px] font-bold text-neutral-500 mt-1 uppercase tracking-tight">Active Filter</span>
+                  <span className="text-[9px] font-bold text-neutral-500 mt-2 uppercase tracking-tight">Active Filter</span>
                 )}
               </div>
             );
@@ -107,23 +109,23 @@ export default function OriginatorOverviewTab({
           tabIndex={0}
           onKeyDown={(e) => e.key === 'Enter' && setActiveTab('documents')}
         >
-          <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-3">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-3 pb-5 border-b border-gray-100">
             <div>
-              <h4 className="text-xs font-black tracking-widest text-gray-400 uppercase mb-1 group-hover:text-[#D32F2F] transition-colors">
+              <h4 className="text-xs font-black tracking-widest text-gray-400 uppercase mb-1.5 group-hover:text-[#D32F2F] transition-colors">
                 Active Pipeline Monitoring &rarr;
               </h4>
               <p className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <svg className="w-5 h-5 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <svg className="w-5 h-5 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 {mostRecentDoc.title}
               </p>
             </div>
             
             {/* Ad-Hoc Top Badge */}
             {mostRecentDoc.history_logs?.some(l => (l.is_adhoc === true || String(l.is_adhoc) === 'true' || l.is_adhoc === 1) && !l.time_out) && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm">
-                <span className="relative flex h-2 w-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm mt-1 md:mt-0">
+                <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500"></span>
                 </span>
                 Ad-Hoc Detour Active
               </span>
@@ -132,19 +134,22 @@ export default function OriginatorOverviewTab({
 
           {/* Ad-Hoc Warning Message */}
           {mostRecentDoc.history_logs?.some(l => (l.is_adhoc === true || String(l.is_adhoc) === 'true' || l.is_adhoc === 1) && !l.time_out) && (
-            <div className="mb-8 p-4 bg-purple-50 border border-purple-100 rounded-xl text-xs text-purple-800 font-medium flex items-start gap-3 shadow-sm">
-              <svg className="w-5 h-5 text-purple-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="leading-relaxed">
-                This document has been temporarily routed to <strong className="font-bold text-purple-900 border-b border-purple-300">{mostRecentDoc.current_office}</strong> for an unscheduled ad-hoc verification detour. The standard routing pipeline will resume once cleared by this station.
+            <div className="mb-10 p-5 bg-gradient-to-r from-purple-50 to-white border border-purple-100 rounded-xl text-xs text-purple-800 font-medium flex items-start gap-4 shadow-sm">
+              <div className="p-2 bg-purple-100 rounded-lg shrink-0">
+                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <span className="leading-relaxed mt-0.5">
+                This document has been temporarily routed to <strong className="font-bold text-purple-900 border-b border-purple-300 pb-0.5">{mostRecentDoc.current_office}</strong> for an unscheduled ad-hoc verification detour. The standard routing pipeline will resume once cleared by this station.
               </span>
             </div>
           )}
 
           {/* Progress Timeline */}
           <div className="relative flex items-start justify-between mt-8 px-4 sm:px-8">
-            <div className="absolute left-4 sm:left-8 right-4 sm:right-8 h-1 bg-gray-200 top-4 -z-10 rounded-full"></div>
+            {/* Background Line */}
+            <div className="absolute left-4 sm:left-8 right-4 sm:right-8 h-1.5 bg-gray-100 top-[17px] -z-10 rounded-full"></div>
             
             {(() => {
               const historyLogs = mostRecentDoc.history_logs || [];
@@ -177,8 +182,9 @@ export default function OriginatorOverviewTab({
 
               return (
                 <>
+                  {/* Active Fill Line */}
                   <div 
-                    className={`absolute left-4 sm:left-8 h-1 top-4 -z-10 rounded-full transition-all duration-700 ease-in-out ${resultStops.some(n => n.isAdhocNode && n.logRef && !n.logRef.time_out) ? 'bg-purple-500' : 'bg-[#D32F2F]'}`}
+                    className={`absolute left-4 sm:left-8 h-1.5 top-[17px] -z-10 rounded-full transition-all duration-700 ease-in-out ${resultStops.some(n => n.isAdhocNode && n.logRef && !n.logRef.time_out) ? 'bg-purple-500' : 'bg-[#D32F2F]'}`}
                     style={{ width: `calc(${mostRecentDoc.status?.toLowerCase() === 'completed' ? 100 : percentage}% - ${window.innerWidth < 640 ? '32px' : '64px'})` }}
                   ></div>
                   
@@ -196,20 +202,20 @@ export default function OriginatorOverviewTab({
 
                     return (
                       <div key={index} className="text-center flex flex-col items-center flex-1 z-10">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                          isCurrent && node.isAdhocNode ? 'bg-purple-600 text-white shadow-[0_0_0_6px_rgba(147,51,234,0.15)] animate-pulse' :
-                          isCurrent ? 'bg-[#D32F2F] text-white shadow-[0_0_0_6px_rgba(211,47,47,0.15)] animate-pulse' :
-                          isPast ? 'bg-[#D32F2F] text-white shadow-sm' : 'bg-white border-2 border-gray-300 text-gray-400'
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${
+                          isCurrent && node.isAdhocNode ? 'bg-purple-600 text-white ring-4 ring-purple-100 shadow-lg shadow-purple-200 animate-pulse' :
+                          isCurrent ? 'bg-[#D32F2F] text-white ring-4 ring-red-50 shadow-lg shadow-red-200 animate-pulse' :
+                          isPast ? 'bg-[#D32F2F] text-white shadow-md' : 'bg-gray-50 border-2 border-gray-200 text-gray-400'
                         }`}>
                           {isPast && !isCurrent ? (
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
                           ) : node.isAdhocNode ? (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                           ) : (
                             index - resultStops.slice(0, index).filter(n => n.isAdhocNode).length + 1
                           )}
                         </div>
-                        <p className={`text-[10px] sm:text-[11px] font-bold mt-3 sm:mt-4 truncate w-[60px] sm:w-[100px] leading-tight ${
+                        <p className={`text-[10px] sm:text-xs font-bold mt-4 sm:mt-5 truncate w-[64px] sm:w-[110px] leading-tight ${
                           isCurrent && node.isAdhocNode ? 'text-purple-700' : 
                           isCurrent ? 'text-[#D32F2F]' : 
                           isPast ? 'text-gray-900' : 'text-gray-400'
