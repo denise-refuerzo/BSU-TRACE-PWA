@@ -1305,87 +1305,174 @@ app.get('/api/processor/history/:officeId', requireAuth, async (req, res) => {
 });
 
 // ==========================================
-// 7.4 FETCH EXPECTED DOCUMENTS COUNT ENDPOINT
+// 7.4 FETCH PROCESSOR KPI METRICS SUMMARY
 // ==========================================
-app.get('/api/processor/documents/expected-count/:officeId', requireAuth, async (req, res) => {
-  const { officeId } = req.params;
+app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (req, res) => {
+  const officeId = parseInt(req.params.officeId);
+
   try {
-    const query = `
-      SELECT COUNT(DISTINCT idoc.ini_id) as expected_count
-      FROM public.initial_document idoc
-      JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      JOIN public.route r ON pt.r_id = r.r_id
-      LEFT JOIN public.processed_document pdoc_active ON idoc.ini_id = pdoc_active.ini_id AND pdoc_active.time_out IS NULL
-      WHERE $1 IN (r.stop_1, r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7)
-        AND COALESCE(pdoc_active.s_id, 1) != 4 
-        AND COALESCE(pdoc_active.s_id, 1) != 5
+    // 1. INCOMING: Routed to this office, hasn't checked in yet, not halted (s_id != 4) anywhere, not completed (s_id != 5)
+    const incomingRes = await pool.query(`
+      WITH mapped_routes AS (
+        SELECT 
+          idoc.ini_id,
+          CASE 
+            WHEN r.stop_1 = 999 THEN 
+              CASE creator.d_id
+                WHEN 1 THEN 11
+                WHEN 2 THEN 12
+                WHEN 3 THEN 13
+                WHEN 4 THEN 14
+                WHEN 5 THEN 14
+                WHEN 6 THEN 24
+                ELSE 11
+              END
+            ELSE r.stop_1
+          END AS stop_1_mapped,
+          r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7
+        FROM public.initial_document idoc
+        JOIN public.process_type pt ON idoc.p_id = pt.p_id
+        JOIN public.route r ON pt.r_id = r.r_id
+        JOIN public."User" creator ON idoc.u_id = creator.u_id
+      )
+      SELECT COUNT(DISTINCT mr.ini_id)::int as incoming_count
+      FROM mapped_routes mr
+      WHERE $1 IN (mr.stop_1_mapped, mr.stop_2, mr.stop_3, mr.stop_4, mr.stop_5, mr.stop_6, mr.stop_7)
+        -- Not halted or completed globally
         AND NOT EXISTS (
-          SELECT 1 FROM public.processed_document pd_past 
-          WHERE pd_past.ini_id = idoc.ini_id 
-            AND pd_past.current_office_id = $1 
-            AND pd_past.time_out IS NOT NULL
+          SELECT 1 FROM public.processed_document pd_halt 
+          WHERE pd_halt.ini_id = mr.ini_id AND pd_halt.s_id IN (4, 5)
         )
-    `;
-    const result = await pool.query(query, [parseInt(officeId)]);
-    res.json({ count: parseInt(result.rows[0].expected_count, 10) });
+        -- Has never signed in to this specific office yet
+        AND NOT EXISTS (
+          SELECT 1 FROM public.processed_document pd_here 
+          WHERE pd_here.ini_id = mr.ini_id 
+            AND pd_here.current_office_id = $1 
+            AND pd_here.time_in IS NOT NULL
+        );
+    `, [officeId]);
+
+    // 2. AWAITING SCAN-IN: Physically at this office (current_office_id = $1) but time_in IS NULL and not halted
+    const awaitingScanRes = await pool.query(`
+      SELECT COUNT(pd_id)::int as awaiting_count
+      FROM public.processed_document
+      WHERE current_office_id = $1 
+        AND time_in IS NULL 
+        AND time_out IS NULL 
+        AND s_id != 4;
+    `, [officeId]);
+
+    // 3. PENDING: Has signed in (time_in IS NOT NULL) at this office and has NOT signed out yet (time_out IS NULL)
+    const pendingRes = await pool.query(`
+      SELECT COUNT(DISTINCT ini_id)::int as pending_count
+      FROM public.processed_document
+      WHERE current_office_id = $1 
+        AND time_in IS NOT NULL 
+        AND time_out IS NULL 
+        AND is_adhoc = false 
+        AND s_id != 4;
+    `, [officeId]);
+
+    // 4. IN VERIFICATION: Active document in this office currently on detour (s_id = 2) waiting for detour time_out
+    const inVerificationRes = await pool.query(`
+      SELECT COUNT(DISTINCT pd_orig.ini_id)::int as in_verification_count
+      FROM public.processed_document pd_orig
+      JOIN public.processed_document pd_adhoc 
+        ON pd_orig.ini_id = pd_adhoc.ini_id 
+        AND pd_adhoc.is_adhoc = true 
+        AND pd_adhoc.adhoc_return_office_id = $1
+      WHERE pd_orig.current_office_id = $1 
+        AND pd_orig.s_id = 2 
+        AND pd_orig.time_out IS NULL 
+        AND pd_adhoc.time_out IS NULL;
+    `, [officeId]);
+
+    // 5. COMPLETED: Has recorded both a time_in AND a time_out in this specific office
+    const completedRes = await pool.query(`
+      SELECT COUNT(DISTINCT ini_id)::int as completed_count
+      FROM public.processed_document
+      WHERE current_office_id = $1 
+        AND time_in IS NOT NULL 
+        AND time_out IS NOT NULL 
+        AND is_adhoc = false;
+    `, [officeId]);
+
+    res.json({
+      incomingCount: incomingRes.rows[0].incoming_count || 0,
+      awaitingScanInCount: awaitingScanRes.rows[0].awaiting_count || 0,
+      pendingCount: pendingRes.rows[0].pending_count || 0,
+      inVerificationCount: inVerificationRes.rows[0].in_verification_count || 0,
+      completedProcessingCount: completedRes.rows[0].completed_count || 0
+    });
+
   } catch (err) {
-    console.error("Expected incoming documents count error:", err);
-    res.status(500).json({ error: "Failed to compile incoming documents KPI." });
+    console.error("KPI Metrics Calculation Error:", err);
+    res.status(500).json({ error: "Failed to calculate processor metrics." });
   }
 });
+
 // ==========================================
 // 7.5 FETCH INCOMING DOCUMENTS LIST ENDPOINT
 // ==========================================
 app.get('/api/processor/documents/expected-list/:officeId', requireAuth, async (req, res) => {
-  const { officeId } = req.params;
+  const officeId = parseInt(req.params.officeId);
   try {
     const query = `
-      SELECT DISTINCT ON (idoc.ini_id)
-        idoc.ini_id,
-        idoc.title,
-        idoc.qr_code,
-        idoc.created_at,
-        pt.process_name,
-        creator.full_name AS requestor_name,
-        CASE 
-          WHEN COALESCE(pdoc_active.current_office_id, r.stop_1) = 999 THEN (
-            SELECT off_dyn.office_name 
-            FROM public.offices off_dyn 
-            WHERE off_dyn.o_id = CASE creator.d_id
-              WHEN 1 THEN 11
-              WHEN 2 THEN 12
-              WHEN 3 THEN 13
-              WHEN 4 THEN 14
-              WHEN 5 THEN 14
-              WHEN 6 THEN 24
-              ELSE 11
-            END
-          )
-          ELSE COALESCE(
-            curr_o.office_name, 
-            (SELECT off_fallback.office_name FROM public.offices off_fallback WHERE off_fallback.o_id = r.stop_1),
-            'Origin Station'
-          )
-        END AS current_office
-      FROM public.initial_document idoc
-      JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      JOIN public.route r ON pt.r_id = r.r_id
-      JOIN public."User" creator ON idoc.u_id = creator.u_id
+      WITH mapped_routes AS (
+        SELECT 
+          idoc.ini_id,
+          idoc.title,
+          idoc.qr_code,
+          idoc.created_at,
+          pt.process_name,
+          creator.full_name AS requestor_name,
+          creator.d_id,
+          CASE 
+            WHEN r.stop_1 = 999 THEN 
+              CASE creator.d_id
+                WHEN 1 THEN 11
+                WHEN 2 THEN 12
+                WHEN 3 THEN 13
+                WHEN 4 THEN 14
+                WHEN 5 THEN 14
+                WHEN 6 THEN 24
+                ELSE 11
+              END
+            ELSE r.stop_1
+          END AS stop_1_mapped,
+          r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7
+        FROM public.initial_document idoc
+        JOIN public.process_type pt ON idoc.p_id = pt.p_id
+        JOIN public.route r ON pt.r_id = r.r_id
+        JOIN public."User" creator ON idoc.u_id = creator.u_id
+      )
+      SELECT DISTINCT ON (mr.ini_id)
+        mr.ini_id,
+        mr.title,
+        mr.qr_code,
+        mr.created_at,
+        mr.process_name,
+        mr.requestor_name,
+        COALESCE(curr_o.office_name, (SELECT office_name FROM public.offices WHERE o_id = mr.stop_1_mapped), 'Origin Station') AS current_office
+      FROM mapped_routes mr
       LEFT JOIN public.processed_document pdoc_active 
-        ON idoc.ini_id = pdoc_active.ini_id AND pdoc_active.time_out IS NULL
+        ON mr.ini_id = pdoc_active.ini_id AND pdoc_active.time_out IS NULL
       LEFT JOIN public.offices curr_o 
         ON pdoc_active.current_office_id = curr_o.o_id
-      WHERE $1 IN (r.stop_1, r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7)
-        AND COALESCE(pdoc_active.s_id, 1) NOT IN (4, 5)
+      WHERE $1 IN (mr.stop_1_mapped, mr.stop_2, mr.stop_3, mr.stop_4, mr.stop_5, mr.stop_6, mr.stop_7)
         AND NOT EXISTS (
-          SELECT 1 FROM public.processed_document pd_past 
-          WHERE pd_past.ini_id = idoc.ini_id 
-            AND pd_past.current_office_id = $1 
-            AND pd_past.time_out IS NOT NULL
+          SELECT 1 FROM public.processed_document pd_halt 
+          WHERE pd_halt.ini_id = mr.ini_id AND pd_halt.s_id IN (4, 5)
         )
-      ORDER BY idoc.ini_id DESC;
+        AND NOT EXISTS (
+          SELECT 1 FROM public.processed_document pd_here 
+          WHERE pd_here.ini_id = mr.ini_id 
+            AND pd_here.current_office_id = $1 
+            AND pd_here.time_in IS NOT NULL
+        )
+      ORDER BY mr.ini_id DESC;
     `;
-    const result = await pool.query(query, [parseInt(officeId)]);
+    const result = await pool.query(query, [officeId]);
     res.json(result.rows);
   } catch (err) {
     console.error("Expected incoming documents list error:", err);
@@ -1791,18 +1878,24 @@ app.post('/api/chat/messages', requireAuth, async (req, res) => {
 });
 
 // ==========================================
-// 10.4 CHAT: FETCH ACTIVE DOCUMENTS DIRECTORY
+// 10.4 CHAT: FETCH ACTIVE DOCUMENTS DIRECTORY (OPTIMIZED)
 // ==========================================
 app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) => {
   const userId = req.user.u_id;
   const roleId = req.user.a_id;
+
   try {
     let query = '';
     let params = [];
 
     if (roleId === 1) {
       query = `
-        SELECT DISTINCT ON (idoc.ini_id) idoc.ini_id, idoc.title, idoc.created_at
+        SELECT idoc.ini_id, idoc.title, idoc.created_at,
+          EXISTS (
+            SELECT 1 FROM public.chat_rooms cr
+            JOIN public.chat_messages cm ON cr.room_id = cm.room_id
+            WHERE cr.ini_id = idoc.ini_id
+          ) AS "hasAnyChat"
         FROM public.initial_document idoc
         WHERE idoc.u_id = $1
         ORDER BY idoc.ini_id DESC;
@@ -1815,7 +1908,13 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
       if (!officeId) return res.json([]);
 
       query = `
-        SELECT DISTINCT ON (idoc.ini_id) idoc.ini_id, idoc.title, idoc.created_at
+        SELECT DISTINCT ON (idoc.ini_id) 
+          idoc.ini_id, idoc.title, idoc.created_at,
+          EXISTS (
+            SELECT 1 FROM public.chat_rooms cr
+            JOIN public.chat_messages cm ON cr.room_id = cm.room_id
+            WHERE cr.ini_id = idoc.ini_id
+          ) AS "hasAnyChat"
         FROM public.initial_document idoc
         JOIN public.processed_document pd ON idoc.ini_id = pd.ini_id
         WHERE pd.current_office_id = $1
@@ -1827,35 +1926,9 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
     }
 
     const result = await pool.query(query, params);
-    const rows = result.rows;
-
-    const finalDirectory = [];
-    for (const doc of rows) {
-      // Look to see if any station channel under this document contains active records
-      const checkRooms = await pool.query(
-        `SELECT room_id FROM public.chat_rooms WHERE ini_id = $1`,
-        [doc.ini_id]
-      );
-      
-      let hasAnyChat = false;
-      if (checkRooms.rows.length > 0) {
-        const roomIds = checkRooms.rows.map(r => r.room_id);
-        const checkMsgs = await pool.query(
-          `SELECT COUNT(message_id)::int FROM public.chat_messages WHERE room_id = ANY($1)`,
-          [roomIds]
-        );
-        hasAnyChat = checkMsgs.rows[0].count > 0;
-      }
-
-      finalDirectory.push({
-        ...doc,
-        hasAnyChat: hasAnyChat
-      });
-    }
-
-    res.json(finalDirectory);
+    res.json(result.rows);
   } catch (err) {
-    console.error("Error compilation active track selection hub array:", err);
+    console.error("Error compiling active chat directory:", err);
     res.status(500).json({ error: 'Failed extraction of operational document parameters directory loops.' });
   }
 });

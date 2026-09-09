@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MoreVertical, Search, Filter, Plus, QrCode, FileText, AlertTriangle, ChevronLeft, ChevronRight, CheckCircle, Zap, MapPin } from 'lucide-react';
-// We remove the QRCodeSVG import here because it is moved to the modal files
 import TrackingDetailsModal from '../modals/TrackingDetailsModal';
 import ViewTrackingQrModal from '../modals/ViewTrackingQrModal';
 
@@ -9,18 +8,24 @@ export default function OriginatorDocumentsTab({
   documents, 
   fetchDashboardLedger, 
   setShowModal, 
-  processTypes 
+  processTypes,
+  filterStatus = 'All',
+  setFilterStatus,
+  onOpenChatWithDoc,
+  targetDocId = null,
+  onClearTargetDocId = null
 }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [activeDetailsDoc, setActiveDetailsDoc] = useState(null); 
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showQrOverlay, setShowQrOverlay] = useState(false);
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All');
   const [activeRouteStops, setActiveRouteStops] = useState([]);
+  const [internalFilterStatus, setInternalFilterStatus] = useState(filterStatus);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+  const tableRef = useRef(null);
 
   const isAdhocLog = (l) => l && (l.is_adhoc === true || String(l.is_adhoc) === 'true' || l.is_adhoc === 1);
 
@@ -35,7 +40,23 @@ export default function OriginatorDocumentsTab({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterStatus]);
+  }, [search, internalFilterStatus]);
+
+  // Handle direct target document passed from notification clicks on the same tab
+  useEffect(() => {
+    if (targetDocId && documents.length > 0) {
+      const matched = documents.find(d => d.ini_id === parseInt(targetDocId));
+      if (matched) {
+        handleSelectDocument(matched);
+        setActiveDetailsDoc(matched);
+        setShowDetailsModal(true);
+        if (tableRef.current) {
+          tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+      if (onClearTargetDocId) onClearTargetDocId();
+    }
+  }, [targetDocId, documents]);
 
   const handleSelectDocument = (doc) => {
     setSelectedDoc(doc);
@@ -58,16 +79,22 @@ export default function OriginatorDocumentsTab({
   };
 
   const handleOpenDetails = (e, doc) => {
-    e.preventDefault();
-    e.stopPropagation(); 
+    e?.preventDefault?.();
+    e?.stopPropagation?.(); 
     setActiveDetailsDoc(doc);
     setShowDetailsModal(true);
+  };
+
+  const effectiveFilter = setFilterStatus ? filterStatus : internalFilterStatus;
+  const handleFilterChange = (val) => {
+    if (setFilterStatus) setFilterStatus(val);
+    else setInternalFilterStatus(val);
   };
 
   const filteredDocs = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) || 
                           doc.qr_code.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = filterStatus === 'All' || doc.status?.toLowerCase() === filterStatus.toLowerCase();
+    const matchesStatus = effectiveFilter === 'All' || doc.status?.toLowerCase() === effectiveFilter.toLowerCase();
     return matchesSearch && matchesStatus;
   });
 
@@ -122,6 +149,9 @@ export default function OriginatorDocumentsTab({
         handleSelectDocument(targetDoc);
         setActiveDetailsDoc(targetDoc);
         setShowDetailsModal(true);
+        if (tableRef.current) {
+          tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
       localStorage.removeItem('redirect_target_doc_id');
     }
@@ -165,7 +195,6 @@ export default function OriginatorDocumentsTab({
             </div>
           </div>
 
-          {/* Ad-Hoc Warning Message */}
           {selectedDoc.history_logs?.some(l => isAdhocLog(l) && !l.time_out) && (
             <div className="mb-6 p-4 bg-purple-50 border border-purple-100 rounded-xl text-xs text-purple-800 font-medium flex items-start gap-3 shadow-sm">
               <Zap className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
@@ -175,7 +204,6 @@ export default function OriginatorDocumentsTab({
             </div>
           )}
 
-          {/* Action Required Message */}
           {selectedDoc.status?.toLowerCase() === 'action required' && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex gap-3 text-xs text-red-800 font-medium shadow-sm">
               <AlertTriangle className="w-5 h-5 text-[#D32F2F] shrink-0 mt-0.5" />
@@ -188,7 +216,6 @@ export default function OriginatorDocumentsTab({
             </div>
           )}
           
-          {/* Completed Message */}
           {selectedDoc.status?.toLowerCase() === 'completed' && (
             <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold uppercase tracking-wider flex items-center gap-3 shadow-sm">
               <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -198,10 +225,8 @@ export default function OriginatorDocumentsTab({
 
           {/* TIMELINE PROGRESS BAR */}
           <div className="relative flex items-start justify-between mt-8 mb-8 px-4 sm:px-8">
-            {/* Background Line */}
             <div className="absolute left-4 sm:left-8 right-4 sm:right-8 h-1 bg-gray-200 top-4 -z-10 rounded-full"></div>
             
-            {/* Active Fill Line */}
             <div 
               className={`absolute left-4 sm:left-8 h-1 top-4 -z-10 rounded-full transition-all duration-700 ease-in-out ${
                 selectedDoc.history_logs?.some(l => isAdhocLog(l) && !l.time_out) ? 'bg-purple-500' : 'bg-[#D32F2F]'
@@ -265,7 +290,7 @@ export default function OriginatorDocumentsTab({
           <div className="flex justify-end pt-5 border-t border-gray-100">
             <button 
               onClick={() => setShowQrOverlay(true)} 
-              className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs font-bold text-gray-700 flex items-center gap-1.5 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+              className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs font-bold text-gray-700 flex items-center gap-1.5 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200 cursor-pointer"
             >
               <QrCode size={14} className="text-gray-500" /> 
               View Tracking QR
@@ -281,9 +306,10 @@ export default function OriginatorDocumentsTab({
       )}
 
       {/* RECENT SUBMISSIONS TABLE */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-        
-        {/* Table Header & Controls */}
+      <div 
+        ref={tableRef} 
+        className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col scroll-mt-6"
+      >
         <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-gray-50/50">
           <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
             <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -294,8 +320,8 @@ export default function OriginatorDocumentsTab({
             <div className="flex items-center gap-1.5 border border-gray-300 rounded-lg px-3 py-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-[#D32F2F] focus-within:border-[#D32F2F] transition-all">
               <Filter size={14} className="text-gray-400" />
               <select 
-                value={filterStatus} 
-                onChange={e => setFilterStatus(e.target.value)}
+                value={effectiveFilter} 
+                onChange={e => handleFilterChange(e.target.value)}
                 className="bg-transparent text-xs outline-none cursor-pointer font-medium text-gray-700 appearance-none pr-2"
               >
                 <option value="All">All Status</option>
@@ -327,7 +353,6 @@ export default function OriginatorDocumentsTab({
           </div>
         </div>
 
-        {/* Table Body */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse">
             <thead>
@@ -385,7 +410,7 @@ export default function OriginatorDocumentsTab({
                   <td className="p-4 text-center">
                     <button 
                       onClick={(e) => handleOpenDetails(e, doc)} 
-                      className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 hover:shadow-sm text-gray-500 hover:text-gray-900 mx-auto flex items-center justify-center transition-all focus:outline-none"
+                      className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 hover:shadow-sm text-gray-500 hover:text-gray-900 mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
                     >
                       <MoreVertical size={16} />
                     </button>
@@ -407,7 +432,6 @@ export default function OriginatorDocumentsTab({
           </table>
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-white">
             <span className="text-xs font-medium text-gray-500">
@@ -440,6 +464,7 @@ export default function OriginatorDocumentsTab({
           setShowDetailsModal={setShowDetailsModal} 
           activeRouteStops={activeRouteStops} 
           getRenderStops={getRenderStops} 
+          onOpenChatWithDoc={onOpenChatWithDoc}
         />
       )}
 

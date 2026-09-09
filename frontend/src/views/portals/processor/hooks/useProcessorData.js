@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchWithAuth } from "../../../../api"; // Adjust path based on your folder depth
+import { fetchWithAuth } from "../../../../api";
 
 export function useProcessorData(userId) {
   // --- USER & OFFICE STATE ---
@@ -34,6 +34,19 @@ export function useProcessorData(userId) {
   const itemsPerPage = 5;
 
   // --- API FETCHING FUNCTIONS ---
+  const fetchLiveNotifications = async (officeId) => {
+    if (!userId || !officeId) return;
+    try {
+      const res = await fetchWithAuth(`/api/notifications/${userId}/2/${officeId}`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        setNotifications(data);
+      }
+    } catch (err) {
+      console.error("Processor notification fetch error:", err);
+    }
+  };
+
   const fetchExpectedIncomingCount = async (officeId) => {
     if (!officeId) return;
     try {
@@ -50,14 +63,6 @@ export function useProcessorData(userId) {
       const data = await res.json();
       if (res.ok) {
         setIncomingDocs(data);
-        if (data.length > 0) {
-          setNotifications([{ 
-            id: 1, 
-            title: "New Document Routing", 
-            message: `Document "${data[0].title}" entered your office queue. Action required.`, 
-            time: data[0].created_at 
-          }]);
-        }
       }
     } catch (err) { console.error("Frontend document log sync error:", err); }
   };
@@ -87,18 +92,37 @@ export function useProcessorData(userId) {
       if (res.ok) {
         setProcessorOfficeName(data.office_name || 'CICS Office');
         setProcessorOfficeId(data.o_id);
-        
+  
         setProfileName(data.full_name || '');
         setProfileEmail(data.uni_email || '');
         setFacultyId(data.faculty_id || 'NOT ASSIGNED');
         setDepartmentName(data.department_name || 'CICS');
         setTwoFaEnabled(data.two_fa_enabled || false);
         setTwoFaCode(data.two_fa_code || '');
-
+  
+        // 1. Declare fetchKpis FIRST
+        const fetchKpis = async (officeId) => {
+          try {
+            const res = await fetchWithAuth(`/api/processor/documents/kpi-metrics/${officeId}`);
+            if (res.ok) {
+              const kpiData = await res.json();
+              setExpectedIncomingCount(kpiData.incomingCount);
+              setAwaitingScanInCount(kpiData.awaitingScanInCount);
+              setPendingCount(kpiData.pendingCount);
+              setInVerificationCount(kpiData.inVerificationCount);
+              setCompletedProcessingCount(kpiData.completedProcessingCount);
+            }
+          } catch (err) {
+            console.error("Failed fetching processor KPI metrics", err);
+          }
+        };
+  
+        // 2. Call it along with the rest (notice line 103 is removed)
+        fetchKpis(data.o_id);
         fetchIncomingDocumentLogs(data.o_id);
-        fetchExpectedIncomingCount(data.o_id);
         fetchPipelineDocs(data.o_id);
         fetchOfficeActionHistory(data.o_id);
+        fetchLiveNotifications(data.o_id);
       }
     } catch (err) { console.error("Error connecting metadata:", err); }
   };
@@ -126,8 +150,14 @@ export function useProcessorData(userId) {
     fetchWorkflowTemplates();
   }, [userId]);
 
+  // Periodic alert and chat polling
   useEffect(() => {
-    if (!userId || userId === 'undefined') return;
+    if (!userId || userId === 'undefined' || !processorOfficeId) return;
+
+    const notifInterval = setInterval(() => {
+      fetchLiveNotifications(processorOfficeId);
+    }, 10000);
+
     const checkChatBadgeStatus = async () => {
       try {
         const res = await fetchWithAuth('/api/chat/active-documents-directory');
@@ -138,8 +168,12 @@ export function useProcessorData(userId) {
 
     checkChatBadgeStatus();
     const chatInterval = setInterval(checkChatBadgeStatus, 15000);
-    return () => clearInterval(chatInterval);
-  }, [userId]);
+
+    return () => {
+      clearInterval(notifInterval);
+      clearInterval(chatInterval);
+    };
+  }, [userId, processorOfficeId]);
 
   // --- DERIVED DATA (Filters & Pagination) ---
   const filteredDocs = incomingDocs.filter(doc => {
@@ -165,7 +199,6 @@ export function useProcessorData(userId) {
     return matchesSearch;
   });
 
-  // Pagination calculations
   const currentDashDocs = filteredDocs.slice((dashboardPage - 1) * itemsPerPage, dashboardPage * itemsPerPage);
   const totalDashPages = Math.ceil(filteredDocs.length / itemsPerPage);
 
@@ -175,31 +208,23 @@ export function useProcessorData(userId) {
   const currentHistoryPageRows = filteredHistoryLogs.slice((historyPage - 1) * itemsPerPage, historyPage * itemsPerPage);
   const totalHistoryTabPages = Math.ceil(filteredHistoryLogs.length / itemsPerPage);
 
-  // Stat counts
   const awaitingScanInCount = incomingDocs.filter(d => d.time_in === null || d.time_in === undefined).length;
   const pendingCount = incomingDocs.filter(d => d.time_in !== null && d.time_out === null).length;
   const completedProcessingCount = pipelineDocs.filter(d => d.time_out !== null && d.time_out !== undefined).length;
   const inVerificationCount = pipelineDocs.filter(d => d.status?.toLowerCase() === 'in verification' && (d.time_out === null || d.time_out === undefined)).length;
 
   return {
-    // Expose Data
     processorOfficeName, processorOfficeId,
     profileName, setProfileName, profileEmail, setProfileEmail,
     facultyId, departmentName, twoFaEnabled, setTwoFaEnabled, twoFaCode, setTwoFaCode,
     expectedIncomingCount, awaitingScanInCount, pendingCount, completedProcessingCount, inVerificationCount,
     notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
-    processTypes, officesList,
-    
-    // Expose Filter/Pagination States
+    processTypes, officesList, incomingDocs, pipelineDocs,
     search, setSearch, filterStatus, setFilterStatus, historyFilter, setHistoryFilter,
     dashboardPage, setDashboardPage, pipelinePage, setPipelinePage, historyPage, setHistoryPage,
-    
-    // Expose Computed Arrays
     filteredDocs, currentDashDocs, totalDashPages,
     filteredPipelineDocs, currentPipeDocs, totalPipePages,
     filteredHistoryLogs, currentHistoryPageRows, totalHistoryTabPages,
-    
-    // Expose Fetch Triggers
     fetchProcessorMeta, fetchOfficesList
   };
 }

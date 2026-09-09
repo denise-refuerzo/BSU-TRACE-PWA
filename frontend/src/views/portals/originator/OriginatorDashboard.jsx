@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, FileText, School, Bell, User, MessageSquare, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, School, User, MessageSquare, LogOut, Menu, X } from 'lucide-react';
 
 // Custom Hook
 import useOriginatorData from './hooks/useOriginatorData';
@@ -14,6 +14,7 @@ import UserProfileTab from '../../shared/components/UserProfileTab';
 import OfficeChatHub from '../../shared/OfficeChatHub';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import NotificationDropdown from '../../shared/components/NotificationDropdown';
 
 // Modals
 import DocumentSubmissionModal from './modals/DocumentSubmissionModal';
@@ -21,32 +22,48 @@ import NewSubmissionQrModal from './modals/NewSubmissionQrModal';
 
 export default function OriginatorDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [targetChatDoc, setTargetChatDoc] = useState(null);
+  const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   
   const {
-    userId, userName, navigate, notificationRef,
+    userId, userName, navigate,
     activeTab, setActiveTab,
-    search, setSearch, filterStatus, setFilterStatus,
-    currentPage, setCurrentPage, itemsPerPage,
-    hasUnreadChats, setHasUnreadChats,
-    showNotifications, setShowNotifications,
     notifications,
-    profile, setProfile, isProfileChanged,
+    hasUnreadChats, setHasUnreadChats,
+    profile, setProfile,
     showModal, setShowModal,
     showQrModal, setShowQrModal,
     showPassModal, setShowPassModal,
     generatedQr,
     form, setForm, passForm, setPassForm,
-    selectedRoutePreview, estimatedDate, statusMsg,
+    selectedRoutePreview, estimatedDate,
     recentDocStops, documents, processTypes,
-    filteredDocuments, currentLedgerDocs, totalPages, pendingCount, mostRecentDoc,
-    handleNotificationClick, saveProfileChanges, updatePasswordRequest,
+    pendingCount, mostRecentDoc,
+    saveProfileChanges, updatePasswordRequest,
     handleProcessChange, submitDocument, toggleTwoFactorAuth,
-    formatRelativeTime, fetchDashboardLedger, fetchUserProfile
+    fetchDashboardLedger
   } = useOriginatorData();
 
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false);
+  };
+
+  const handleSelectDocumentDetails = (doc) => {
+    setActiveNotificationDocId(doc.ini_id);
+    setActiveTab('documents');
+  };
+
+  const handleNotificationClick = (notif) => {
+    if (!notif.ini_id) return;
+    setActiveNotificationDocId(notif.ini_id);
+    setActiveTab('documents');
+  };
+
+  const handleOpenChatWithDoc = (doc) => {
+    setTargetChatDoc(doc);
+    setActiveTab('messages');
+    setHasUnreadChats(false);
   };
 
   return (
@@ -79,23 +96,23 @@ export default function OriginatorDashboard() {
             </div>
             <button 
               onClick={() => setIsSidebarOpen(false)}
-              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden"
+              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden cursor-pointer"
             >
               <X size={20} />
             </button>
           </div>
 
           <nav className="space-y-1 text-sm">
-            <button onClick={() => handleTabSelect('dashboard')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${activeTab === 'dashboard' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => handleTabSelect('dashboard')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'dashboard' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <LayoutDashboard size={18} /> Home
             </button>
-            <button onClick={() => handleTabSelect('documents')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${activeTab === 'documents' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => handleTabSelect('documents')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'documents' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <FileText size={18} /> Documents
             </button>
-            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${activeTab === 'resources' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'resources' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <School size={18} /> School Resources
             </button>
-            <button onClick={() => { handleTabSelect('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors ${activeTab === 'messages' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+            <button onClick={() => { handleTabSelect('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'messages' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <div className="flex items-center gap-3">
                 <MessageSquare size={18} /> Chat with Offices
               </div>
@@ -107,7 +124,7 @@ export default function OriginatorDashboard() {
         </div>
 
         <div className="border-t border-neutral-700 pt-4">
-          <button onClick={() => { sessionStorage.removeItem('bsu_pwa_banner_dismissed'); localStorage.clear(); navigate('/login'); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-400 hover:bg-red-950/40 hover:text-red-400 font-semibold rounded-lg transition-colors">
+          <button onClick={() => { sessionStorage.removeItem('bsu_pwa_banner_dismissed'); localStorage.clear(); navigate('/login'); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-400 hover:bg-red-950/40 hover:text-red-400 font-semibold rounded-lg transition-colors cursor-pointer">
             <LogOut size={16} /> Sign Out
           </button>
         </div>
@@ -121,7 +138,7 @@ export default function OriginatorDashboard() {
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden cursor-pointer"
               aria-label="Open menu"
             >
               <Menu size={22} />
@@ -130,38 +147,12 @@ export default function OriginatorDashboard() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 text-neutral-600">
-            <div className="relative" ref={notificationRef}>
-              <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 relative">
-                <Bell size={20} />
-                {notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></span>}
-              </button>
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white border border-neutral-200 rounded-2xl shadow-xl z-50 overflow-hidden">
-                  <div className="p-4 border-b border-neutral-100 bg-[#FDFBF9] font-bold text-xs uppercase text-neutral-900">Notifications</div>
-                  <div className="max-h-64 overflow-y-auto divide-y divide-neutral-100">
-                    {notifications.map(n => (
-                      <div 
-                        key={n.id} 
-                        onClick={() => handleNotificationClick(n)}
-                        className="p-4 text-xs text-left hover:bg-neutral-50 cursor-pointer transition-colors border-b last:border-b-0"
-                      >
-                        <div className="flex justify-between items-start gap-2">
-                          <p className="font-bold text-neutral-900">{n.title}</p>
-                          <span className="text-[10px] text-neutral-400 whitespace-nowrap">
-                            {formatRelativeTime(n.time)}
-                          </span>
-                        </div>
-                        <p className="text-neutral-500 mt-1">{n.message}</p>
-                      </div>
-                    ))}
-                    {notifications.length === 0 && (
-                      <div className="p-4 text-xs text-neutral-400 text-center font-bold">📭 No active updates.</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            <button onClick={() => setActiveTab('profile')} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors ${activeTab === 'profile' ? 'bg-neutral-100 text-red-800' : ''}`}>
+            <NotificationDropdown 
+              userId={userId}
+              notifications={notifications}
+              onNotificationClick={handleNotificationClick}
+            />
+            <button onClick={() => setActiveTab('profile')} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-neutral-100 text-red-800' : ''}`}>
               <User size={20} />
             </button>
           </div>
@@ -177,12 +168,9 @@ export default function OriginatorDashboard() {
               pendingCount={pendingCount}
               mostRecentDoc={mostRecentDoc}
               recentDocStops={recentDocStops}
-              currentLedgerDocs={currentLedgerDocs}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              setCurrentPage={setCurrentPage}
               setShowModal={setShowModal}
               setActiveTab={setActiveTab}
+              onSelectDocumentDetails={handleSelectDocumentDetails}
             />
           )}
 
@@ -193,6 +181,9 @@ export default function OriginatorDashboard() {
               fetchDashboardLedger={fetchDashboardLedger}
               setShowModal={setShowModal}
               processTypes={processTypes}
+              onOpenChatWithDoc={handleOpenChatWithDoc}
+              targetDocId={activeNotificationDocId}
+              onClearTargetDocId={() => setActiveNotificationDocId(null)}
             />
           )}
 
@@ -212,7 +203,12 @@ export default function OriginatorDashboard() {
           )}
 
           {activeTab === 'messages' && (
-            <OfficeChatHub userId={userId} roleId={1} />
+            <OfficeChatHub 
+              userId={userId} 
+              roleId={1} 
+              targetDoc={targetChatDoc}
+              onClearTargetDoc={() => setTargetChatDoc(null)}
+            />
           )}
 
           {activeTab === 'resources' && (

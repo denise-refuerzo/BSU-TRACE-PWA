@@ -1,12 +1,7 @@
 import React from 'react';
-import { Filter, Search, Inbox, Scan, Clock, CheckCircle, Scale, FileText } from 'lucide-react';
+import { Filter, Search, Inbox, FileText } from 'lucide-react';
 
 export default function ProcessorPipelineTab({
-  expectedIncomingCount,
-  awaitingScanInCount,
-  pendingCount,
-  completedProcessingCount,
-  inVerificationCount,
   search,
   setSearch,
   setPipelinePage,
@@ -27,27 +22,6 @@ export default function ProcessorPipelineTab({
         <p className="text-sm text-gray-500 mt-1">Review and process active administrative requests across campus stations.</p>
       </div>
 
-      {/* 5 KPI METRICS CARDS ROW */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {[
-          { title: 'Incoming Docs', count: expectedIncomingCount, border: 'border-t-blue-500', icon: <Inbox size={20} />, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { title: 'Awaiting Scan-In', count: awaitingScanInCount, border: 'border-t-[#D32F2F]', icon: <Scan size={20} />, color: 'text-[#D32F2F]', bg: 'bg-red-50' },
-          { title: 'Pending Docs', count: pendingCount, border: 'border-t-amber-500', icon: <Clock size={20} />, color: 'text-amber-500', bg: 'bg-amber-50' },
-          { title: 'Completed Docs', count: completedProcessingCount, border: 'border-t-emerald-500', icon: <CheckCircle size={20} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { title: 'In Verification', count: inVerificationCount, border: 'border-t-purple-500', icon: <Scale size={20} />, color: 'text-purple-600', bg: 'bg-purple-50' }
-        ].map((card, i) => (
-          <div key={i} className={`bg-white p-5 rounded-xl border-t-4 ${card.border} border-x border-b border-gray-200 shadow-sm flex items-center justify-between hover:shadow-md transition-all transform hover:-translate-y-0.5`}>
-            <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block leading-tight">{card.title}</span>
-              <p className="text-3xl font-black text-gray-900">{String(card.count).padStart(2, '0')}</p>
-            </div>
-            <div className={`p-3 rounded-xl ${card.bg} ${card.color} shadow-sm shrink-0`}>
-              {card.icon}
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* ACTIVE REQUESTS MATRIX TABLE */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
         
@@ -55,9 +29,6 @@ export default function ProcessorPipelineTab({
         <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-gray-50/50">
           <div className="flex items-center gap-3">
             <h3 className="text-base font-bold text-gray-900 tracking-tight">Active Requests</h3>
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 shadow-sm">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span> Real-time On
-            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -80,10 +51,11 @@ export default function ProcessorPipelineTab({
                 className="bg-transparent text-xs outline-none cursor-pointer font-medium text-gray-700 appearance-none pr-2"
               >
                 <option value="All">All Statuses</option>
+                <option value="Incoming">Incoming Docs</option>
                 <option value="Awaiting Scan-In">Awaiting Scan-In</option>
-                <option value="Pending">Pending</option>
+                <option value="Pending">Pending Docs</option>
                 <option value="In Verification">In Verification</option>
-                <option value="Completed">Completed</option>
+                <option value="Completed">Completed Docs</option>
               </select>
             </div>
           </div>
@@ -140,7 +112,9 @@ export default function ProcessorPipelineTab({
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
                         {doc.next_office ? (
                           <>
-                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
                             {doc.next_office}
                           </>
                         ) : (
@@ -153,7 +127,10 @@ export default function ProcessorPipelineTab({
                         onClick={() => handleOpenPipelineDetails(doc, false)} 
                         className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-red-50 hover:text-[#D32F2F] hover:border-red-200 transition-all text-[11px] shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-100"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
                         View Details
                       </button>
                     </td>

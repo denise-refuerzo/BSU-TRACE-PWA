@@ -1,19 +1,237 @@
-import React from 'react';
-import { X, MessageSquare, Download } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { X, MessageSquare, Download, ChevronDown, FileText, Image as ImageIcon } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function TrackingDetailsModal({
   activeDetailsDoc,
   setShowDetailsModal,
   activeRouteStops,
-  getRenderStops
+  getRenderStops,
+  onOpenChatWithDoc
 }) {
+  const qrContainerRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const getQrBase64 = () => {
+    if (!qrContainerRef.current) return null;
+    const svgElement = qrContainerRef.current.querySelector('svg');
+    if (!svgElement) return null;
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const size = 512;
+    canvas.width = size;
+    canvas.height = size;
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgData)))}`;
+    });
+  };
+
+  const handleDownloadImage = async () => {
+    setShowExportMenu(false);
+    const pngUrl = await getQrBase64();
+    if (!pngUrl) return;
+
+    const link = document.createElement('a');
+    link.download = `QR-${activeDetailsDoc.qr_code || 'Document'}.png`;
+    link.href = pngUrl;
+    link.click();
+  };
+
+  const handlePrintPdf = async () => {
+    setShowExportMenu(false);
+    const qrDataUrl = await getQrBase64();
+    if (!qrDataUrl) return;
+
+    const formattedDate = activeDetailsDoc.created_at
+      ? new Date(activeDetailsDoc.created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric'
+        }) + ', ' + new Date(activeDetailsDoc.created_at).toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      : 'N/A';
+
+    const requestorName = activeDetailsDoc.full_name || activeDetailsDoc.creator_name || activeDetailsDoc.originator_name || 'Originator';
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const printableHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Routing Slip - ${activeDetailsDoc.qr_code || 'Document'}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 20mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              color: #1a1a1a;
+              margin: 0;
+              padding: 24px;
+            }
+            .slip-card {
+              max-width: 480px;
+              margin: 0 auto;
+              border: 2px solid #e5e7eb;
+              border-radius: 12px;
+              padding: 24px;
+              text-align: center;
+            }
+            .header-title {
+              font-size: 16px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              color: #881337;
+              margin: 0;
+            }
+            .sub-title {
+              font-size: 11px;
+              color: #6b7280;
+              margin-top: 4px;
+              margin-bottom: 20px;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+              font-weight: bold;
+            }
+            .qr-wrapper {
+              display: inline-block;
+              padding: 12px;
+              border: 1px solid #e5e7eb;
+              border-radius: 10px;
+              background: #fafafa;
+              margin-bottom: 12px;
+            }
+            .qr-wrapper img {
+              width: 140px;
+              height: 140px;
+              display: block;
+            }
+            .ref-code {
+              font-family: monospace;
+              font-size: 14px;
+              font-weight: 800;
+              color: #111827;
+              letter-spacing: 0.05em;
+              margin: 6px 0 18px 0;
+            }
+            .details-table {
+              width: 100%;
+              text-align: left;
+              border-top: 1px dashed #d1d5db;
+              padding-top: 14px;
+              font-size: 12px;
+            }
+            .details-table td {
+              padding: 4px 0;
+            }
+            .label {
+              color: #6b7280;
+              font-weight: 600;
+              width: 40%;
+            }
+            .value {
+              color: #111827;
+              font-weight: 700;
+            }
+            .footer-note {
+              margin-top: 20px;
+              font-size: 10px;
+              color: #9ca3af;
+              border-top: 1px solid #f3f4f6;
+              padding-top: 10px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="slip-card">
+            <h1 class="header-title">BSU - Trace Verification Slip</h1>
+            <div class="sub-title">Document Routing & Tracking Identifier</div>
+            
+            <div class="qr-wrapper">
+              <img src="${qrDataUrl}" alt="Tracking QR" />
+            </div>
+            <div class="ref-code">${activeDetailsDoc.qr_code}</div>
+
+            <table class="details-table">
+              <tr>
+                <td class="label">Document Title:</td>
+                <td class="value">${activeDetailsDoc.title || 'Untitled'}</td>
+              </tr>
+              <tr>
+                <td class="label">Form / Workflow:</td>
+                <td class="value">${activeDetailsDoc.process_name || 'Standard'}</td>
+              </tr>
+              <tr>
+                <td class="label">Requestor Name:</td>
+                <td class="value">${requestorName}</td>
+              </tr>
+              <tr>
+                <td class="label">Date Created:</td>
+                <td class="value">${formattedDate}</td>
+              </tr>
+            </table>
+
+            <div class="footer-note">
+              Scan this QR tag at each designated station terminal to sign and update routing history.
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() {
+                window.close();
+              };
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(printableHtml);
+    printWindow.document.close();
+  };
+
+  const handleChatClick = () => {
+    setShowDetailsModal(false);
+    if (onOpenChatWithDoc) {
+      onOpenChatWithDoc(activeDetailsDoc);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-neutral-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
       <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-neutral-200 overflow-hidden flex flex-col">
         <div className="p-5 border-b border-neutral-100 flex items-center justify-between bg-[#FDFBF9]">
           <h3 className="font-bold text-neutral-950 text-base">Document Tracking Details</h3>
-          <button onClick={() => setShowDetailsModal(false)} className="text-neutral-400 hover:text-neutral-600 transition-colors">
+          <button onClick={() => setShowDetailsModal(false)} className="text-neutral-400 hover:text-neutral-600 transition-colors cursor-pointer">
             <X size={18} />
           </button>
         </div>
@@ -75,7 +293,7 @@ export default function TrackingDetailsModal({
               </div>
             </div>
 
-            <div className="bg-neutral-50 p-3 border border-neutral-200 rounded-xl flex flex-col items-center flex-shrink-0">
+            <div ref={qrContainerRef} className="bg-neutral-50 p-3 border border-neutral-200 rounded-xl flex flex-col items-center flex-shrink-0">
               <QRCodeSVG 
                 value={activeDetailsDoc.qr_code} 
                 size={80} 
@@ -167,19 +385,44 @@ export default function TrackingDetailsModal({
           <div className="flex gap-2">
             <button 
               type="button" 
-              onClick={() => {
-                localStorage.setItem('redirect_target_doc_id', String(activeDetailsDoc.ini_id));
-                window.location.reload(); 
-              }}
-              className="px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100 rounded-xl font-bold text-xs text-red-800 flex items-center gap-1.5 transition-colors"
+              onClick={handleChatClick}
+              className="px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100 rounded-xl font-bold text-xs text-red-800 flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <MessageSquare size={18} /> Chat regarding this file
             </button>
-            <button type="button" className="px-4 py-2 border border-neutral-200 bg-white hover:bg-neutral-50 rounded-xl font-bold text-xs text-neutral-700 flex items-center gap-1.5 transition-colors">
-              <Download size={14} /> Download QR Code
-            </button>
+
+            {/* Export Dropdown Menu */}
+            <div className="relative" ref={dropdownRef}>
+              <button 
+                type="button" 
+                onClick={() => setShowExportMenu(prev => !prev)}
+                className="px-4 py-2 border border-neutral-200 bg-white hover:bg-neutral-50 rounded-xl font-bold text-xs text-neutral-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Download size={14} /> Download QR <ChevronDown size={14} className={showExportMenu ? 'rotate-180 transition-transform' : 'transition-transform'} />
+              </button>
+
+              {showExportMenu && (
+                <div className="absolute left-0 bottom-full mb-2 w-48 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 py-1.5 text-xs text-neutral-700 font-semibold animate-in fade-in slide-in-from-bottom-2">
+                  <button
+                    onClick={handleDownloadImage}
+                    className="w-full px-3.5 py-2 text-left hover:bg-neutral-100 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <ImageIcon size={14} className="text-neutral-500" /> Image (PNG)
+                  </button>
+                  <button
+                    onClick={handlePrintPdf}
+                    className="w-full px-3.5 py-2 text-left hover:bg-neutral-100 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <FileText size={14} className="text-[#D32F2F]" /> Printable PDF Slip
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-          <button onClick={() => setShowDetailsModal(false)} className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-500 hover:bg-neutral-100 transition-colors">
+          <button 
+            onClick={() => setShowDetailsModal(false)} 
+            className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-500 hover:bg-neutral-100 transition-colors cursor-pointer"
+          >
             Close
           </button>
         </div>
