@@ -8,6 +8,9 @@ export function useRolesPermissions() {
   // --- CATALOG INDICES STATES ---
   const [offices, setOffices] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [categoryId, setCategoryId] = useState('');
+  const [catalogError, setCatalogError] = useState('');
   const [infraSummary, setInfraSummary] = useState({ departments: [], roleStatistics: [], officeCapacity: [] });
 
   // --- INTERACTIVE VISUALIZER FORM STATES ---
@@ -27,6 +30,11 @@ export function useRolesPermissions() {
 
   const fetchBaselineCatalogs = async () => {
     try {
+      setCatalogError('');
+      const categoryRes = await fetchWithAuth('/api/document-categories');
+      const categoryData = await categoryRes.json();
+      if (!categoryRes.ok) throw new Error(categoryData.error || 'Unable to load categories.');
+      setCategories(categoryData);
       const officeRes = await fetchWithAuth('/api/offices');
       const officeData = await officeRes.json();
       if (officeRes.ok) setOffices(officeData);
@@ -39,7 +47,7 @@ export function useRolesPermissions() {
       const summaryData = await summaryRes.json();
       if (summaryRes.ok) setInfraSummary(summaryData);
     } catch (err) {
-      console.error("Error updating configuration indices matrices lines:", err);
+      setCatalogError(err.message || 'Unable to load workflow configuration.');
     }
   };
 
@@ -79,6 +87,7 @@ export function useRolesPermissions() {
   // Resets the workflow form back to creation defaults
   const resetWorkflowForm = () => {
     setNewProcessName('');
+    setCategoryId('');
     setSelectedStops([null, null]);
     setFormMeta({ currentProcessId: null, currentRouteId: null, is_active: true });
   };
@@ -116,7 +125,8 @@ export function useRolesPermissions() {
             method: targetMethod,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              processName: newProcessName, 
+              processName: newProcessName,
+              categoryId: Number(categoryId),
               stops: processedStopsPayload,
               routeId: formMeta.currentRouteId,
               isActive: formMeta.is_active
@@ -178,6 +188,7 @@ export function useRolesPermissions() {
   return {
     activeTab, setActiveTab,
     offices, processTypes, infraSummary,
+    categories, categoryId, setCategoryId, catalogError, refreshCatalogs: fetchBaselineCatalogs,
     newProcessName, setNewProcessName,
     selectedStops, setSelectedStops,
     formMeta, setFormMeta,

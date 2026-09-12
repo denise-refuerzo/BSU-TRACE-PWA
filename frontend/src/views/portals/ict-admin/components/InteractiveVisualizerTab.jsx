@@ -1,13 +1,19 @@
 import React from 'react';
+import CategoryManagement from './CategoryManagement';
 
 export default function InteractiveVisualizerTab({
-  formMeta, setFormMeta, newProcessName, setNewProcessName, selectedStops,
+  formMeta, setFormMeta, newProcessName, setNewProcessName, selectedStops, setSelectedStops,
   handleStopSelectorChange, handleAddStopSlot, handleRemoveTrailingStopSlot,
-  offices, resetWorkflowForm, handleProcessFormSubmit, processTypes
+  offices, resetWorkflowForm, handleProcessFormSubmit, processTypes,
+  categories, categoryId, setCategoryId, catalogError, refreshCatalogs
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-200">
       
+      <div className="lg:col-span-3">
+        {catalogError && <p role="alert" className="text-red-700 mb-3">{catalogError} <button type="button" onClick={refreshCatalogs} className="underline">Retry</button></p>}
+        <CategoryManagement categories={categories} onChanged={refreshCatalogs} />
+      </div>
       {/* LEFT COLUMN: WORKFLOW BUILDER FORM */}
       <div className="lg:col-span-2 bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col h-full">
         
@@ -37,6 +43,13 @@ export default function InteractiveVisualizerTab({
 
         <form onSubmit={handleProcessFormSubmit} className="space-y-6 flex-1 flex flex-col">
           
+          <div>
+            <label htmlFor="pipeline-category" className="block text-xs font-bold text-gray-700 mb-2">Document Category</label>
+            <select id="pipeline-category" required value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm bg-white">
+              <option value="">Select a category...</option>
+              {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+            </select>
+          </div>
           {/* Process Name Input */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-2">
@@ -178,6 +191,7 @@ export default function InteractiveVisualizerTab({
                 key={p.p_id} 
                 onClick={() => {
                   setNewProcessName(p.process_name);
+                  setCategoryId(String(p.category_id));
                   setSelectedStops(stopsIdsArray);
                   setFormMeta({ currentProcessId: p.p_id, currentRouteId: p.r_id, is_active: p.is_active ?? true });
                 }}
@@ -204,6 +218,7 @@ export default function InteractiveVisualizerTab({
                 </div>
                 
                 <div className="mt-3 pl-2">
+                  <p className="text-xs text-red-800 mb-2">{p.category_name}</p>
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-600 font-medium">
                     {stopsArray.map((stopName, index) => (
                       <React.Fragment key={index}>

@@ -24,6 +24,9 @@ export default function useOriginatorData() {
   const [edcPredictions, setEdcPredictions] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
+  const [workflowsLoading, setWorkflowsLoading] = useState(true);
+  const [workflowError, setWorkflowError] = useState('');
+  const [workflowRefresh, setWorkflowRefresh] = useState(0);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   
@@ -67,7 +70,6 @@ export default function useOriginatorData() {
       return;
     }
     fetchDashboardLedger();
-    fetchWorkflowTemplates();
     fetchUserProfile();
   }, [userId]);
 
@@ -198,13 +200,20 @@ export default function useOriginatorData() {
     } catch (err) { console.error(err); }
   };
 
-  const fetchWorkflowTemplates = async () => {
-    try {
-      const res = await fetchWithAuth('/api/process-types');
-      const data = await res.json();
-      if (res.ok) setProcessTypes(data);
-    } catch (err) { console.error(err); }
-  };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchWithAuth('/api/process-types')
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Unable to load pipelines.');
+        return data;
+      })
+      .then(data => { if (!cancelled) { setProcessTypes(data); setWorkflowError(''); } })
+      .catch(err => { if (!cancelled) setWorkflowError(err.message || 'Unable to load pipelines.'); })
+      .finally(() => { if (!cancelled) setWorkflowsLoading(false); });
+    return () => { cancelled = true; };
+  }, [showModal, workflowRefresh]);
 
   // -------------------------
   // EVENT HANDLERS
@@ -250,7 +259,7 @@ export default function useOriginatorData() {
 
   const handleProcessChange = (pId) => {
     const selected = processTypes.find(p => p.p_id === parseInt(pId));
-    if (selected) {
+    if (selected && selected.is_active === true) {
       const stops = [];
       for (let i = 1; i <= 7; i++) if (selected[`stop_${i}_name`]) stops.push(selected[`stop_${i}_name`]);
       setSelectedRoutePreview(stops);
@@ -274,6 +283,10 @@ export default function useOriginatorData() {
 
   const submitDocument = async (e) => {
     e.preventDefault();
+    if (workflowsLoading || workflowError || !processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId))) {
+      alert('Choose an active pipeline from the suggestions before submitting.');
+      return;
+    }
     let edcPayload = null;
     if (estimatedDate && estimatedDate !== "Estimation pending...") {
       const d = new Date(estimatedDate);
@@ -404,13 +417,14 @@ export default function useOriginatorData() {
     hasUnreadChats, setHasUnreadChats,
     notifications,
     profile, setProfile, isProfileChanged,
-    showModal, setShowModal,
+    showModal, setShowModal: value => { if (value) setWorkflowsLoading(true); setShowModal(value); },
     showQrModal, setShowQrModal,
     showPassModal, setShowPassModal,
     generatedQr,
     form, setForm, passForm, setPassForm,
     selectedRoutePreview, estimatedDate, statusMsg,
     recentDocStops, documents, processTypes,
+    workflowsLoading, workflowError, retryWorkflows: () => { setWorkflowsLoading(true); setWorkflowRefresh(value => value + 1); },
     filteredDocuments, currentLedgerDocs, totalPages, pendingCount, mostRecentDoc,
     saveProfileChanges, updatePasswordRequest,
     handleProcessChange, submitDocument, toggleTwoFactorAuth,
