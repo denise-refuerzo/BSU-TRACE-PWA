@@ -38,6 +38,7 @@ export default function OriginatorDashboard() {
     form, setForm, passForm, setPassForm,
     selectedRoutePreview, estimatedDate,
     recentDocStops, documents, processTypes,
+    workflowsLoading, workflowError, retryWorkflows,
     pendingCount, mostRecentDoc,
     saveProfileChanges, updatePasswordRequest,
     handleProcessChange, submitDocument, toggleTwoFactorAuth,
@@ -240,8 +241,9 @@ export default function OriginatorDashboard() {
           processTypes={processTypes}
           estimatedDate={estimatedDate}
           selectedRoutePreview={selectedRoutePreview}
-          setSelectedRoutePreview={(val) => {}}
-          setEstimatedDate={(val) => {}}
+          workflowsLoading={workflowsLoading}
+          workflowError={workflowError}
+          retryWorkflows={retryWorkflows}
         />
       )}
 
