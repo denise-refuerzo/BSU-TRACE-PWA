@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Lock, Calendar, Truck, Presentation, MonitorPlay, Users, MapPin, Box } from 'lucide-react';
 import { fetchWithAuth } from "../../../../api";
+import Swal from 'sweetalert2';
+import {blockOnDay,blockMatchesResource} from '../../../../utils/resourceSchedule';
+import ResourceDayModal from '../modals/ResourceDayModal';
 import ResourceBookingModal from '../modals/ResourceBookingModal';
 
 export default function OriginatorResourcesTab({ userId }) {
@@ -10,6 +13,7 @@ export default function OriginatorResourcesTab({ userId }) {
   const [bookings, setBookings] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date()); 
+  const [selectedDay, setSelectedDay] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
   
   const todayObj = new Date();
@@ -17,10 +21,12 @@ export default function OriginatorResourcesTab({ userId }) {
   const currentTimeString = `${String(todayObj.getHours()).padStart(2, '0')}:${String(todayObj.getMinutes()).padStart(2, '0')}`;
 
   const [form, setForm] = useState({
-    reservationDate: '', purpose: '', department: 'CICS',
+    reservationDate: '', purpose: '', department: '', intendedDates: [''], facilityDetails: {},
     startTime: '', endTime: '', expectedAttendees: '',
-    destination: '', passengerCount: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: ''
+    destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: ''
   });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [blackouts, setBlackouts] = useState([]);
 
@@ -32,7 +38,7 @@ export default function OriginatorResourcesTab({ userId }) {
 
   const fetchBlackouts = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/resources/blackouts');
+      const res = await fetchWithAuth('/api/resources/schedule-blocks');
       const data = await res.json();
       if (res.ok) setBlackouts(data);
     } catch (err) { console.error(err); }
@@ -56,35 +62,68 @@ export default function OriginatorResourcesTab({ userId }) {
 
   const handleBookingSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const typeMapping = { 'Gymnasium': 'Gymnasium', 'Multimedia Room': 'Room', 'Van': 'Vehicle' };
     
     if (activeFacility !== 'Van' && form.startTime >= form.endTime) {
       return alert("Invalid Timeline: End time must fall strictly after start time coordinates.");
     }
 
+    if (activeFacility === 'Van') {
+      if (![form.department, form.purpose, ...form.officialPassengers, form.preparedByName, form.preparedByPosition, form.recommendingApprovalName, form.recommendingApprovalPosition].every(value => value.trim())) {
+        return alert('Please complete the department, travel purpose, passenger names, and name/position fields.');
+      }
+      if (form.pickUpTime >= form.dropOffTime) {
+        return alert('Estimated arrival must be after estimated departure.');
+      }
+    }
+
+    if (activeFacility !== 'Van') {
+      const details = form.facilityDetails;
+      if (!details.purposes?.length || !details.participants?.length) {
+        return Swal.fire({icon: 'warning', title: 'Complete the form', text: 'Select at least one purpose and participant category.'});
+      }
+      if (new Set(form.intendedDates).size !== form.intendedDates.length) {
+        return Swal.fire({icon: 'warning', title: 'Duplicate dates', text: 'Please select each intended date only once.'});
+      }
+    }
+
     const payload = {
       userId: parseInt(userId),
       bookingType: typeMapping[activeFacility],
       assetName: activeFacility,
-      ...form
+      ...form,
+      ...(activeFacility !== 'Van' ? {purpose: form.facilityDetails.purposes.map(value => value === 'Others' ? form.facilityDetails.purposesOther : value).join(', ')} : {})
     };
 
+    setIsSubmitting(true);
     try {
+      const confirmation = await Swal.fire({icon:'question',title:'Submit this request?',text:'This sends your request to GSO for review. Confirmation requires submitting the necessary documents in person.',showCancelButton:true,confirmButtonText:'Submit request',confirmButtonColor:'#991b1b'});
+      if (!confirmation.isConfirmed) return;
       const res = await fetchWithAuth('http://localhost:5000/api/resources/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        alert("🎉 Reservation successfully registered in system! Current status: Reserved.");
         setShowFormModal(false);
-        setForm({ reservationDate: '', purpose: '', department: 'CICS', startTime: '', endTime: '', expectedAttendees: '', destination: '', passengerCount: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
+        setForm({ reservationDate: '', purpose: '', department: '', intendedDates: [''], facilityDetails: {}, startTime: '', endTime: '', expectedAttendees: '', destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
         fetchActiveReservations();
+        await Swal.fire({
+          icon: 'success',
+          title: 'Request submitted successfully',
+          text: 'This submission is a request only and does not confirm your booking. Please submit the necessary documents in person at the GSO office. Your request remains subject to review and confirmation.',
+          confirmButtonText: 'Understood',
+          confirmButtonColor: '#991b1b'
+        });
       } else {
         const err = await res.json();
-        alert(err.error || "Submission rejected.");
+        await Swal.fire({icon: 'error', title: 'Request not submitted', text: err.error || 'Submission rejected.'});
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      await Swal.fire({icon: 'error', title: 'Submission could not be verified', text: 'Check your requests before retrying.'});
+    } finally { setIsSubmitting(false); }
   };
 
   const year = currentDate.getFullYear();
@@ -147,7 +186,7 @@ export default function OriginatorResourcesTab({ userId }) {
             
             <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-red-100 border border-red-300 rounded-sm inline-block"></span> Reserved
+                <span className="w-2.5 h-2.5 bg-red-100 border border-red-300 rounded-sm inline-block"></span> Pending
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-emerald-100 border border-emerald-300 rounded-sm inline-block"></span> Confirmed
@@ -204,10 +243,7 @@ export default function OriginatorResourcesTab({ userId }) {
           });
           
           const activeBlock = blackouts.find(blk => {
-            if (blk.asset_name !== activeFacility) return false;
-            const start = new Date(blk.start_time).toISOString().split('T')[0];
-            const end = new Date(blk.end_time).toISOString().split('T')[0];
-            return dayString >= start && dayString <= end;
+            return blockMatchesResource(blk,activeFacility) && blockOnDay(blk,dayString);
           });
 
           return (
@@ -215,18 +251,17 @@ export default function OriginatorResourcesTab({ userId }) {
               key={index} 
               className={`border rounded-xl p-2 min-h-[120px] flex flex-col justify-between transition-all group ${
                 activeBlock 
-                  ? 'bg-red-50/30 border-red-200 cursor-not-allowed' 
+                  ? 'bg-red-50/30 border-red-200 cursor-pointer'
                   : isPastDate 
-                    ? 'bg-gray-50/80 border-gray-200 cursor-not-allowed opacity-75' 
+                    ? 'bg-gray-50/80 border-gray-200 cursor-pointer opacity-75'
                     : isToday
                       ? 'bg-red-50/10 border-[#D32F2F] shadow-sm hover:shadow-md cursor-pointer'
                       : 'bg-white border-gray-200 hover:border-[#D32F2F] hover:shadow-sm cursor-pointer'
               }`}
               onClick={() => {
-                if (!activeBlock && !isPastDate) {
-                  setForm({ ...form, reservationDate: dayString });
-                  setShowFormModal(true); 
-                }
+                setSelectedDay(dayString);
+                fetchActiveReservations();
+                fetchBlackouts();
               }}
             >
               <div className="flex justify-between items-start">
@@ -252,12 +287,13 @@ export default function OriginatorResourcesTab({ userId }) {
                 )}
               </div>
               
-              {activeBlock ? (
+              {activeBlock && (
                 <div className="bg-white border border-red-200 p-2 rounded-lg text-center mt-auto shadow-sm">
                   <Lock size={12} className="mx-auto text-[#D32F2F] mb-1" />
-                  <span className="text-[9px] font-black uppercase text-[#D32F2F] leading-tight block">Admin Override: {activeBlock.reason}</span>
+                  <span className="text-[9px] font-black uppercase text-[#D32F2F] leading-tight block">Closure scheduled: {activeBlock.reason}</span>
                 </div>
-              ) : (
+              )}
+              {(
                 <div className="flex-1 overflow-y-auto space-y-1.5 mt-2 max-h-[85px] custom-scrollbar pr-0.5">
                   {matches.map((b, idx) => {
                     const isConfirmed = b.status?.toLowerCase() === 'confirmed' || b.status?.toLowerCase() === 'approved';
@@ -273,7 +309,7 @@ export default function OriginatorResourcesTab({ userId }) {
                           {b.booking_type === 'Vehicle' ? (
                             <>
                               <MapPin size={10} className="shrink-0" />
-                              <span className="truncate">{b.destination || 'Campus'}</span>
+                              <span className="truncate">{b.vr_start?.substring(0,5)} – {b.vr_end?.substring(0,5)}</span>
                             </>
                           ) : (
                             <>
@@ -341,11 +377,17 @@ export default function OriginatorResourcesTab({ userId }) {
         </div>
       </div>
 
+      {selectedDay && <ResourceDayModal key={`${activeFacility}-${selectedDay}`} date={selectedDay} facility={activeFacility} bookings={bookings} blocks={blackouts} today={todayString} onClose={() => setSelectedDay(null)} onRequest={(start, end) => {
+        setForm({...form, reservationDate:selectedDay, intendedDates:[selectedDay], startTime:start, endTime:end, pickUpTime:start, dropOffTime:end});
+        setSelectedDay(null);
+        setShowFormModal(true);
+      }} />}
       {/* MODAL INJECTION */}
       {showFormModal && (
         <ResourceBookingModal 
           activeFacility={activeFacility} 
           setShowFormModal={setShowFormModal} 
+          isSubmitting={isSubmitting}
           handleBookingSubmit={handleBookingSubmit} 
           userName={userName} 
           todayString={todayString} 

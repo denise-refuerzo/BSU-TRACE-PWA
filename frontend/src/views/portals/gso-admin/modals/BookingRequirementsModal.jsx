@@ -6,7 +6,8 @@ export default function BookingRequirementsModal({
   setShowActiveChecklistModal,
   activeChecklistBooking,
   activeChecklistItems,
-  handleToggleChecklistItem
+  handleToggleChecklistItem,
+  busy
 }) {
   if (!showActiveChecklistModal || !activeChecklistBooking) return null;
 
@@ -16,7 +17,7 @@ export default function BookingRequirementsModal({
         
         <div className="p-4 border-b bg-[#FDFBF9] flex items-center justify-between">
           <h3 className="font-bold text-neutral-900 text-sm flex items-center gap-2">
-            <FileText size={16} className="text-red-800" /> Booking Requirements
+            <FileText size={16} className="text-red-800" /> Request Requirement
           </h3>
           <button onClick={() => setShowActiveChecklistModal(false)} className="text-neutral-400 hover:text-neutral-600"><X size={16} /></button>
         </div>
@@ -32,7 +33,7 @@ export default function BookingRequirementsModal({
               </div>
               <div>
                 <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide border ${activeChecklistBooking.status === 'Confirmed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                  {activeChecklistBooking.status}
+                  {activeChecklistBooking.status === 'Reserved' ? 'Pending' : activeChecklistBooking.status}
                 </span>
               </div>
             </div>
@@ -57,7 +58,8 @@ export default function BookingRequirementsModal({
                 >
                   <div className="relative flex items-center justify-center">
                     <input 
-                      type="checkbox" 
+                      type="checkbox"
+                      disabled={busy}
                       checked={item.is_checked} 
                       onChange={() => handleToggleChecklistItem(item.check_id, item.is_checked)}
                       className="w-5 h-5 appearance-none border-2 border-neutral-300 rounded-md checked:border-green-600 checked:bg-green-600 transition-colors cursor-pointer"

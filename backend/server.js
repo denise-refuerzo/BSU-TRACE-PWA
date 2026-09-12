@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jwt-simple');
 const bcrypt = require('bcrypt');
 const pool = require('./db');
+const {lockSchedule, availability, assertConfirmable} = require('./resourceScheduling');
 const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require('./mailer');
 const crypto = require('crypto');
 const axios = require('axios');
@@ -2118,6 +2119,10 @@ app.delete('/api/resources/assets/:id', requireAuth, async (req, res) => {
 // ==========================================
 app.post('/api/resources/assets', requireAuth, async (req, res) => {
   const { assetName, assetTypeId, quantity } = req.body;
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO access required.'});
+  if (typeof assetName !== 'string' || !assetName.trim() || ![1,2,3].includes(Number(assetTypeId)) || !Number.isInteger(Number(quantity)) || Number(quantity)<1) {
+    return res.status(400).json({error:'Enter a name, a facility/equipment type, and a positive whole-number quantity. Register vehicles separately.'});
+  }
   try {
     // Note: assetTypeId maps to ast_id (1: Room, 2: Gym, 3: Furniture/Equipment, 4: Vehicle)
     await pool.query(
@@ -2171,10 +2176,13 @@ app.post('/api/resources/blackouts', requireAuth, async (req, res) => {
 // ==========================================
 // 12. BOOKINGS: FETCH CALENDAR EVENTS ENDPOINT
 // ==========================================
+require('./resourceSchedulingRoutes')(app, pool, requireAuth);
+require('./resourceAdminRoutes')(app, pool, requireAuth);
+
 app.get('/api/resources/bookings', async (req, res) => {
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, b.reservation_date, b.purpose, b.status, u.full_name,
+      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose, b.status, u.full_name,
              gm.start_time as gm_start, gm.end_time as gm_end,
              vr.pick_up_time as vr_start, vr.drop_off_time as vr_end, vr.destination,
              ad.asset_name
@@ -2195,82 +2203,126 @@ app.get('/api/resources/bookings', async (req, res) => {
 // ==========================================
 // 12.1 BOOKINGS: CREATE RESERVATION ENDPOINT
 // ==========================================
-app.post('/api/resources/book', async (req, res) => {
+app.post('/api/resources/book', requireAuth, async (req, res) => {
   const { 
     userId, bookingType, assetName, reservationDate, purpose, department,
-    startTime, endTime, expectedAttendees,
-    destination, passengerCount, serviceTypeId, pickUpTime, dropOffTime
+    startTime, endTime, expectedAttendees, intendedDates, facilityDetails,
+    destination, officialPassengers, serviceTypeId, pickUpTime, dropOffTime,
+    preparedByName, preparedByPosition, recommendingApprovalName, recommendingApprovalPosition
   } = req.body;
+
+  const passengerNames = Array.isArray(officialPassengers)
+    ? officialPassengers.map(name => typeof name === 'string' ? name.trim() : '') : [];
+  if (bookingType === 'Vehicle') {
+    const requiredText = [department, purpose, destination, preparedByName, preparedByPosition, recommendingApprovalName, recommendingApprovalPosition];
+    if (!requiredText.every(value => typeof value === 'string' && value.trim()) ||
+        passengerNames.length === 0 || passengerNames.some(name => !name)) {
+      return res.status(400).json({ error: 'Complete the travel details, official passenger names, and both name/position sections.' });
+    }
+    if (!['1', '2', '3'].includes(String(serviceTypeId))) {
+      return res.status(400).json({ error: 'Choose a valid service type.' });
+    }
+    const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(value);
+    if (!validTime(pickUpTime) || !validTime(dropOffTime) || pickUpTime >= dropOffTime) {
+      return res.status(400).json({ error: 'Provide valid travel times, with arrival after departure when both are required.' });
+    }
+  }
+
+  const isFacility = bookingType === 'Room' || bookingType === 'Gymnasium';
+  const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  const dates = isFacility ? intendedDates : [reservationDate];
+  let details = null;
+  if (isFacility) {
+    if (!Array.isArray(dates) || dates.length === 0 || !dates.every(validDate) || new Set(dates).size !== dates.length) {
+      return res.status(400).json({error: 'Provide unique, valid intended dates of use.'});
+    }
+    const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+    if (!validTime(startTime) || !validTime(endTime) || startTime >= endTime ||
+        !Number.isInteger(Number(expectedAttendees)) || Number(expectedAttendees) < 1) {
+      return res.status(400).json({error: 'Provide valid start/end times and a positive whole-number attendance.'});
+    }
+    if (!facilityDetails || typeof facilityDetails !== 'object' || Array.isArray(facilityDetails) ||
+        typeof department !== 'string' || !department.trim()) {
+      return res.status(400).json({error: 'Complete the facility request details and requesting office.'});
+    }
+    details = {};
+    const groups = {
+      purposes: ['Seminar/Training', 'Meeting', 'Special Class/Class Activity', 'Acquaintance', 'Presentation', 'Others'],
+      participants: ['Faculty', 'Student', 'External Partners', 'Staff', 'Parents', 'Others'],
+      miscellaneous: ['Basic Sound System', 'Operator', 'Maintenance Personnel', 'Others']
+    };
+    for (const [key, options] of Object.entries(groups)) {
+      const selected = facilityDetails[key] ?? [];
+      if (!Array.isArray(selected) || (key !== 'miscellaneous' && !selected.length) || selected.some(value => !options.includes(value))) {
+        return res.status(400).json({error: `Choose valid ${key}.`});
+      }
+      details[key] = [...new Set(selected)];
+      if (selected.includes('Others')) {
+        const other = facilityDetails[`${key}Other`];
+        if (typeof other !== 'string' || !other.trim()) return res.status(400).json({error: `Specify other ${key}.`});
+        details[`${key}Other`] = other.trim();
+      }
+    }
+    for (const key of ['personInChargeName', 'personInChargePosition', 'requestedByName', 'requestedByPosition', 'reviewedByName', 'reviewedByPosition', 'approvedByName', 'approvedByPosition']) {
+      if (typeof facilityDetails[key] !== 'string' || !facilityDetails[key].trim()) {
+        return res.status(400).json({error: 'Complete all name and position fields.'});
+      }
+      details[key] = facilityDetails[key].trim();
+    }
+    if (facilityDetails.remarks != null && typeof facilityDetails.remarks !== 'string') {
+      return res.status(400).json({error: 'Remarks must be text.'});
+    }
+    details.remarks = (facilityDetails.remarks || '').trim();
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await lockSchedule(client);
 
-    const assetRes = await client.query('SELECT asd_id FROM public.asset_details WHERE asset_name = $1', [assetName]);
+    const assetRes = await client.query(`SELECT asd_id FROM public.asset_details WHERE ast_id = CASE $2 WHEN 'Vehicle' THEN 4 WHEN 'Room' THEN 1 WHEN 'Gymnasium' THEN 2 END ORDER BY (asset_name = $1) DESC, asd_id LIMIT 1`, [assetName, bookingType]);
     if (assetRes.rows.length === 0) throw new Error("Target university asset resource not registered.");
     const asdId = assetRes.rows[0].asd_id;
 
-    // =========================================================
-    // OVERLAP PREVENTION LOGIC
-    // =========================================================
-    if (bookingType === 'Room' || bookingType === 'Gymnasium') {
-      const overlapCheck = await client.query(`
-        SELECT 1 FROM public.bookings b
-        JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id
-        WHERE b.reservation_date = $1 AND gm.asd_id = $2 AND b.status IN ('Confirmed', 'Reserved')
-        AND gm.start_time < $4 AND gm.end_time > $3
-      `, [reservationDate, asdId, startTime, endTime]);
-      
-      if (overlapCheck.rows.length > 0) {
-        throw new Error("This facility is already booked during this time frame.");
-      }
-    } else if (bookingType === 'Vehicle') {
-      const finalizedPickUp = pickUpTime && pickUpTime.trim() !== "" ? pickUpTime : "00:00:00";
-      const finalizedDropOff = dropOffTime && dropOffTime.trim() !== "" ? dropOffTime : "00:00:00";
-      
-      const overlapCheck = await client.query(`
-        SELECT 1 FROM public.bookings b
-        JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id
-        WHERE b.reservation_date = $1 AND vr.asd_id = $2 AND b.status IN ('Confirmed', 'Reserved')
-        AND vr.pick_up_time < $4 AND vr.drop_off_time > $3
-      `, [reservationDate, asdId, finalizedPickUp, finalizedDropOff]);
-
-      if (overlapCheck.rows.length > 0) {
-        throw new Error("This vehicle is already scheduled for transit during this time frame.");
-      }
-    }
-    // =========================================================
+    for (const requestedDate of dates) {
+    const free = await availability(client, {date:requestedDate, start:isFacility ? startTime : pickUpTime, end:isFacility ? endTime : dropOffTime, type:bookingType, assetName});
+    if (!free.available) throw Object.assign(new Error(free.reason), {status:409});
 
     // Insert the booking
     const bookingRes = await client.query(
       `INSERT INTO public.bookings (u_id, booking_type, department, reservation_date, purpose, status)
        VALUES ($1, $2, $3, $4, $5, 'Reserved') RETURNING booking_id`,
-      [userId, bookingType, department, reservationDate, purpose]
+      [req.user.u_id, bookingType, department, requestedDate, isFacility ? details.purposes.map(value => value === 'Others' ? details.purposesOther : value).join(', ') : purpose]
     );
     const bookingId = bookingRes.rows[0].booking_id;
 
     if (bookingType === 'Room' || bookingType === 'Gymnasium') {
       await client.query(
-        `INSERT INTO public.gm_requirements (asd_id, booking_id, start_time, end_time, expected_attendees)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [asdId, bookingId, startTime, endTime, expectedAttendees || 0]
+        `INSERT INTO public.gm_requirements (asd_id, booking_id, start_time, end_time, expected_attendees, request_details)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [asdId, bookingId, startTime, endTime, expectedAttendees, JSON.stringify(details)]
       );
     } else if (bookingType === 'Vehicle') {
       const finalizedPickUp = pickUpTime && pickUpTime.trim() !== "" ? pickUpTime : "00:00:00";
       const finalizedDropOff = dropOffTime && dropOffTime.trim() !== "" ? dropOffTime : "00:00:00";
 
       await client.query(
-        `INSERT INTO public.vehicle_requirements (asd_id, sv_id, booking_id, destination, passenger_count, pick_up_time, drop_off_time)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [asdId, parseInt(serviceTypeId) || 3, bookingId, destination, parseInt(passengerCount) || 1, finalizedPickUp, finalizedDropOff]
+        `INSERT INTO public.vehicle_requirements (asd_id, sv_id, booking_id, destination, passenger_count, pick_up_time, drop_off_time,
+          official_passengers, prepared_by_name, prepared_by_position, recommending_approval_name, recommending_approval_position)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [asdId, parseInt(serviceTypeId) || 3, bookingId, destination, passengerNames.length, finalizedPickUp, finalizedDropOff,
+          passengerNames, preparedByName.trim(), preparedByPosition.trim(), recommendingApprovalName.trim(), recommendingApprovalPosition.trim()]
       );
     }
 
+    }
+
     await client.query('COMMIT');
-    res.status(201).json({ message: "Reservation recorded successfully! Awaiting status validation." });
+    res.status(201).json({ message: "Request submitted. Confirmation requires the necessary documents to be submitted in person at the GSO office and review by the responsible officers." });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message || "Failed transactional database commitment sequence." });
+    res.status(err.status || 500).json({ error: err.message || "Failed transactional database commitment sequence." });
   } finally {
     client.release();
   }
@@ -2282,7 +2334,7 @@ app.post('/api/resources/book', async (req, res) => {
 app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, b.reservation_date, b.purpose, b.status, 
+      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose, b.status,
              b.created_at, 
              CASE 
                 WHEN b.status = 'Confirmed' THEN b.updated_at 
@@ -2374,14 +2426,18 @@ app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req,
 // 13.3 PROCUREMENT: UPDATE CHECKLIST STATUS ENDPOINT
 // ==========================================
 app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   const { checkId } = req.params;
   const { isChecked, bookingId } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await lockSchedule(client);
+    if (typeof isChecked !== 'boolean') throw new Error('Invalid checklist value.');
     
     // Update specific item
-    await client.query('UPDATE public.booking_checklists SET is_checked = $1 WHERE check_id = $2', [isChecked, checkId]);
+    const updated = await client.query('UPDATE public.booking_checklists SET is_checked = $1 WHERE check_id = $2 AND booking_id = $3 RETURNING check_id', [isChecked, checkId, bookingId]);
+    if (!updated.rows.length) throw new Error('Checklist item does not belong to this request.');
     
     // Check if ALL items for this booking are now ticked off
     const allItems = await client.query('SELECT is_checked FROM public.booking_checklists WHERE booking_id = $1', [bookingId]);
@@ -2390,6 +2446,7 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     // Auto-update booking status if requirements are met
 // Auto-update booking status if requirements are met
   if (allChecked && allItems.rows.length > 0) {
+    await assertConfirmable(client, bookingId);
     await client.query("UPDATE public.bookings SET status = 'Confirmed', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [bookingId]);
   } else {
     await client.query("UPDATE public.bookings SET status = 'Reserved' WHERE booking_id = $1", [bookingId]);
@@ -2399,7 +2456,7 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     res.json({ message: "Checklist updated", allChecked });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: "Failed to update checklist status." });
+    res.status(err.status || 400).json({ error: err.message || "Failed to update checklist status." });
   } finally {
     client.release();
   }
