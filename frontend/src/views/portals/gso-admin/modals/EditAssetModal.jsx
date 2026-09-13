@@ -79,7 +79,7 @@ export default function EditAssetModal({
                   return (
                     <div key={idx} className="bg-white p-3 rounded-xl border border-neutral-200 shadow-sm flex flex-col gap-1">
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-neutral-900 text-xs">{dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        <span className="font-bold text-neutral-900 text-xs">{dateObj.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         <span className="text-[10px] font-mono font-bold text-red-800 bg-red-50 px-2 py-0.5 rounded">
                           {sched.start_time.substring(0,5)} - {sched.end_time.substring(0,5)}
                         </span>

@@ -64,11 +64,11 @@ export default function TrackingDetailsModal({
     if (!qrDataUrl) return;
 
     const formattedDate = activeDetailsDoc.created_at
-      ? new Date(activeDetailsDoc.created_at).toLocaleDateString('en-US', {
+      ? new Date(activeDetailsDoc.created_at).toLocaleDateString('en-US', { timeZone: 'Asia/Manila',
           month: 'short',
           day: '2-digit',
           year: 'numeric'
-        }) + ', ' + new Date(activeDetailsDoc.created_at).toLocaleTimeString('en-US', {
+        }) + ', ' + new Date(activeDetailsDoc.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Manila',
           hour: '2-digit',
           minute: '2-digit'
         })
@@ -264,7 +264,7 @@ export default function TrackingDetailsModal({
                 <div>
                   <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Date Created</span>
                   <p className="text-xs font-bold text-neutral-700 mt-0.5">
-                    {activeDetailsDoc.created_at ? new Date(activeDetailsDoc.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) + ', ' + new Date(activeDetailsDoc.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                    {activeDetailsDoc.created_at ? new Date(activeDetailsDoc.created_at).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: '2-digit', year: 'numeric' }) + ', ' + new Date(activeDetailsDoc.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                   </p>
                 </div>
               </div>
@@ -276,7 +276,7 @@ export default function TrackingDetailsModal({
                 <div>
                   <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Estimated Completion</span>
                   <p className="text-xs font-bold text-neutral-600 mt-0.5">
-                    {activeDetailsDoc.edc ? new Date(activeDetailsDoc.edc).toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }) : 'Calculating...'}
+                    {activeDetailsDoc.edc ? new Date(activeDetailsDoc.edc).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'long', day: '2-digit', year: 'numeric' }) : 'Calculating...'}
                   </p>
                 </div>
               </div>
@@ -326,7 +326,7 @@ export default function TrackingDetailsModal({
                   }
 
                   const stopLog = node.logRef;
-                  const formatTime = (ts) => ts ? new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : null;
+                  const formatTime = (ts) => ts ? new Date(ts).toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }) : null;
                   const timeIn = formatTime(stopLog?.time_in);
                   const timeOut = formatTime(stopLog?.time_out);
 

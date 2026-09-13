@@ -121,9 +121,9 @@ export default function Login() {
     if (role === 5) {
       navigate('/admin/dashboard');  
     } else if (role === 2) {
-      navigate('/processor/dashboard');   
+      navigate('/office/dashboard');   
     } else if (role === 3) {
-      navigate('/signee/dashboard');   
+      navigate('/office/dashboard');   
     } else if (role === 4) {
       navigate('/gso-dashboard'); 
     } else {

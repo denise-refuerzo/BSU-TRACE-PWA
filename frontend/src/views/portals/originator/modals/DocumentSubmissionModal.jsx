@@ -11,7 +11,10 @@ export default function DocumentSubmissionModal({
   processTypes,
   workflowsLoading, workflowError, retryWorkflows,
   estimatedDate,
-  selectedRoutePreview
+  selectedRoutePreview,
+  canCompleteOriginProcessing = false,
+  submitting = false,
+  submissionError = ''
 }) {
   const close = () => { handleProcessChange(''); setShowModal(false); };
   const verified = processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId));
@@ -56,13 +59,18 @@ export default function DocumentSubmissionModal({
               </div>
             </div>
           )}
+          {submissionError && <p role="alert" className="text-sm text-red-800">{submissionError}</p>}
+          {canCompleteOriginProcessing && <label className="flex items-start gap-3 p-4 border border-red-200 bg-red-50 rounded-xl text-sm">
+            <input type="checkbox" checked={!!form.completeOriginProcessing} onChange={e=>setForm({...form,completeOriginProcessing:e.target.checked})}/>
+            <span><strong>Complete originating-office processing upon submission</strong><span className="block text-xs mt-1">The document is already signed or stamped and ready for release. Receipt, signing, and release will be recorded under your name. The next office will still record its own Time In.</span></span>
+          </label>}
           <div className="flex items-start gap-2.5 pt-2">
             <input type="checkbox" id="confirmBox" required checked={form.confirmation} onChange={e => setForm({...form, confirmation: e.target.checked})} className="mt-0.5 rounded text-red-800 focus:ring-red-700 w-3.5 h-3.5" />
             <label htmlFor="confirmBox" className="text-[11px] text-gray-500 leading-tight select-none">I confirm that the information provided is accurate and all necessary supporting documents are attached as per institutional guidelines.</label>
           </div>
           <div className="flex justify-end gap-2.5 pt-4 border-t border-neutral-100">
             <button type="button" onClick={close} className="px-4 py-2 border font-medium text-gray-500 text-xs rounded-lg hover:bg-neutral-50">Cancel</button>
-            <button type="submit" disabled={!verified || workflowsLoading || !!workflowError} className="disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2 font-medium bg-red-800 hover:bg-red-900 text-white text-xs rounded-lg">Submit Document</button>
+            <button type="submit" disabled={submitting || !verified || workflowsLoading || !!workflowError} className="disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2 font-medium bg-red-800 hover:bg-red-900 text-white text-xs rounded-lg">{submitting ? 'Submitting…' : 'Submit Document'}</button>
           </div>
         </form>
       </div>

@@ -163,6 +163,9 @@ export function useProcessorData(userId) {
     if (!userId || userId === 'undefined' || !processorOfficeId) return;
 
     const notifInterval = setInterval(() => {
+      fetchPipelineDocs(processorOfficeId);
+      fetchOfficeActionHistory(processorOfficeId);
+      fetchKpis(processorOfficeId);
       fetchLiveNotifications(processorOfficeId);
     }, 10000);
 
@@ -186,9 +189,16 @@ export function useProcessorData(userId) {
   // --- UNIFIED OFFICE STATUS FILTERING ---
   // Evaluates status relative to THIS office (matching KPI definitions)
   const resolveOfficeStatus = (doc) => {
+    const ownStatus = doc.office_status_id;
+    if (ownStatus === 4) return 'Action Required';
     if (doc.pdoc_office_time_out || doc.time_out) return 'Completed';
-    if (doc.status?.toLowerCase() === 'in verification' || doc.current_step_is_adhoc) return 'In Verification';
+    if (ownStatus === 2) return 'In Verification';
+    if (ownStatus === 3) return 'Signed';
     if (!doc.time_in && !doc.pdoc_office_time_in) return 'Awaiting Scan-In';
+    if (ownStatus === 1) return 'Pending';
+    if (doc.status?.toLowerCase() === 'action required') return 'Action Required';
+    if (doc.status?.toLowerCase() === 'signed') return 'Signed';
+    if (doc.status?.toLowerCase() === 'in verification' || (doc.current_step_is_adhoc && Number(doc.current_office_id) !== Number(processorOfficeId))) return 'In Verification';
     return 'Pending';
   };
 
@@ -200,10 +210,11 @@ export function useProcessorData(userId) {
     if (!matchesSearch) return false;
 
     if (filterStatus === 'All') return true;
+    if (['Signed','Action Required'].includes(filterStatus)) return resolveOfficeStatus(doc) === filterStatus;
 
     const hasTimeIn = Boolean(doc.time_in || doc.pdoc_office_time_in);
     const hasTimeOut = Boolean(doc.time_out || doc.pdoc_office_time_out);
-    const isVerification = doc.status?.toLowerCase() === 'in verification' || doc.current_step_is_adhoc;
+    const isVerification = resolveOfficeStatus(doc) === 'In Verification';
 
     // 1. Awaiting Scan-In: At this office, but no Time-In yet
     if (filterStatus === 'Awaiting Scan-In') {
@@ -241,7 +252,7 @@ export function useProcessorData(userId) {
     const matchesSearch = (log.title && log.title.toLowerCase().includes(q)) || 
                           (log.full_name && log.full_name.toLowerCase().includes(q)) || 
                           (log.qr_code && log.qr_code.toLowerCase().includes(q));
-    if (historyFilter !== 'All') return matchesSearch && log.action_type === historyFilter;
+    if (historyFilter !== 'All') return matchesSearch && log.action_type.startsWith(historyFilter);
     return matchesSearch;
   });
 
@@ -249,6 +260,8 @@ export function useProcessorData(userId) {
   const totalHistoryTabPages = Math.ceil(filteredHistoryLogs.length / itemsPerPage) || 1;
 
   return {
+    signedCount: pipelineDocs.filter(doc => resolveOfficeStatus(doc) === "Signed").length,
+    sentBackCount: pipelineDocs.filter(doc => resolveOfficeStatus(doc) === "Action Required").length,
     processorOfficeName, processorOfficeId,
     profileName, setProfileName, profileEmail, setProfileEmail,
     facultyId, departmentName, twoFaEnabled, setTwoFaEnabled, twoFaCode, setTwoFaCode,

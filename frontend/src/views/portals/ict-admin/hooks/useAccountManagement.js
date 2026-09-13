@@ -39,7 +39,7 @@ export function useAccountManagement() {
     try {
       const res = await fetchWithAuth('/api/accounts');
       const data = await res.json();
-      if (res.ok) setAccounts(data);
+      if (res.ok) setAccounts(data.map(account => [2,3].includes(Number(account.a_id)) ? {...account,a_id:2,role_name:'Office Staff'} : account));
     } catch (err) {
       console.error("Error fetching institutional accounts catalog ledger:", err);
     }

@@ -1,3 +1,4 @@
+import OfficeSubmissionsTab from '../processor/components/OfficeSubmissionsTab';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -29,7 +30,7 @@ import QRScannerModal from './modals/QRScannerModal';
 import AddAssetModal from './modals/AddAssetModal';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 import MasterChecklistModal from './modals/MasterChecklistModal';
-import DocumentAuditModal from './modals/DocumentAuditModal';
+import OfficeDocumentModal from '../processor/modals/OfficeDocumentModal';
 import EditAssetModal from './modals/EditAssetModal';
 import ExportLogsModal from './modals/ExportLogsModal';
 import FacilityBlackoutModal from './modals/FacilityBlackoutModal';
@@ -577,7 +578,7 @@ export default function GSOAdminDashboard() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
 
       <PWAInstallBanner />
 
@@ -616,6 +617,7 @@ export default function GSOAdminDashboard() {
             <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
+            <button onClick={() => handleTabSelect('submissions')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold text-neutral-400 hover:text-white"><Archive size={18}/> Office Submissions</button>
             <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'resources' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <Archive size={18} /> School Resources
             </button>
@@ -712,6 +714,7 @@ export default function GSOAdminDashboard() {
             />
           )}
 
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} />}
           {activeTab === 'resources' && (
             <ResourceManagementTab
               onOpenRequest={(request) => {
@@ -810,7 +813,16 @@ export default function GSOAdminDashboard() {
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
         scanMode={scanMode} setScanMode={setScanMode}
-        simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload} executeSimulatedScanner={() => {}}
+        simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload} executeSimulatedScanner={async (event, code) => {
+          event?.preventDefault();
+          try {
+            const response=await fetchWithAuth(`/api/documents/scan-${scanMode === "time-in" ? "in" : "out"}`, {method:"POST", headers:{"Content-Type":"application/json"},body:JSON.stringify({qrCode:code || simulatedQrInput})});
+            const result=await response.json();
+            if (!response.ok) throw new Error(result.error);
+            setShowScannerModal(false);setSimulatedQrPayload("");fetchGSOMeta();
+            minimalSwal.fire({icon:"success",text:result.message});
+          } catch (error) {minimalSwal.fire({icon:"error",text:error.message});}
+        }}
       />
       <AddAssetModal 
         showAddAssetModal={showAddAssetModal} setShowAddAssetModal={setShowAddAssetModal}
@@ -822,18 +834,9 @@ export default function GSOAdminDashboard() {
         newPassword={newPassword} setNewPassword={setNewPassword}
         confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} handleUpdatePassword={() => {}}
       />
-      <DocumentAuditModal 
-        showDetailsModal={showDetailsModal} setShowDetailsModal={setShowDetailsModal}
-        selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
-        isAwaitingScanIn={isAwaitingScanIn} isInVerification={isInVerification} isActionAltered={isActionAltered}
-        showAdHocForm={showAdHocForm} setShowAdHocForm={setShowAdHocForm} showSendBackForm={showSendBackForm} setShowSendBackForm={setShowSendBackForm}
-        selectedAdHocOffice={selectedAdHocOffice} setSelectedAdHocOffice={setSelectedAdHocOffice}
-        officesList={officesList} gsoOfficeId={gsoOfficeId} isActionProcessing={isActionProcessing}
-        returnReason={returnReason} setReturnReason={setReturnReason}
-        handleExecuteAdHocDetour={() => {}} handleExecuteReturn={() => {}} handleSignDocument={() => {}}
-        setScanMode={setScanMode} setShowScannerModal={setShowScannerModal} setSimulatedQrPayload={setSimulatedQrPayload}
-        handleNavigateToChat={handleNavigateToChat}
-      />
+      {showDetailsModal && selectedDoc && <OfficeDocumentModal selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
+        processorOfficeId={gsoOfficeId} officesList={officesList} onClose={() => setShowDetailsModal(false)} onRefresh={fetchGSOMeta} onOpenChat={handleNavigateToChat} />}
+
       <MasterChecklistModal
         showChecklistMakerModal={showChecklistMakerModal} setShowChecklistMakerModal={setShowChecklistMakerModal}
         activeChecklistTab={activeChecklistTab} setActiveChecklistTab={setActiveChecklistTab}

@@ -54,8 +54,7 @@ export default function ManageAccountModal({
                 className="w-full border border-neutral-300 bg-white rounded-lg px-2 py-2 outline-none"
               >
                 <option value="1">Originator</option>
-                <option value="2">Processor</option>
-                <option value="3">Signee</option>
+                <option value="2">Office Staff</option>
                 <option value="4">GSO Admin</option>
                 <option value="5">ICT Admin</option>
               </select>

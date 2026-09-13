@@ -34,8 +34,8 @@ test('global and filtered searches preserve route data and parameterize filters'
   assert.equal(global.body[0].stop_1_name, 'Origin office');
   assert.deepEqual(app.queries[0].params, [null, '', null]);
   await app.request('get /api/process-types', {query: {categoryId: '2', q: "Proposal'_%", active: 'true'}});
-  assert.deepEqual(app.queries[1].params, ['2', "Proposal'_%", true]);
-  assert.ok(!app.queries[1].sql.includes("Proposal'_%"));
+  assert.deepEqual(app.queries[2].params, ['2', "Proposal'_%", true]);
+  assert.ok(!app.queries[2].sql.includes("Proposal'_%"));
   assert.equal((await app.request('get /api/process-types', {query: {categoryId: '2x'}})).code, 400);
 });
 test('category names are trimmed and duplicate names return a conflict', async () => {
@@ -90,19 +90,15 @@ test('invalid category rolls back before creating a route', async () => {
   assert.ok(!app.queries.some(q => q.sql.startsWith('INSERT')));
 });
 test('document submission rejects free text and inactive IDs without creating documents', async () => {
-  const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require.resolve('./server'), 'utf8');
-  const start = source.indexOf("app.post('/api/documents',");
-  const end = source.indexOf('// 6. SMART SCANNER', start);
-  let handler;
-  const queries = [];
-  const pool = {async query(sql) { queries.push(sql); return {rows: sql.includes('SELECT d_id') ? [{d_id: 1}] : []}; }};
-  vm.runInNewContext(source.slice(start, end), {app: {post: (path, auth, fn) => { handler = fn; }}, pool, requireAuth() {}, console});
-  for (const id of ['Proposal', '', null, 999]) {
-    const res = {status(code) { this.code = code; return this; }, json(body) { this.body = body; }};
-    await handler({body: {processTypeId: id, userId: 1, title: 'Test'}}, res);
-    assert.equal(res.code, 400);
+  const routes = new Map();
+  const app = {get(){},post(path,...handlers){routes.set(path,handlers.at(-1));}};
+  const queries=[];
+  const client={async query(sql){queries.push(sql);return {rows:sql.includes('FROM public."User"')?[{u_id:1,a_id:1,d_id:1}]:[]};},release(){}};
+  require('./officeWorkflowRoutes')(app,{connect:async()=>client},()=>{});
+  for (const id of ['Proposal','',null,999]) {
+    const res={status(code){this.code=code;return this;},json(body){this.body=body;}};
+    await routes.get('/api/documents')({user:{u_id:1},body:{processTypeId:id,title:'Test'}},res);
+    assert.equal(res.code,400);
   }
-  assert.equal(queries.length, 2);
-  assert.match(queries[1], /FROM public.process_type WHERE p_id=\$1 AND is_active IS TRUE/);
+  assert.ok(!queries.some(q=>q.includes('INSERT')));
 });

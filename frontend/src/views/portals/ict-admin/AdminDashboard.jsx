@@ -74,7 +74,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#FDFBF9] overflow-hidden text-neutral-800 font-sans relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FDFBF9] overflow-hidden text-neutral-800 font-sans relative">
       
       <PWAInstallBanner />
 
@@ -175,13 +175,13 @@ export default function AdminDashboard() {
           {activeSidebar === 'accounts' && <AccountManagementTab {...accountProps} />}
           
           {activeSidebar === 'matrix' && (
-            <div className="space-y-6">
-              <div className="text-left">
+            <div className="trace-matrix space-y-6">
+              <div className="trace-section-banner rounded-2xl border border-rose-100 p-5 text-left">
                 <h2 className="text-xl md:text-2xl font-black tracking-tight text-neutral-900">System Permissions & Workflow Engineering</h2>
                 <p className="text-xs text-gray-500">Configure dynamic tracking routes, security matrix parameters, and registration building locations.</p>
               </div>
 
-              <div className="flex border-b border-neutral-200 gap-2 overflow-x-auto">
+              <div className="trace-matrix-tabs flex border border-rose-100 rounded-xl bg-white p-1.5 gap-2 overflow-x-auto">
                 <button type="button" onClick={() => matrixProps.setActiveTab('routes')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 whitespace-nowrap transition-all ${matrixProps.activeTab === 'routes' ? 'border-red-800 text-red-800' : 'border-transparent text-gray-400 hover:text-neutral-700'}`}>🗺️ Interactive Visualizer</button>
                 <button type="button" onClick={() => matrixProps.setActiveTab('infrastructure')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 whitespace-nowrap transition-all ${matrixProps.activeTab === 'infrastructure' ? 'border-red-800 text-red-800' : 'border-transparent text-gray-400 hover:text-neutral-700'}`}>🏢 Campus Infrastructure</button>
               </div>

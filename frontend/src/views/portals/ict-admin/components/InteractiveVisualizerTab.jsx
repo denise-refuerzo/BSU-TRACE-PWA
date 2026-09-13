@@ -5,7 +5,7 @@ export default function InteractiveVisualizerTab({
   formMeta, setFormMeta, newProcessName, setNewProcessName, selectedStops, setSelectedStops,
   handleStopSelectorChange, handleAddStopSlot, handleRemoveTrailingStopSlot,
   offices, resetWorkflowForm, handleProcessFormSubmit, processTypes,
-  categories, categoryId, setCategoryId, catalogError, refreshCatalogs
+  categories, categoryId, setCategoryId, catalogError, refreshCatalogs, deletePipeline
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-200">
@@ -210,6 +210,7 @@ export default function InteractiveVisualizerTab({
                   <p className={`font-bold text-sm ${isSelectedCard ? 'text-[#D32F2F]' : 'text-gray-900'}`}>
                     {p.process_name}
                   </p>
+                  <button type="button" aria-label={`Delete ${p.process_name}`} onClick={e => { e.stopPropagation(); deletePipeline(p); }} className="text-xs text-red-800 underline shrink-0">Delete</button>
                   {p.is_active === false && (
                     <span className="text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 ml-2">
                       Archived

@@ -185,6 +185,27 @@ export function useRolesPermissions() {
     }
   };
 
+  const editInfrastructure = async (type, id, current) => {
+    const result = await Swal.fire({title:`Rename ${type}`, input:'text', inputValue:current, inputLabel:`New ${type} name`, showCancelButton:true, confirmButtonText:'Save', confirmButtonColor:'#8c1023', inputValidator:value => !value?.trim() ? 'A name is required.' : undefined});
+    const value = result.isConfirmed ? result.value : '';
+    if (!value || value.trim() === current) return;
+    const response = await fetchWithAuth(`/api/${type === 'department' ? 'departments' : 'offices'}/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(type === 'department' ? {departmentName:value} : {officeName:value}) });
+    const data = await response.json(); if (!response.ok) return Swal.fire('Operation blocked', data.error, 'error');
+    Swal.fire('Updated', data.message, 'success'); fetchBaselineCatalogs();
+  };
+  const deleteInfrastructure = async (type, id, current) => {
+    const result = await Swal.fire({title:`Delete ${current}?`, text:'Accounts, blueprints, and documents that reference this item are protected. The deletion will be blocked while dependencies remain; related records will not be silently deleted.', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#8c1023'});
+    if (!result.isConfirmed) return;
+    const response = await fetchWithAuth(`/api/${type === 'department' ? 'departments' : 'offices'}/${id}`, {method:'DELETE'}); const data=await response.json();
+    if (!response.ok) return Swal.fire('Operation blocked', data.error, 'error'); Swal.fire('Deleted', data.message, 'success'); fetchBaselineCatalogs();
+  };
+  const deletePipeline = async p => {
+    const result = await Swal.fire({title:`Delete ${p.process_name}?`, text:'Transaction records may prevent deletion; archive it when it is already in use.', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#8c1023'});
+    if (!result.isConfirmed) return;
+    const response=await fetchWithAuth(`/api/process-types/${p.p_id}`,{method:'DELETE'}); const data=await response.json();
+    if (!response.ok) return Swal.fire('Operation blocked',data.error,'error'); Swal.fire('Deleted',data.message,'success'); resetWorkflowForm(); fetchBaselineCatalogs();
+  };
+
   return {
     activeTab, setActiveTab,
     offices, processTypes, infraSummary,
@@ -195,6 +216,6 @@ export function useRolesPermissions() {
     newDeptName, setNewDeptName,
     newOfficeName, setNewOfficeName,
     handleAddStopSlot, handleRemoveTrailingStopSlot, handleStopSelectorChange,
-    resetWorkflowForm, handleProcessFormSubmit, handleCreateDepartment, handleCreateOffice
+    resetWorkflowForm, handleProcessFormSubmit, handleCreateDepartment, handleCreateOffice, editInfrastructure, deleteInfrastructure, deletePipeline
   };
 }
