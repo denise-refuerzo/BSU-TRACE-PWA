@@ -1,1 +1,144 @@
 @import "tailwindcss";
+
+/* Shared BSU accents for the Office, Originator, GSO and ICT portals. */
+:root {
+  --trace-wine: #8c1023;
+  --trace-wine-dark: #650b1b;
+  --trace-rose: #fff3f3;
+  --trace-border: #ecdede;
+  --trace-ink: #38272b;
+}
+
+.trace-portal {
+  background: radial-gradient(ellipse at top right, #f9e8e8 0, transparent 48%), #faf8f5;
+}
+
+.trace-portal > aside {
+  background: linear-gradient(160deg, #3c2228, #24191d 72%);
+  border-right: 1px solid #63313b;
+}
+
+.trace-portal aside nav button.text-white {
+  background: linear-gradient(110deg, var(--trace-wine), #a51c30);
+  box-shadow: inset 3px 0 #f7adb4, 0 3px 12px #19090e33;
+  border-left-color: #f7adb4;
+}
+
+.trace-portal > .flex-1 > header {
+  background: linear-gradient(100deg, #fff, #fff4f3);
+  border-top: 3px solid var(--trace-wine);
+  border-bottom-color: var(--trace-border);
+  box-shadow: 0 3px 14px #650b1b06;
+}
+
+.trace-portal .bg-white:is(.border-gray-200, .border-neutral-200) {
+  border-color: var(--trace-border);
+}
+
+.trace-portal table thead,
+.trace-portal table thead tr {
+  background: #fff1f2;
+  color: var(--trace-wine-dark);
+  border-bottom-color: #e7bcc3;
+}
+
+.trace-portal table tbody tr:hover {
+  background-color: #fff9f9;
+}
+
+/* Existing dialogs share the same colored title treatment without changing
+   their forms, semantic status colors or action behavior. */
+.trace-portal .fixed .bg-white > div.border-b:has(> h3),
+.trace-dialog-header {
+  background: linear-gradient(110deg, var(--trace-wine-dark), #ac1930);
+  color: #fff;
+  border-color: #a8293d;
+}
+
+.trace-portal .fixed .bg-white > div.border-b:has(> h3) > :is(h3, button) {
+  color: #fff;
+}
+
+.trace-section-banner {
+  background: linear-gradient(115deg, #fff4f3, #fff 68%);
+  border-left: 4px solid var(--trace-wine);
+}
+
+.trace-portal :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid #b02039;
+  outline-offset: 3px;
+}
+
+.trace-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .65rem 1rem;
+  border: 1px solid #dfccd0;
+  border-radius: .7rem;
+  background: #fff;
+  color: #593b43;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .15s, box-shadow .15s;
+}
+.trace-button:hover { background: #fff0f2; }
+.trace-button:disabled { opacity: .5; cursor: not-allowed; }
+.trace-button-primary {
+  color: white;
+  background: var(--trace-wine);
+  border-color: var(--trace-wine);
+  box-shadow: 0 3px 8px #8c102322;
+}
+.trace-button-primary:hover { background: var(--trace-wine-dark); }
+
+.trace-dialog-body { scrollbar-color: #d7adb5 #fff9f9; scrollbar-width: thin; }
+.trace-field-label {
+  display: block;
+  color: #887079;
+  font-size: .65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: .3rem;
+}
+
+.swal2-popup { border: 1px solid var(--trace-border); border-top: 4px solid var(--trace-wine); }
+
+/* Roles & Matrix uses the same wine headers and softly tinted panels. */
+.trace-matrix-tabs button { border: 0; border-radius: .55rem; }
+.trace-matrix-tabs button.border-red-800 {
+  background: linear-gradient(110deg, var(--trace-wine-dark), #ac1930);
+  color: white;
+  box-shadow: 0 2px 6px #650b1b22;
+}
+.trace-matrix-tabs button.border-transparent { color: #78636a; }
+.trace-matrix-tabs button.border-transparent:hover { background: var(--trace-rose); color: var(--trace-wine); }
+.trace-matrix .bg-white.rounded-2xl {
+  border-top: 3px solid var(--trace-wine);
+  box-shadow: 0 4px 16px #650b1b08;
+}
+.trace-matrix :is(h3, h4) { color: var(--trace-wine-dark); }
+.trace-matrix :is(input, textarea, select) {
+  min-width: 0;
+  border-color: #decbd0;
+  background-color: #fffdfd;
+}
+.trace-matrix :is(input, textarea, select):focus { border-color: var(--trace-wine); }
+.trace-matrix .trace-category-card {
+  border-color: #ecdede;
+  border-left: 3px solid #d9a0ab;
+  background: linear-gradient(110deg, #fff8f8, #fff);
+}
+.trace-matrix .trace-category-card:hover { border-color: #c88090; }
+.trace-matrix .trace-category-card button { text-decoration: none; padding: .2rem .35rem; border-radius: .3rem; }
+.trace-matrix .trace-category-card button:hover:not(:disabled) { background: #ffe8ed; }
+.trace-matrix .bg-gray-50 { background-color: #fff7f8; border-color: #ecdede; }
+.trace-matrix .rounded-full.border-2 { background: var(--trace-wine); border-color: var(--trace-wine); color: white; }
+.trace-matrix button:is(.bg-gray-900, .bg-red-800) {
+  background: linear-gradient(110deg, var(--trace-wine-dark), #a31a30);
+  color: white;
+}
+.trace-matrix button:is(.bg-gray-900, .bg-red-800):hover { background: var(--trace-wine-dark); }

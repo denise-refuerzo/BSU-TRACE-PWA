@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Filter, Search, Inbox, FileText } from 'lucide-react';
 
 export default function ProcessorPipelineTab({
+  resolveOfficeStatus,
   search,
   setSearch,
   setPipelinePage,
@@ -87,7 +88,7 @@ export default function ProcessorPipelineTab({
                 <option value="All">All Statuses</option>
                 <option value="Incoming">Incoming Docs (Open Modal)</option>
                 <option value="Awaiting Scan-In">Awaiting Scan-In</option>
-                <option value="Pending">Pending Docs</option>
+                <option value="Signed">Signed / Ready for Release</option><option value="Action Required">Action Required</option><option value="Pending">Pending Docs</option>
                 <option value="In Verification">In Verification</option>
                 <option value="Completed">Completed Docs</option>
               </select>
@@ -110,7 +111,7 @@ export default function ProcessorPipelineTab({
             <tbody className="divide-y divide-gray-100">
               {currentPipeDocs.map((doc, index) => {
                 const isCompleted = Boolean(doc.time_out);
-                const isInVerification = doc.status?.toLowerCase() === 'in verification' || doc.current_step_is_adhoc;
+                const isInVerification = resolveOfficeStatus(doc) === 'In Verification';
 
                 return (
                   <tr key={index} className="hover:bg-gray-50/50 transition-colors group">
@@ -138,7 +139,7 @@ export default function ProcessorPipelineTab({
                           isInVerification ? 'bg-purple-500' : 
                           'bg-amber-500'
                         }`}></span>
-                        {!doc.time_in ? 'Awaiting Scan-In' : isCompleted ? 'Completed' : isInVerification ? 'In Verification' : 'Pending'}
+                        {resolveOfficeStatus(doc)}
                       </span>
                     </td>
                     <td className="p-4">

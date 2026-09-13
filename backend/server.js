@@ -136,7 +136,7 @@ const requireAuth = async (req, res, next) => {
     const decoded = jwt.decode(token, JWT_SECRET);
     
     // Check the database to see if the session token matches the current one
-    const result = await pool.query('SELECT session_token FROM public."User" WHERE u_id = $1', [decoded.u_id]);
+    const result = await pool.query('SELECT session_token,a_id,o_id,d_id,is_active FROM public."User" WHERE u_id = $1', [decoded.u_id]);
     
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'User account no longer exists.' });
@@ -153,7 +153,8 @@ const requireAuth = async (req, res, next) => {
     }
 
     // If it matches, attach user info to req and proceed
-    req.user = decoded;
+    if (!result.rows[0].is_active) return res.status(403).json({error:'Account is inactive.'});
+    req.user = {...decoded, ...result.rows[0]};
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token.' });
@@ -408,7 +409,9 @@ app.get('/api/accounts', requireAuth, async (req, res) => {
 // 2.1 CREATE NEW ACCOUNT ENDPOINT
 // ==========================================
 app.post('/api/accounts', requireAuth, async (req, res) => {
-  const { username, password, accountType, fullName, email, departmentId, officeId } = req.body;
+  const { username, password, fullName, email, departmentId, officeId } = req.body;
+  const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});
   
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'Rejection: Password must be at least 6 characters long.' });
@@ -450,7 +453,9 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
 // ==========================================
 app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
   const { userId } = req.params;
-  const { username, fullName, email, accountType, departmentId, officeId, isActive } = req.body;  
+  const { username, fullName, email, departmentId, officeId, isActive } = req.body;
+  const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});  
   try {
     const duplicateCheck = await pool.query(
       `SELECT * FROM public."User" WHERE username = $1 AND u_id != $2`,
@@ -592,7 +597,7 @@ app.post('/api/users/:id/request-profile-otp', async (req, res) => {
 // ==========================================
 // 3. FETCH ALL OFFICES ENDPOINT
 // ==========================================
-app.get('/api/offices', async (req, res) => {
+app.get('/api/offices', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT o_id AS id, office_name AS name FROM public.offices ORDER BY office_name ASC'
@@ -607,7 +612,7 @@ app.get('/api/offices', async (req, res) => {
 // ==========================================
 // 3.1 CREATE DEPARTMENT ENDPOINT
 // ==========================================
-app.post('/api/departments', async (req, res) => {
+app.post('/api/departments', requireAuth, async (req, res) => {
   const { departmentName } = req.body;
   if (!departmentName || departmentName.trim() === "") {
     return res.status(400).json({ error: 'Rejection: Department names cannot be instantiated as empty text strings.' });
@@ -630,7 +635,7 @@ app.post('/api/departments', async (req, res) => {
 // ==========================================
 // 3.2 CREATE OFFICE ENDPOINT
 // ==========================================
-app.post('/api/offices', async (req, res) => {
+app.post('/api/offices', requireAuth, async (req, res) => {
   const { officeName } = req.body;
   if (!officeName || officeName.trim() === "") {
     return res.status(400).json({ error: 'Rejection: Office destination tags cannot be instantiated as empty text strings.' });
@@ -650,772 +655,43 @@ app.post('/api/offices', async (req, res) => {
   }
 });
 
+// ICT-only infrastructure maintenance. Foreign-key constraints deliberately
+// protect departments/offices that are already used by accounts or routes.
+app.put('/api/departments/:id', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
+  const name = String(req.body.departmentName || '').trim();
+  if (!name) return res.status(400).json({error: 'Department name is required.'});
+  try { const r = await pool.query('UPDATE public.department SET department_name=$1 WHERE d_id=$2 RETURNING d_id', [name, req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); res.json({message:'Department updated.'}); }
+  catch (e) { res.status(e.code === '23505' ? 409 : 500).json({error: e.code === '23505' ? 'That department already exists.' : 'Unable to update department.'}); }
+});
+app.delete('/api/departments/:id', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
+  try { const r = await pool.query('DELETE FROM public.department WHERE d_id=$1 RETURNING d_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); res.json({message:'Department deleted.'}); }
+  catch (e) { res.status(e.code === '23503' ? 409 : 500).json({error: e.code === '23503' ? 'This department is still assigned to an account.' : 'Unable to delete department.'}); }
+});
+app.put('/api/offices/:id', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
+  const name = String(req.body.officeName || '').trim();
+  if (!name) return res.status(400).json({error: 'Office name is required.'});
+  try { const r = await pool.query('UPDATE public.offices SET office_name=$1 WHERE o_id=$2 RETURNING o_id', [name, req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Office not found.'}); res.json({message:'Office updated.'}); }
+  catch (e) { res.status(e.code === '23505' ? 409 : 500).json({error: e.code === '23505' ? 'That office already exists.' : 'Unable to update office.'}); }
+});
+app.delete('/api/offices/:id', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
+  try { const r = await pool.query('DELETE FROM public.offices WHERE o_id=$1 RETURNING o_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Office not found.'}); res.json({message:'Office deleted.'}); }
+  catch (e) { res.status(e.code === '23503' ? 409 : 500).json({error: e.code === '23503' ? 'This office is still referenced by an account, route, or document.' : 'Unable to delete office.'}); }
+});
+
 // ==========================================
 // 4. FETCH PROCESS TYPES (WORKFLOWS) ENDPOINT
 // ==========================================
 require('./documentCategoryRoutes')(app, pool, requireAuth);
+require('./officeWorkflowRoutes')(app, pool, requireAuth);
 
 // ==========================================
 // 5. FETCH USER DOCUMENTS ENDPOINT
 // ==========================================
-app.get('/api/documents/:userId', requireAuth, async (req, res) => {
-  try {
-    const query = `
-      SELECT DISTINCT ON (idoc.ini_id)
-             idoc.ini_id, 
-             idoc.title, 
-             idoc.edc, 
-             idoc.qr_code, 
-             idoc.created_at,
-             pt.process_name,
-             curr_o.office_name as current_office, 
-             next_o.office_name as next_office, 
-             st.current_status as status,
-             (
-               SELECT action_type 
-               FROM public.office_action_history 
-               WHERE ini_id = idoc.ini_id AND action_type LIKE 'Sent Back for Revision:%'
-               ORDER BY history_id DESC 
-               LIMIT 1
-             ) as last_action,
-             (
-              SELECT json_agg(json_build_object(
-                'office_name', off2.office_name,
-                'time_in', p2.time_in,
-                'time_out', p2.time_out,
-                'is_adhoc', p2.is_adhoc
-              ) ORDER BY p2.pd_id ASC)
-               FROM public.processed_document p2
-               JOIN public.offices off2 ON p2.current_office_id = off2.o_id
-               WHERE p2.ini_id = idoc.ini_id
-             ) as history_logs
-      FROM public.initial_document idoc
-      JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      LEFT JOIN public.processed_document pdoc ON idoc.ini_id = pdoc.ini_id
-      LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
-      LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
-      LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE idoc.u_id = $1 
-      ORDER BY idoc.ini_id DESC, (pdoc.time_out IS NULL) DESC, pdoc.pd_id DESC;
-    `;
-    const result = await pool.query(query, [req.params.userId]);
-    res.json(result.rows);
-  } catch (err) { 
-    console.error(err);
-    res.status(500).json({ error: 'Failed mapping logs' }); 
-  }
-});
-
-// ==========================================
-// 5.1 CREATE NEW DOCUMENT ENDPOINT
-// ==========================================
-app.post('/api/documents', requireAuth, async (req, res) => {
-  const { userId, title, processTypeId, edc } = req.body;
-  if (!Number.isInteger(processTypeId) || processTypeId <= 0 || processTypeId > 2147483647) {
-    return res.status(400).json({error: 'Select a valid pipeline from the suggestions.'});
-  }
-  try {
-    // 1. Fetch the Originator's Department ID (d_id)
-    const userRes = await pool.query('SELECT d_id FROM public."User" WHERE u_id = $1', [userId]);
-    const userDeptId = userRes.rows[0]?.d_id;
-
-    // 2. Map the Department ID to the specific College Office ID (o_id)
-    const departmentToOfficeMap = {
-        1: 11, // CICS (d_id 1) -> CICS Office (o_id 11)
-        2: 12, // CABEIHM -> CABEIHM Office
-        3: 13, // CAS -> CAS Office
-        4: 14, // CIT -> CE / CIT Office
-        5: 14, // CE -> CE / CIT Office
-        6: 24  // CTE -> CTE Office
-    };
-    
-    // Default to CICS if mapping fails
-    const assignedOfficeId = departmentToOfficeMap[userDeptId] || 11; 
-
-    const uniqueQrPayload = `TRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const docResult = await pool.query(
-      `INSERT INTO public.initial_document (p_id, u_id, title, edc, qr_code, created_at) 
-       SELECT p_id, $2, $3, $4, $5, TIMEZONE('Asia/Manila', NOW())
-       FROM public.process_type WHERE p_id=$1 AND is_active IS TRUE RETURNING *`,
-      [processTypeId, userId, title, edc , uniqueQrPayload] // 'edc' variable is used here
-    );
-    if (!docResult.rows.length) return res.status(400).json({error: 'Select an existing active pipeline from the suggestions.'});
-    const newDoc = docResult.rows[0];
-    
-    const routeResult = await pool.query(`SELECT r.stop_1, r.stop_2 FROM public.process_type pt JOIN public.route r ON pt.r_id = r.r_id WHERE pt.p_id = $1`, [processTypeId]);
-    const route = routeResult.rows[0];
-    
-    if (route) {
-      // 3. The Dynamic Swap Logic
-      let firstStop = route.stop_1;
-      
-      // If the template uses the 999 Placeholder, swap it with the Originator's mapped office
-      if (firstStop === 999) {
-          firstStop = assignedOfficeId;
-      }
-
-      await pool.query(
-        `INSERT INTO public.processed_document (ini_id, s_id, current_office_id, next_office_id) 
-         VALUES ($1, 1, $2, $3)`, 
-        [newDoc.ini_id, firstStop, route.stop_2]
-      );
-    }
-    res.status(201).json({ message: 'Document tracking active!', qrCode: uniqueQrPayload });
-  } catch (err) { 
-    console.error(err);
-    res.status(500).json({ error: 'Failed' }); 
-  }
-});
-
-// ==========================================
-// 6. SMART SCANNER: SCAN-IN ENDPOINT
-// ==========================================
-app.post('/api/documents/scan-in', requireAuth, async (req, res) => {
-  const { qrCode, processorUserId } = req.body;
-  try {
-    const procRes = await pool.query('SELECT o_id FROM public."User" WHERE u_id = $1', [processorUserId]);
-    const processorOfficeId = procRes.rows[0]?.o_id;
-
-    if (!processorOfficeId) {
-      return res.status(400).json({ error: "Your account is not assigned to a physical campus office workspace." });
-    }
-
-    const docRes = await pool.query(`
-      SELECT pd.pd_id, pd.ini_id, pd.current_office_id, pd.time_in, idoc.title, off.office_name as expected_office_name
-      FROM public.processed_document pd
-      JOIN public.initial_document idoc ON pd.ini_id = idoc.ini_id
-      JOIN public.offices off ON pd.current_office_id = off.o_id
-      WHERE idoc.qr_code = $1 AND pd.time_out IS NULL
-      ORDER BY pd.pd_id DESC LIMIT 1
-    `, [qrCode]);
-
-    if (docRes.rows.length === 0) {
-      return res.status(422).json({ error: "Rejection: Document token is either invalid or already fully completed." });
-    }
-
-    const activeLog = docRes.rows[0];
-
-    if (activeLog.current_office_id !== processorOfficeId) {
-      return res.status(400).json({ 
-        error: `Notice of Rejection: This document belongs to the ${activeLog.expected_office_name}. It cannot be scanned here.` 
-      });
-    }
-
-    if (activeLog.time_in !== null) {
-      return res.status(400).json({ 
-        error: `Notice: "${activeLog.title}" has already been clocked into your office.` 
-      });
-    }
-
-    await pool.query(`
-      UPDATE public.processed_document 
-      SET time_in = TIMEZONE('Asia/Manila', NOW()) 
-      WHERE pd_id = $1
-    `, [activeLog.pd_id]);
-
-    await pool.query(`
-      INSERT INTO public.office_action_history (ini_id, u_id, o_id, action_type, action_timestamp)
-      VALUES ($1, $2, $3, 'Scanned In', TIMEZONE('Asia/Manila', NOW()))
-    `, [activeLog.ini_id, processorUserId, processorOfficeId]);
-
-    res.json({ message: `Successfully registered Time-In for document: "${activeLog.title}"` });
-
-  } catch (err) {
-    console.error("Scan-In Error:", err);
-    res.status(500).json({ error: "Internal Server Error during logging computation." });
-  }
-});
-
-// ==========================================
-// 6.1 SMART SCANNER: SCAN-OUT ENDPOINT
-// ==========================================
-app.post('/api/documents/scan-out', requireAuth, async (req, res) => {
-  const { qrCode, processorUserId } = req.body;
-  try {
-    const procRes = await pool.query('SELECT o_id FROM public."User" WHERE u_id = $1', [processorUserId]);
-    const processorOfficeId = procRes.rows[0]?.o_id;
-
-    // 1. Fetch current document state along with its numeric status ID (s_id)
-    // FIX: Added pd.current_office_id to the SELECT statement
-    const checkStatusRes = await pool.query(`
-      SELECT pd.pd_id, pd.time_in, pd.s_id, st.current_status, pd.current_office_id, pd.next_office_id, pd.ini_id, idoc.title
-      FROM public.processed_document pd
-      JOIN public.initial_document idoc ON pd.ini_id = idoc.ini_id
-      JOIN public.status st ON pd.s_id = st.s_id
-      WHERE idoc.qr_code = $1 AND pd.time_out IS NULL
-      ORDER BY pd.pd_id DESC LIMIT 1
-    `, [qrCode]);
-
-    if (checkStatusRes.rows.length === 0) {
-      return res.status(444).json({ error: "Document not found or already checked out." });
-    }
-
-    const currentActiveStep = checkStatusRes.rows[0];
-    const currentStatusClean = currentActiveStep.current_status.toLowerCase();
-
-    if (currentActiveStep.time_in === null) {
-      return res.status(400).json({
-        error: `Rejection: Cannot complete Time-Out. "${currentActiveStep.title}" must be scanned for Time-In first upon arrival.`
-      });
-    }
-
-    // 2. Prevent scanning out if it's still generic pending or verification state
-    if (currentStatusClean === 'pending' || currentStatusClean === 'in verification') {
-      return res.status(400).json({ 
-        error: "Rejection: This document cannot be signed out yet. It requires approval/signature or explicit action from the office Signee." 
-      });
-    }
-
-    // ==========================================================
-    // CRITICAL PATCH: HANDLE SENT BACK / ACTION REQUIRED WORKFLOW
-    // ==========================================================
-    if (currentActiveStep.s_id === 4 || currentStatusClean === 'action required') {
-      // Clock out of current office but preserve s_id = 4 so it remains frozen as Action Required
-      await pool.query(`
-        UPDATE public.processed_document 
-        SET time_out = TIMEZONE('Asia/Manila', NOW())
-        WHERE pd_id = $1
-      `, [currentActiveStep.pd_id]);
-
-      if (processorOfficeId) {
-        await pool.query(`
-          INSERT INTO public.office_action_history (ini_id, u_id, o_id, action_type, action_timestamp)
-          VALUES ($1, $2, $3, 'Scanned Out (Halted - Revision Required)', TIMEZONE('Asia/Manila', NOW()))
-        `, [currentActiveStep.ini_id, processorUserId, processorOfficeId]);
-      }
-
-      return res.json({ 
-        message: "Document safely checked out and frozen. Workflow halted pending Originator revisions." 
-      });
-    }
-    // ==========================================================
-
-    // 3. Normal route processing continues below for non-halted documents
-    const adhocCheckRes = await pool.query(`
-      SELECT is_adhoc, adhoc_return_office_id, is_returned_from_adhoc, current_office_id
-      FROM public.processed_document
-      WHERE pd_id = $1
-    `, [currentActiveStep.pd_id]);
-
-    const adhocData = adhocCheckRes.rows[0];
-
-    const routeRes = await pool.query(`
-      SELECT r.stop_1, r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7, u.d_id as originator_dept_id
-      FROM public.initial_document idoc
-      JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      JOIN public.route r ON pt.r_id = r.r_id
-      JOIN public."User" u ON idoc.u_id = u.u_id
-      WHERE idoc.ini_id = $1
-    `, [currentActiveStep.ini_id]);
-
-    const r = routeRes.rows[0];
-
-    // ==========================================================
-    // 1. AD-HOC RETURN TRIP LOGIC
-    // ==========================================================
-    if (adhocData && adhocData.is_adhoc) {
-      // Clock out of Transferred Office (Office B)
-      await pool.query(`
-        UPDATE public.processed_document 
-        SET time_out = TIMEZONE('Asia/Manila', NOW()) 
-        WHERE pd_id = $1
-      `, [currentActiveStep.pd_id]);
-
-      // UNFREEZE Original Office (Office A) back to pending (s_id = 1)
-      await pool.query(`
-        UPDATE public.processed_document 
-        SET s_id = 1
-        WHERE ini_id = $1 AND current_office_id = $2 AND time_out IS NULL
-      `, [currentActiveStep.ini_id, adhocData.adhoc_return_office_id]);
-      
-    } else {
-      // ==========================================================
-      // 2. NORMAL 7-STOP ROUTING LOGIC
-      // ==========================================================
-      let mappedStop1 = r.stop_1;
-      
-      // The Dynamic Swap: Translate 999 back into the Originator's actual office
-      if (mappedStop1 === 999) {
-          const departmentToOfficeMap = {
-              1: 11, 2: 12, 3: 13, 4: 14, 5: 14, 6: 24
-          };
-          mappedStop1 = departmentToOfficeMap[r.originator_dept_id] || 11;
-      }
-
-      // Build the sequence using mappedStop1 instead of the raw r.stop_1
-      const sequence = [mappedStop1, r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7].filter(Boolean);
-      
-      // Look for the office we are CURRENTLY scanning out of
-      const currentIndex = sequence.indexOf(currentActiveStep.current_office_id);
-      
-      let nextStopToReceive = null;
-      let followingStop = null;
-
-      if (currentIndex !== -1 && currentIndex + 1 < sequence.length) {
-        nextStopToReceive = sequence[currentIndex + 1]; // The immediate next stop
-        if (currentIndex + 2 < sequence.length) {
-          followingStop = sequence[currentIndex + 2]; // The stop after next (for UI display)
-        }
-      }
-
-      if (!nextStopToReceive) {
-        // If there is no next stop, the document has finished its ENTIRE route!
-        await pool.query(`
-          UPDATE public.processed_document 
-          SET time_out = TIMEZONE('Asia/Manila', NOW()), s_id = 5
-          WHERE pd_id = $1
-        `, [currentActiveStep.pd_id]);
-      } else {
-        // Clock out of current office
-        await pool.query(`
-          UPDATE public.processed_document 
-          SET time_out = TIMEZONE('Asia/Manila', NOW()) 
-          WHERE pd_id = $1
-        `, [currentActiveStep.pd_id]);
-
-        // Push to the next office in the sequence
-        await pool.query(`
-          INSERT INTO public.processed_document (ini_id, s_id, current_office_id, next_office_id, time_in)
-          VALUES ($1, 1, $2, $3, NULL)
-        `, [currentActiveStep.ini_id, nextStopToReceive, followingStop]);
-      }
-    }
-
-    if (processorOfficeId) {
-      await pool.query(`
-        INSERT INTO public.office_action_history (ini_id, u_id, o_id, action_type, action_timestamp)
-        VALUES ($1, $2, $3, 'Scanned Out', TIMEZONE('Asia/Manila', NOW()))
-      `, [currentActiveStep.ini_id, processorUserId, processorOfficeId]);
-    }
-
-    res.json({ message: "Document safely checked out and pushed to next workflow queue block." });
-
-  } catch (err) {
-    console.error("Scan-Out Error:", err);
-    res.status(500).json({ error: "Internal Server Error checking out document." });
-  }
-});
-
-// ==========================================
-// 7. FETCH PROCESSOR ACTIVE DOCUMENTS ENDPOINT
-// ==========================================
-app.get('/api/processor/documents/:officeId', requireAuth, async (req, res) => {
-  const { officeId } = req.params;
-  try {
-    const query = `
-      SELECT 
-        idoc.ini_id, 
-        idoc.title, 
-        idoc.edc, 
-        idoc.qr_code, 
-        idoc.created_at, 
-        pt.process_name,
-        INITCAP(st.current_status) as status,
-        curr_o.office_name as current_office, 
-        next_o.office_name as next_office,
-        pdoc.time_in,
-        pdoc.time_out,
-        pdoc.is_adhoc,
-        pdoc.adhoc_return_office_id,
-        r.stop_1 as route_start_id,
-        creator.full_name AS requestor_name
-      FROM public.processed_document pdoc
-      JOIN public.initial_document idoc ON pdoc.ini_id = idoc.ini_id
-      JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      JOIN public.route r ON pt.r_id = r.r_id
-      JOIN public."User" creator ON idoc.u_id = creator.u_id
-      LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
-      LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
-      LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE pdoc.current_office_id = $1 AND pdoc.time_out IS NULL
-      ORDER BY pdoc.pd_id DESC;
-    `;
-    const result = await pool.query(query, [parseInt(officeId)]);
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Processor active document lookup failure:", err);
-    res.status(500).json({ error: "Failed to load active office document stream parameters." });
-  }
-});
-
-// ==========================================
-// 7.1 FETCH PROCESSOR PIPELINE ENDPOINT
-// ==========================================
-app.get('/api/processor/documents/pipeline/:officeId', requireAuth, async (req, res) => {
-  const { officeId } = req.params;
-  try {
-    const query = `
-      SELECT DISTINCT ON (idoc.ini_id)
-        idoc.ini_id, 
-        idoc.title, 
-        idoc.edc, 
-        idoc.qr_code, 
-        idoc.created_at, 
-        pt.process_name,
-        INITCAP(st.current_status) as status,
-        (SELECT o.office_name 
-         FROM public.processed_document first_pd 
-         JOIN public.offices o ON first_pd.current_office_id = o.o_id 
-         WHERE first_pd.ini_id = idoc.ini_id 
-         ORDER BY first_pd.pd_id ASC LIMIT 1) as originating_office,
-        curr_o.office_name as current_office, 
-        next_o.office_name as next_office,
-        pdoc_office.time_in,
-        pdoc_office.time_out,
-        pdoc_active.current_office_id,
-        pdoc_active.is_adhoc AS current_step_is_adhoc,
-        creator.full_name AS requestor_name
-      FROM public.initial_document idoc
-      JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      JOIN public.route r ON pt.r_id = r.r_id
-      JOIN public."User" creator ON idoc.u_id = creator.u_id
-      JOIN public.processed_document pdoc_office ON idoc.ini_id = pdoc_office.ini_id
-      LEFT JOIN public.processed_document pdoc_active ON idoc.ini_id = pdoc_active.ini_id AND pdoc_active.time_out IS NULL
-      LEFT JOIN public.offices curr_o ON COALESCE(pdoc_active.current_office_id, pdoc_office.current_office_id) = curr_o.o_id
-      LEFT JOIN public.offices next_o ON pdoc_active.next_office_id = next_o.o_id
-      LEFT JOIN public.status st ON COALESCE(pdoc_active.s_id, pdoc_office.s_id) = st.s_id
-      WHERE pdoc_office.current_office_id = $1
-      ORDER BY idoc.ini_id DESC, pdoc_office.pd_id DESC;
-    `;
-    const result = await pool.query(query, [parseInt(officeId)]);
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Pipeline analytics ledger parsing fault:", err);
-    res.status(500).json({ error: "Failed compiling analytical structural route loops." });
-  }
-});
-
-// ==========================================
-// 7.2 AD-HOC VERIFICATION DETOUR ENDPOINT
-// ==========================================
-app.post('/api/processor/documents/ad-hoc', requireAuth, async (req, res) => {
-  const { iniId, targetOfficeId, currentOfficeId, executorUserId } = req.body;
-  const client = await pool.connect();
-
-  try {
-    await client.query('BEGIN');
-
-    const activeRes = await client.query(`
-      SELECT pd_id, time_in 
-      FROM public.processed_document 
-      WHERE ini_id = $1 AND current_office_id = $2 AND time_out IS NULL
-    `, [iniId, currentOfficeId]);
-
-    if (activeRes.rows.length === 0) throw new Error("Active document track not found in your office.");
-    const activeStep = activeRes.rows[0];
-
-    if (activeStep.time_in === null) throw new Error("Cannot route detour: Document must be Scanned-In to your office first.");
-
-    // PATCH 1: Do NOT clock out Office A. Just change status to In Verification (s_id = 2).
-    await client.query(`
-      UPDATE public.processed_document 
-      SET s_id = 2
-      WHERE pd_id = $1
-    `, [activeStep.pd_id]);
-
-    // Insert Office B's new record
-    await client.query(`
-      INSERT INTO public.processed_document 
-      (ini_id, s_id, current_office_id, next_office_id, is_adhoc, adhoc_return_office_id, time_in)
-      VALUES ($1, 1, $2, NULL, true, $3, NULL)
-    `, [iniId, targetOfficeId, currentOfficeId]);
-
-    await client.query(`
-      INSERT INTO public.office_action_history 
-      (ini_id, u_id, o_id, action_type, action_timestamp)
-      VALUES ($1, $2, $3, 'Ad-Hoc Detour Routed', TIMEZONE('Asia/Manila', NOW()))
-    `, [iniId, executorUserId, currentOfficeId]);
-
-    await client.query('COMMIT');
-    res.json({ message: "Detour active. Document transferred to target office for verification." });
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message || "Failed to process ad-hoc detour route." });
-  } finally {
-    client.release();
-  }
-});
-
-// ==========================================
-// 7.3 FETCH PROCESSOR HISTORY ENDPOINT
-// ==========================================
-app.get('/api/processor/history/:officeId', requireAuth, async (req, res) => {
-  const { officeId } = req.params;
-  try {
-    const query = `
-      SELECT 
-        h.history_id,
-        h.action_type,
-        h.action_timestamp,
-        u.full_name,
-        idoc.title,
-        idoc.qr_code,
-        idoc.ini_id,
-        idoc.edc,
-        idoc.created_at, 
-        pt.process_name,
-        COALESCE(INITCAP(st.current_status), 'Active Path') as status,
-        curr_o.office_name as current_office,
-        next_o.office_name as next_office,
-        pdoc.time_in,
-        pdoc.time_out,
-        pdoc.is_adhoc,
-        creator.full_name AS requestor_name
-      FROM public.office_action_history h
-      JOIN public."User" u ON h.u_id = u.u_id
-      JOIN public.initial_document idoc ON h.ini_id = idoc.ini_id
-      JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      JOIN public."User" creator ON idoc.u_id = creator.u_id
-      LEFT JOIN LATERAL (
-        SELECT pd.time_in, pd.time_out, pd.is_adhoc, pd.s_id, pd.current_office_id, pd.next_office_id
-        FROM public.processed_document pd
-        WHERE pd.ini_id = h.ini_id 
-          AND pd.current_office_id = h.o_id
-        ORDER BY pd.pd_id DESC
-        LIMIT 1
-      ) pdoc ON TRUE
-      LEFT JOIN public.offices curr_o ON h.o_id = curr_o.o_id
-      LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
-      LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE h.o_id = $1
-      ORDER BY h.action_timestamp DESC;
-    `;
-    const result = await pool.query(query, [parseInt(officeId)]);
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Audit trail lookup mapping error:", err);
-    res.status(500).json({ error: "Failed to map historical action segments." });
-  }
-});
-
-// ==========================================
-// 7.4 FETCH PROCESSOR KPI METRICS SUMMARY
-// ==========================================
-app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (req, res) => {
-  const officeId = parseInt(req.params.officeId);
-
-  try {
-    // 1. INCOMING
-    const incomingRes = await pool.query(`
-      WITH mapped_routes AS (
-        SELECT 
-          idoc.ini_id,
-          CASE 
-            WHEN r.stop_1 = 999 THEN 
-              CASE creator.d_id
-                WHEN 1 THEN 11
-                WHEN 2 THEN 12
-                WHEN 3 THEN 13
-                WHEN 4 THEN 14
-                WHEN 5 THEN 14
-                WHEN 6 THEN 24
-                ELSE 11
-              END
-            ELSE r.stop_1
-          END AS stop_1_mapped,
-          r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7
-        FROM public.initial_document idoc
-        JOIN public.process_type pt ON idoc.p_id = pt.p_id
-        JOIN public.route r ON pt.r_id = r.r_id
-        JOIN public."User" creator ON idoc.u_id = creator.u_id
-      )
-      SELECT COUNT(DISTINCT mr.ini_id)::int as incoming_count
-      FROM mapped_routes mr
-      WHERE $1 IN (mr.stop_1_mapped, mr.stop_2, mr.stop_3, mr.stop_4, mr.stop_5, mr.stop_6, mr.stop_7)
-        AND NOT EXISTS (
-          SELECT 1 FROM public.processed_document pd_halt 
-          WHERE pd_halt.ini_id = mr.ini_id AND pd_halt.s_id IN (4, 5)
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM public.processed_document pd_here 
-          WHERE pd_here.ini_id = mr.ini_id 
-            AND pd_here.current_office_id = $1 
-            AND pd_here.time_in IS NOT NULL
-        );
-    `, [officeId]);
-
-    // 2. AWAITING SCAN-IN
-    const awaitingScanRes = await pool.query(`
-      SELECT COUNT(pd_id)::int as awaiting_count
-      FROM public.processed_document
-      WHERE current_office_id = $1 
-        AND time_in IS NULL 
-        AND time_out IS NULL 
-        AND s_id != 4;
-    `, [officeId]);
-
-    // 3. PENDING (All signed in, not signed out, including in-verification)
-    const pendingRes = await pool.query(`
-      SELECT COUNT(DISTINCT ini_id)::int as pending_count
-      FROM public.processed_document
-      WHERE current_office_id = $1 
-        AND time_in IS NOT NULL 
-        AND time_out IS NULL 
-        AND s_id != 4;
-    `, [officeId]);
-
-    // 4. IN VERIFICATION (Documents marked as s_id = 2 in this office with no time_out)
-    const inVerificationRes = await pool.query(`
-      SELECT COUNT(DISTINCT ini_id)::int as in_verification_count
-      FROM public.processed_document
-      WHERE current_office_id = $1 
-        AND s_id = 2 
-        AND time_out IS NULL;
-    `, [officeId]);
-
-    // 5. COMPLETED (Has time_in and time_out in this office)
-    const completedRes = await pool.query(`
-      SELECT COUNT(DISTINCT ini_id)::int as completed_count
-      FROM public.processed_document
-      WHERE current_office_id = $1 
-        AND time_in IS NOT NULL 
-        AND time_out IS NOT NULL 
-        AND is_adhoc = false;
-    `, [officeId]);
-
-    res.json({
-      incomingCount: incomingRes.rows[0]?.incoming_count || 0,
-      awaitingScanInCount: awaitingScanRes.rows[0]?.awaiting_count || 0,
-      pendingCount: pendingRes.rows[0]?.pending_count || 0,
-      inVerificationCount: inVerificationRes.rows[0]?.in_verification_count || 0,
-      completedProcessingCount: completedRes.rows[0]?.completed_count || 0
-    });
-
-  } catch (err) {
-    console.error("KPI Metrics Calculation Error:", err);
-    res.status(500).json({ error: "Failed to calculate processor metrics." });
-  }
-});
-
-// ==========================================
-// 7.5 FETCH INCOMING DOCUMENTS LIST ENDPOINT
-// ==========================================
-app.get('/api/processor/documents/expected-list/:officeId', requireAuth, async (req, res) => {
-  const officeId = parseInt(req.params.officeId);
-  try {
-    const query = `
-      WITH mapped_routes AS (
-        SELECT 
-          idoc.ini_id,
-          idoc.title,
-          idoc.qr_code,
-          idoc.created_at,
-          pt.process_name,
-          creator.full_name AS requestor_name,
-          creator.d_id,
-          CASE 
-            WHEN r.stop_1 = 999 THEN 
-              CASE creator.d_id
-                WHEN 1 THEN 11
-                WHEN 2 THEN 12
-                WHEN 3 THEN 13
-                WHEN 4 THEN 14
-                WHEN 5 THEN 14
-                WHEN 6 THEN 24
-                ELSE 11
-              END
-            ELSE r.stop_1
-          END AS stop_1_mapped,
-          r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7
-        FROM public.initial_document idoc
-        JOIN public.process_type pt ON idoc.p_id = pt.p_id
-        JOIN public.route r ON pt.r_id = r.r_id
-        JOIN public."User" creator ON idoc.u_id = creator.u_id
-      )
-      SELECT DISTINCT ON (mr.ini_id)
-        mr.ini_id,
-        mr.title,
-        mr.qr_code,
-        mr.created_at,
-        mr.process_name,
-        mr.requestor_name,
-        COALESCE(curr_o.office_name, (SELECT office_name FROM public.offices WHERE o_id = mr.stop_1_mapped), 'Origin Station') AS current_office
-      FROM mapped_routes mr
-      LEFT JOIN public.processed_document pdoc_active 
-        ON mr.ini_id = pdoc_active.ini_id AND pdoc_active.time_out IS NULL
-      LEFT JOIN public.offices curr_o 
-        ON pdoc_active.current_office_id = curr_o.o_id
-      WHERE $1 IN (mr.stop_1_mapped, mr.stop_2, mr.stop_3, mr.stop_4, mr.stop_5, mr.stop_6, mr.stop_7)
-        AND NOT EXISTS (
-          SELECT 1 FROM public.processed_document pd_halt 
-          WHERE pd_halt.ini_id = mr.ini_id AND pd_halt.s_id IN (4, 5)
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM public.processed_document pd_here 
-          WHERE pd_here.ini_id = mr.ini_id 
-            AND pd_here.current_office_id = $1 
-            AND pd_here.time_in IS NOT NULL
-        )
-      ORDER BY mr.ini_id DESC;
-    `;
-    const result = await pool.query(query, [officeId]);
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Expected incoming documents list error:", err);
-    res.status(500).json({ error: "Failed to pull expected documents list." });
-  }
-});
-
-// ==========================================
-// 8. SIGNEE: APPROVE & SIGN ENDPOINT
-// ==========================================
-app.post('/api/signee/sign', requireAuth, async (req, res) => {
-  const { iniId, currentOfficeId, signeeUserId } = req.body;
-  try {
-    const updateResult = await pool.query(`
-      UPDATE public.processed_document
-      SET s_id = 3 
-      WHERE ini_id = $1 AND current_office_id = $2 AND time_out IS NULL
-      RETURNING pd_id
-    `, [parseInt(iniId), parseInt(currentOfficeId)]);
-
-    if (updateResult.rows.length === 0) {
-      return res.status(404).json({ error: "No active processing track found for signature in this branch." });
-    }
-
-    await pool.query(`
-      INSERT INTO public.office_action_history (ini_id, u_id, o_id, action_type, action_timestamp)
-      VALUES ($1, $2, $3, 'Approved & Signed', TIMEZONE('Asia/Manila', NOW()))
-    `, [parseInt(iniId), parseInt(signeeUserId), parseInt(currentOfficeId)]);
-
-    res.json({ message: "Document authorization seal applied successfully!" });
-  } catch (err) {
-    console.error("Signature processing error:", err);
-    res.status(500).json({ error: "Failed sequence allocation structural logic loop." });
-  }
-});
-
-// ==========================================
-// 8.1 SIGNEE: RETURN FOR REVISION ENDPOINT
-// ==========================================
-app.post('/api/signee/return', requireAuth, async (req, res) => {
-  const { iniId, currentOfficeId, signeeUserId, reason } = req.body;
-  try {
-    // Set status to 'Action Required' (s_id = 4) and decouple next_office_id to freeze the route
-    const updateResult = await pool.query(`
-      UPDATE public.processed_document
-      SET s_id = 4, next_office_id = NULL
-      WHERE ini_id = $1 AND current_office_id = $2 AND time_out IS NULL
-      RETURNING pd_id
-    `, [parseInt(iniId), parseInt(currentOfficeId)]);
-
-    if (updateResult.rows.length === 0) {
-      return res.status(404).json({ error: "Document active link context is missing." });
-    }
-
-    const actionMessage = `Sent Back for Revision: ${reason}`;
-    await pool.query(`
-      INSERT INTO public.office_action_history (ini_id, u_id, o_id, action_type, action_timestamp)
-      VALUES ($1, $2, $3, $4, TIMEZONE('Asia/Manila', NOW()))
-    `, [parseInt(iniId), parseInt(signeeUserId), parseInt(currentOfficeId), actionMessage]);
-
-    res.json({ message: "Document flagged for corrections and route path frozen cleanly." });
-  } catch (err) {
-    console.error("Return routing tracking error:", err);
-    res.status(500).json({ error: "Internal processing structural breakdown." });
-  }
-});
+require('./officeDocumentReadRoutes')(app, pool, requireAuth);
 
 // ==========================================
 // 9. REAL-TIME POSTGRESQL NOTIFICATION LISTENER
@@ -1494,9 +770,9 @@ const initDatabaseListener = async () => {
 // 9.1 FETCH USER NOTIFICATIONS ENDPOINT
 // ==========================================
 app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req, res) => {
-  const userId = parseInt(req.params.userId);
-  const roleId = parseInt(req.params.roleId);
-  const officeId = parseInt(req.params.officeId) || 0;
+  const userId = req.user.u_id;
+  const roleId = Number(req.user.a_id);
+  const officeId = req.user.o_id || 0;
 
   try {
     let alertRows = [];
@@ -1510,12 +786,12 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
           idoc.title,
           h.action_type as title_alert,
           ('Action performed at ' || COALESCE(off.office_name, 'Origin Station')) as message,
-          h.action_timestamp as time
+          CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp - INTERVAL '8 hours' ELSE h.action_timestamp END as time
         FROM public.office_action_history h
         JOIN public.initial_document idoc ON h.ini_id = idoc.ini_id
         LEFT JOIN public.offices off ON h.o_id = off.o_id
         WHERE idoc.u_id = $1
-        ORDER BY h.action_timestamp DESC LIMIT 10;
+        ORDER BY h.history_id DESC LIMIT 10;
       `;
       const result = await pool.query(query, [userId]);
       alertRows = result.rows.map(row => ({
@@ -1526,52 +802,16 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
         time: row.time
       }));
 
-    } else if (roleId === 2) {
-      // 2. PROCESSOR: Alerts when an incoming document is created
-      const query = `
-        SELECT 
-          pd.pd_id as id,
-          idoc.ini_id,
-          idoc.title,
-          u.full_name as requestor,
-          idoc.created_at as time
-        FROM public.processed_document pd
-        JOIN public.initial_document idoc ON pd.ini_id = idoc.ini_id
-        JOIN public."User" u ON idoc.u_id = u.u_id
-        WHERE pd.current_office_id = $1 AND pd.time_in IS NULL
-        ORDER BY pd.pd_id DESC LIMIT 10;
-      `;
-      const result = await pool.query(query, [officeId]);
-      alertRows = result.rows.map(row => ({
-        id: row.id,
-        ini_id: row.ini_id, // <-- CRITICAL: Pass ini_id directly!
-        doc_title: row.title,
-        title: "Incoming Document",
-        message: `"${row.title}" submitted by ${row.requestor}`,
-        time: row.time
-      }));
-
-    } else if (roleId === 3) {
-      // 3. SIGNEE: Alerts when a processor signs a document in (Time-In matches, pending action)
-      const query = `
-        SELECT 
-          pd.pd_id as id,
-          idoc.title,
-          u.full_name as requestor,
-          pd.time_in as time
-        FROM public.processed_document pd
-        JOIN public.initial_document idoc ON pd.ini_id = idoc.ini_id
-        JOIN public."User" u ON idoc.u_id = u.u_id
-        WHERE pd.current_office_id = $1 AND pd.time_in IS NOT NULL AND pd.s_id = 1
-        ORDER BY pd.pd_id DESC LIMIT 10;
-      `;
-      const result = await pool.query(query, [officeId]);
-      alertRows = result.rows.map(row => ({
-        id: row.id,
-        title: "Pending Document",
-        message: `"${row.title}" from ${row.requestor} is awaiting your signature.`,
-        time: row.time
-      }));
+    } else if ([2,3,4].includes(roleId)) {
+      const result=await pool.query(`SELECT h.history_id AS id,i.ini_id,i.title AS doc_title,h.action_type AS title,
+        u.full_name || ' · ' || o.office_name AS message,
+        CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
+        FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
+        JOIN public."User" u ON h.u_id=u.u_id JOIN public.offices o ON h.o_id=o.o_id
+        WHERE i.submission_office_id=$1 OR EXISTS (SELECT 1 FROM public.processed_document pd
+          WHERE pd.ini_id=i.ini_id AND pd.current_office_id=$1 AND pd.time_out IS NULL)
+        ORDER BY h.history_id DESC LIMIT 20`,[officeId]);
+      alertRows=result.rows;
     }
 
     res.json(alertRows);
@@ -1781,7 +1021,7 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
         ORDER BY idoc.ini_id DESC;
       `;
       params = [userId];
-    } else if (roleId === 2 || roleId === 4) {
+    } else if ([2,3,4].includes(Number(roleId))) {
       const userOfficeRes = await pool.query('SELECT o_id FROM public."User" WHERE u_id = $1', [userId]);
       const officeId = userOfficeRes.rows[0]?.o_id;
 
@@ -1797,7 +1037,7 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
           ) AS "hasAnyChat"
         FROM public.initial_document idoc
         JOIN public.processed_document pd ON idoc.ini_id = pd.ini_id
-        WHERE pd.current_office_id = $1
+        WHERE (pd.current_office_id = $1 OR idoc.submission_office_id = $1)
         ORDER BY idoc.ini_id DESC;
       `;
       params = [officeId];
@@ -2447,7 +1687,7 @@ app.get('/api/admin/dashboard-metrics', async (req, res) => {
       SELECT 
         h.history_id,
         h.action_type,
-        h.action_timestamp,
+        CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp - INTERVAL '8 hours' ELSE h.action_timestamp END AS action_timestamp,
         u.full_name as operator_name,
         off.office_name,
         idoc.title as document_title
@@ -2455,7 +1695,7 @@ app.get('/api/admin/dashboard-metrics', async (req, res) => {
       JOIN public."User" u ON h.u_id = u.u_id
       JOIN public.initial_document idoc ON h.ini_id = idoc.ini_id
       LEFT JOIN public.offices off ON h.o_id = off.o_id
-      ORDER BY h.action_timestamp DESC
+      ORDER BY h.history_id DESC
       LIMIT 15;
     `;
     const liveFeedRes = await pool.query(liveFeedQuery);

@@ -2,6 +2,7 @@ import React from 'react';
 import { Search, Inbox, Scan, Clock, CheckCircle, Scale, FileText, Filter } from 'lucide-react';
 
 export default function ProcessorOverviewTab({
+  signedCount, sentBackCount,
   profileName,
   processorOfficeName,
   expectedIncomingCount,
@@ -24,6 +25,8 @@ export default function ProcessorOverviewTab({
   setActiveTab
 }) {
   const filterKpiCards = [
+    {label:'Ready for Release',filterKey:'Signed',val:signedCount,color:'text-blue-600',border:'border-t-blue-600',icon:<CheckCircle size={18}/>},
+    {label:'Sent Back',filterKey:'Action Required',val:sentBackCount,color:'text-red-800',border:'border-t-red-800',icon:<FileText size={18}/>},
     { label: 'Awaiting Scan-In', filterKey: 'Awaiting Scan-In', val: awaitingScanInCount, color: 'text-[#D32F2F]', border: 'border-t-[#D32F2F]', icon: <Scan size={18} /> },
     { label: 'Pending Docs', filterKey: 'Pending', val: pendingCount, color: 'text-amber-500', border: 'border-t-amber-500', icon: <Clock size={18} /> },
     { label: 'In Verification', filterKey: 'In Verification', val: inVerificationCount, color: 'text-purple-600', border: 'border-t-purple-500', icon: <Scale size={18} /> },

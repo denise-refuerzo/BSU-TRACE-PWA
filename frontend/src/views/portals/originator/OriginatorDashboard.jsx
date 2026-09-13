@@ -68,7 +68,7 @@ export default function OriginatorDashboard() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
       
       <PWAInstallBanner />
 

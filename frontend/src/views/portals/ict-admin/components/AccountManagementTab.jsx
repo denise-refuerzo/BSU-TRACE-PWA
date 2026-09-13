@@ -72,8 +72,7 @@ export default function AccountManagementTab({
                 >
                   <option value="">All Roles</option>
                   <option value="1">Originator</option>
-                  <option value="2">Processor</option>
-                  <option value="3">Signee</option>
+                  <option value="2">Office Staff</option>
                   <option value="4">GSO Admin</option>
                   <option value="5">ICT Admin</option>
                 </select>
@@ -223,8 +222,7 @@ export default function AccountManagementTab({
                           className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors appearance-none cursor-pointer">
                     <option value="">Select assigned role...</option>
                     <option value="1">Originator</option>
-                    <option value="2">Processor</option>
-                    <option value="3">Signee</option>
+                    <option value="2">Office Staff</option>
                     <option value="4">GSO Admin</option>
                     <option value="5">ICT Admin</option>
                   </select>
@@ -318,17 +316,9 @@ export default function AccountManagementTab({
             <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl hover:shadow-md transition-shadow">
               <div className="flex items-center gap-2 mb-1.5">
                 <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p className="font-bold text-blue-900 text-sm">Processor</p>
+                <p className="font-bold text-blue-900 text-sm">Office Staff</p>
               </div>
-              <p className="text-xs text-blue-800/80 leading-relaxed">Validates data entry, handles scan arrivals/releases, and routes ad-hoc workflows inside an assigned office destination.</p>
-            </div>
-
-            <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-xl hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-2 mb-1.5">
-                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                <p className="font-bold text-amber-900 text-sm">Signee</p>
-              </div>
-              <p className="text-xs text-amber-800/80 leading-relaxed">Final authority within an assigned office branch with access privileges to evaluate, sign, or reject active document states.</p>
+              <p className="text-xs text-blue-800/80 leading-relaxed">Receives, signs, releases, returns, and routes documents. Staff share office submissions while actions are recorded under individual names.</p>
             </div>
 
             <div className="p-4 bg-red-50/50 border border-red-100 rounded-xl hover:shadow-md transition-shadow">

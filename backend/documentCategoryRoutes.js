@@ -67,7 +67,12 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
       AND ($3::boolean IS NULL OR p.is_active=$3)
       ORDER BY lower(c.category_name),lower(p.process_name),p.p_id`,
     [categoryId || null, q.trim(), active === undefined ? null : active === 'true']);
-    res.json(result.rows);
+    const {resolveRoute} = require('./officeWorkflow');
+    const officeNames = new Map((await pool.query('SELECT o_id,office_name FROM public.offices')).rows.map(o=>[o.o_id,o.office_name]));
+    res.json(result.rows.map(p=>{
+      const sequence=resolveRoute(p,req.user);
+      return {...p,resolved_origin_office_id:sequence[0],resolved_route_names:sequence.map(id=>officeNames.get(id) || 'Office')};
+    }));
   }));
   for (const method of ['post','put']) {
     app[method]('/api/process-types' + (method === 'put' ? '/:processId' : ''), requireAuth, requireICT, handle(async (req, res) => {
@@ -99,5 +104,19 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
       res.status(editing ? 200 : 201).json({message: editing ? 'Workflow updated.' : 'Workflow created.'});
     }));
   }
+  app.delete('/api/process-types/:processId', requireAuth, requireICT, handle(async (req, res) => {
+    if (!positiveId(req.params.processId)) throw fail(400, 'Invalid pipeline ID.');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query('SELECT r_id FROM public.process_type WHERE p_id=$1 FOR UPDATE', [req.params.processId]);
+      if (!current.rows.length) throw fail(404, 'Pipeline not found.');
+      await client.query('DELETE FROM public.process_type WHERE p_id=$1', [req.params.processId]);
+      await client.query('DELETE FROM public.route WHERE r_id=$1 AND NOT EXISTS (SELECT 1 FROM public.process_type WHERE r_id=$1)', [current.rows[0].r_id]);
+      await client.query('COMMIT');
+    } catch (err) { await client.query('ROLLBACK'); if (err.code === '23503') throw fail(409, 'This pipeline has transaction records and cannot be deleted. Archive it instead.'); throw err; }
+    finally { client.release(); }
+    res.json({message:'Pipeline deleted.'});
+  }));
 };
 module.exports.validatePipeline = validatePipeline;

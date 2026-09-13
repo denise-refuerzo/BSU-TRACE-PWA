@@ -1,3 +1,4 @@
+import {formatPhilippineDateTime} from '../../../../utils/philippineTime';
 import React from 'react';
 import { Filter, Search, Clock, FileText, User } from 'lucide-react';
 
@@ -52,6 +53,10 @@ export default function ProcessorHistoryTab({
                 className="bg-transparent text-xs outline-none cursor-pointer font-medium text-gray-700 appearance-none pr-2"
               >
                 <option value="All">All Actions</option>
+                <option value="Approved & Signed">Signed</option>
+                <option value="Sent Back for Revision">Sent Back</option>
+                <option value="Submitted">Submitted</option>
+                <option value="Resubmitted after correction">Resubmitted</option>
                 <option value="Scanned In">Scanned In</option>
                 <option value="Scanned Out">Scanned Out</option>
                 <option value="Ad-Hoc Detour Routed">Ad-Hoc Detour</option>
@@ -65,7 +70,7 @@ export default function ProcessorHistoryTab({
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-wider">
-                <th className="p-4">Timestamp</th>
+                <th className="p-4">Timestamp (Philippine time)</th>
                 <th className="p-4">Action Event</th>
                 <th className="p-4">Executed By</th>
                 <th className="p-4">Document Title</th>
@@ -74,24 +79,7 @@ export default function ProcessorHistoryTab({
             </thead>
             <tbody className="divide-y divide-gray-100">
               {currentHistoryPageRows.map((log, index) => {
-                const rawTimestamp = log.action_timestamp;
-                let formattedTime = 'N/A';
-                
-                if (rawTimestamp) {
-                  const localizedString = String(rawTimestamp).replace(/(\+00:00|\+00|Z)$/i, '');
-                  const d = new Date(localizedString);
-                  
-                  formattedTime = d.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  }) + ', ' +
-                  d.toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                  });
-                }
+                const formattedTime = formatPhilippineDateTime(log.action_timestamp);
 
                 const actionType = log.action_type;
                 const isScannedIn = actionType === 'Scanned In';

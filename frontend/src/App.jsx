@@ -5,7 +5,6 @@ import Login from './views/auth/Login';
 import AdminDashboard from './views/portals/ict-admin/AdminDashboard';
 import OriginatorDashboard from './views/portals/originator/OriginatorDashboard';
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
-import SigneeDashboard from './views/portals/signee/SigneeDashboard';
 import GSOAdminDashboard from './views/portals/gso-admin/GSOAdminDashboard';
 
 function App() {
@@ -17,8 +16,9 @@ function App() {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/gso-dashboard" element={<GSOAdminDashboard />} />
           <Route path="/dashboard" element={<OriginatorDashboard />} />
-          <Route path="/processor/dashboard" element={<ProcessorDashboard />} />
-          <Route path="/signee/dashboard" element={<SigneeDashboard />} />
+          <Route path="/office/dashboard" element={<ProcessorDashboard />} />
+          <Route path="/processor/dashboard" element={<Navigate to="/office/dashboard" replace />} />
+          <Route path="/signee/dashboard" element={<Navigate to="/office/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Router>

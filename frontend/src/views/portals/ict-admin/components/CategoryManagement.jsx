@@ -52,7 +52,7 @@ export default function CategoryManagement({ categories, onChanged }) {
         <p role="status" className="text-sm">{message}</p>
       </form>
       <ul className="space-y-2 max-h-72 overflow-y-auto">
-        {categories.map(c => <li key={c.category_id} className="border rounded-lg p-3">
+        {categories.map(c => <li key={c.category_id} className="trace-category-card border rounded-xl p-3">
           <div className="flex justify-between gap-3">
             <span className="font-semibold text-sm break-words">{c.category_name}</span>
             <div className="flex gap-3 text-xs shrink-0">
@@ -61,7 +61,7 @@ export default function CategoryManagement({ categories, onChanged }) {
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-1 break-words">{c.description}</p>
-          <p className="text-xs text-gray-500 mt-1">{c.pipeline_count} pipelines · {c.active_pipeline_count} active</p>
+          <p className="inline-flex rounded-full bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-800 mt-2">{c.pipeline_count} pipelines · {c.active_pipeline_count} active</p>
         </li>)}
         {!categories.length && <li className="text-sm text-gray-500">No categories loaded. Add a category to get started.</li>}
       </ul>

@@ -6,7 +6,7 @@ import {blockOnDay,blockMatchesResource} from '../../../../utils/resourceSchedul
 import ResourceDayModal from '../modals/ResourceDayModal';
 import ResourceBookingModal from '../modals/ResourceBookingModal';
 
-export default function OriginatorResourcesTab({ userId }) {
+export default function OriginatorResourcesTab({ userId, officeName = '' }) {
   const userName = localStorage.getItem('user') || 'Faculty User';
   
   const [activeFacility, setActiveFacility] = useState('Gymnasium');
@@ -21,7 +21,7 @@ export default function OriginatorResourcesTab({ userId }) {
   const currentTimeString = `${String(todayObj.getHours()).padStart(2, '0')}:${String(todayObj.getMinutes()).padStart(2, '0')}`;
 
   const [form, setForm] = useState({
-    reservationDate: '', purpose: '', department: '', intendedDates: [''], facilityDetails: {},
+    reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {},
     startTime: '', endTime: '', expectedAttendees: '',
     destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: ''
   });
@@ -46,7 +46,7 @@ export default function OriginatorResourcesTab({ userId }) {
 
   const fetchActiveReservations = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/resources/bookings');
+      const res = await fetchWithAuth('/api/resources/bookings');
       const data = await res.json();
       if (res.ok) setBookings(data);
     } catch (err) { console.error("Error connecting calendar rows:", err); }
@@ -54,7 +54,7 @@ export default function OriginatorResourcesTab({ userId }) {
 
   const fetchInventoryMetrics = async () => {
     try {
-      const res = await fetchWithAuth('http://localhost:5000/api/resources/inventory');
+      const res = await fetchWithAuth('/api/resources/inventory');
       const data = await res.json();
       if (res.ok) setInventory(data);
     } catch (err) { console.error(err); }
@@ -100,14 +100,14 @@ export default function OriginatorResourcesTab({ userId }) {
     try {
       const confirmation = await Swal.fire({icon:'question',title:'Submit this request?',text:'This sends your request to GSO for review. Confirmation requires submitting the necessary documents in person.',showCancelButton:true,confirmButtonText:'Submit request',confirmButtonColor:'#991b1b'});
       if (!confirmation.isConfirmed) return;
-      const res = await fetchWithAuth('http://localhost:5000/api/resources/book', {
+      const res = await fetchWithAuth('/api/resources/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
         setShowFormModal(false);
-        setForm({ reservationDate: '', purpose: '', department: '', intendedDates: [''], facilityDetails: {}, startTime: '', endTime: '', expectedAttendees: '', destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
+        setForm({ reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {}, startTime: '', endTime: '', expectedAttendees: '', destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
         fetchActiveReservations();
         await Swal.fire({
           icon: 'success',
@@ -146,10 +146,10 @@ export default function OriginatorResourcesTab({ userId }) {
     <div className="space-y-6 max-w-6xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER & TABS SECTION */}
-      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+      <div className="trace-section-banner bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-5">
         <div>
           <h3 className="text-2xl font-bold tracking-tight text-gray-900">Resource Scheduler</h3>
-          <p className="text-sm text-gray-500 mt-1">Manage institutional asset schedules and venue reservations.</p>
+          <p className="text-sm text-gray-500 mt-1">View availability and request vehicles, rooms, and venues through GSO.</p>
         </div>
         
         <div className="bg-gray-100/80 p-1.5 rounded-xl flex flex-wrap items-center gap-1.5 font-bold text-xs shadow-inner">
