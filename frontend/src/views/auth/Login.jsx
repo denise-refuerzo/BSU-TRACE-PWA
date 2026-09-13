@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 
@@ -17,6 +17,17 @@ export default function Login() {
   const [require2FA, setRequire2FA] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [tempUserId, setTempUserId] = useState(null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(null);
+  const [resendAvailableAt, setResendAvailableAt] = useState(null);
+  const [otpClock, setOtpClock] = useState(Date.now());
+  useEffect(() => {
+    if (!require2FA) return;
+    const timer = setInterval(() => setOtpClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [require2FA]);
+  const secondsLeft = Math.max(0, Math.ceil(((otpExpiresAt || 0) - otpClock) / 1000));
+  const resendSeconds = Math.max(0, Math.ceil(((resendAvailableAt || 0) - otpClock) / 1000));
+  const formatCountdown = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -59,6 +70,8 @@ export default function Login() {
 
       if (data.two_fa_enabled) {
         setTempUserId(data.u_id);
+        setOtpExpiresAt(data.two_fa_expires_at ? Date.parse(data.two_fa_expires_at) : Date.now() + 10 * 60 * 1000);
+        setResendAvailableAt(Date.now() + 60 * 1000);
         setRequire2FA(true);  
         Swal.fire({
           title: 'Verification Required',
@@ -102,11 +115,27 @@ export default function Login() {
       setPendingLoginData(data);
       setShowTerms(true);
       setRequire2FA(false);
+      setOtpExpiresAt(null); setResendAvailableAt(null);
     } catch (err) {
       setError(err.message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleResendOTP = async () => {
+    setError(''); setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/login/resend-2fa`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({userId: tempUserId})
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to resend verification code');
+      setOtpExpiresAt(data.two_fa_expires_at ? Date.parse(data.two_fa_expires_at) : Date.now() + 10 * 60 * 1000);
+      setResendAvailableAt(Date.now() + 60 * 1000);
+      Swal.fire({title: 'New code sent', text: 'A fresh verification code was sent to your university email.', icon: 'success', confirmButtonColor: '#D32F2F'});
+    } catch (err) { setError(err.message); } finally { setIsSubmitting(false); }
   };
 
   // --- FINAL ROUTING ---
@@ -248,6 +277,8 @@ export default function Login() {
                 placeholder="000000" 
                 className="w-full border border-gray-300 px-4 py-3 text-center font-mono text-2xl tracking-[0.5em] rounded-xl focus:border-[#D32F2F] focus:ring-2 focus:ring-red-100 focus:outline-none transition-all" 
               />
+              <p className={`text-xs ${secondsLeft ? 'text-gray-500' : 'text-red-600'} font-medium`}>{secondsLeft ? `Code expires in ${formatCountdown(secondsLeft)}` : 'This code has expired. Request a new code.'}</p>
+              <button type="button" disabled={isSubmitting || resendSeconds > 0} onClick={handleResendOTP} className="text-sm text-[#D32F2F] font-semibold hover:underline disabled:opacity-50">{resendSeconds ? `Resend available in ${formatCountdown(resendSeconds)}` : 'Resend code'}</button>
               <div className="flex gap-3 pt-2">  
                 <button 
                   type="button" 
