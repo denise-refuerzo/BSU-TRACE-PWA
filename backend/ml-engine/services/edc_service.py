@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from database import get_db_connection
 
-def calculate_edc():
+def calculate_edc(route_ids=None):
     # 1. Pull historical dwell times per office
     # This query calculates the average time (in hours) a document spends at each office
     dwell_query = """
@@ -22,6 +22,8 @@ def calculate_edc():
     # If a specific office hasn't been visited yet, we use a global average (e.g., 24 hours)
     global_avg = dwell_df['avg_hours'].mean() if not dwell_df.empty else 24
     
+    if route_ids:
+        return [{"process_id": None, "estimated_hours_to_complete": round(sum(dwell_map.get(int(stop), global_avg) for stop in route_ids), 2)}]
     predictions = []
     # Generate predictions for all process patterns existing in your DB
     query_processes = "SELECT p_id, stop_1, stop_2, stop_3, stop_4, stop_5, stop_6, stop_7 FROM public.process_type pt JOIN public.route r ON pt.r_id = r.r_id"

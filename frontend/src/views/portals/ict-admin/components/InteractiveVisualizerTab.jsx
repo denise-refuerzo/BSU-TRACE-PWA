@@ -1,5 +1,6 @@
 import React from 'react';
 import CategoryManagement from './CategoryManagement';
+import CustomRouteReview from './CustomRouteReview';
 
 export default function InteractiveVisualizerTab({
   formMeta, setFormMeta, newProcessName, setNewProcessName, selectedStops, setSelectedStops,
@@ -12,6 +13,7 @@ export default function InteractiveVisualizerTab({
       
       <div className="lg:col-span-3">
         {catalogError && <p role="alert" className="text-red-700 mb-3">{catalogError} <button type="button" onClick={refreshCatalogs} className="underline">Retry</button></p>}
+        <div className="mb-8"><CustomRouteReview onChanged={refreshCatalogs} /></div>
         <CategoryManagement categories={categories} onChanged={refreshCatalogs} />
       </div>
       {/* LEFT COLUMN: WORKFLOW BUILDER FORM */}

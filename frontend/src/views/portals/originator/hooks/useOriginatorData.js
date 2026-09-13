@@ -283,7 +283,7 @@ export default function useOriginatorData() {
 
   const submitDocument = async (e) => {
     e.preventDefault();
-    if (workflowsLoading || workflowError || !processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId))) {
+    if (workflowsLoading || workflowError || !estimatedDate || estimatedDate === 'Estimation pending...' || (!form.customRoute && !processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId)))) {
       alert('Choose an active pipeline from the suggestions before submitting.');
       return;
     }
@@ -301,6 +301,7 @@ export default function useOriginatorData() {
           userId: parseInt(userId), 
           title: form.title, 
           processTypeId: parseInt(form.processTypeId), 
+          customRoute: form.customRoute,
           edc: edcPayload
         })
       });

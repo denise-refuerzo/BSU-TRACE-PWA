@@ -23,9 +23,45 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
   app.get('/api/document-categories', requireAuth, handle(async (req, res) => {
     const result = await pool.query(`SELECT c.*, count(p.p_id)::int AS pipeline_count,
       count(p.p_id) FILTER (WHERE p.is_active IS TRUE)::int AS active_pipeline_count
-      FROM public.document_category c LEFT JOIN public.process_type p USING(category_id)
+      FROM public.document_category c LEFT JOIN public.process_type p ON p.category_id=c.category_id AND p.route_status='official'
       GROUP BY c.category_id ORDER BY lower(c.category_name)`);
     res.json(result.rows);
+  }));
+  app.get('/api/custom-routes', requireAuth, requireICT, handle(async (req,res) => {
+    const result = await pool.query(`SELECT p.*,COALESCE(c.category_name,p.proposed_category_name) AS category_name,
+      u.full_name AS submitter_name, ARRAY(SELECT o.office_name FROM public.route r,
+      unnest(ARRAY[r.stop_1,r.stop_2,r.stop_3,r.stop_4,r.stop_5,r.stop_6,r.stop_7]) WITH ORDINALITY AS step(id,pos)
+      JOIN public.offices o ON o.o_id=step.id WHERE r.r_id=p.r_id ORDER BY step.pos) AS route_names
+      FROM public.process_type p LEFT JOIN public.document_category c USING(category_id)
+      LEFT JOIN public."User" u ON u.u_id=p.submitted_by
+      WHERE p.submitted_by IS NOT NULL ORDER BY p.proposed_at DESC,p.p_id DESC`);
+    res.json(result.rows);
+  }));
+  app.post('/api/custom-routes/:processId/review', requireAuth, requireICT, handle(async (req,res) => {
+    if (!positiveId(req.params.processId) || !['approve','decline'].includes(req.body.decision)) throw fail(400,'Invalid review.');
+    const db = await pool.connect();
+    try {
+      await db.query('BEGIN');
+      await db.query('SELECT pg_advisory_xact_lock(90412027)');
+      const p = (await db.query('SELECT * FROM public.process_type WHERE p_id=$1 FOR UPDATE',[req.params.processId])).rows[0];
+      if (!p || p.route_status !== 'custom') throw fail(409,'This route has already been reviewed or is unavailable.');
+      let category = p.category_id;
+      if (req.body.decision === 'approve') {
+        const name = req.body.processName === undefined ? p.process_name : req.body.processName;
+        if (typeof name !== 'string' || !name.trim() || name.trim().length > 100) throw fail(400,'Enter a process name of 1–100 characters.');
+        const duplicate = await db.query("SELECT p_id FROM public.process_type WHERE route_status='official' AND lower(btrim(process_name))=lower($1)",[name.trim()]);
+        if (duplicate.rows.length) throw fail(409,'An official process already has that name. Rename this proposal before approving.');
+        if (!category) {
+          // Serialize with category writes so concurrent creation cannot duplicate names.
+          await db.query('LOCK TABLE public.document_category IN SHARE ROW EXCLUSIVE MODE');
+          category = (await db.query('SELECT category_id FROM public.document_category WHERE lower(btrim(category_name))=lower($1)',[p.proposed_category_name])).rows[0]?.category_id;
+          if (!category) category = (await db.query('INSERT INTO public.document_category(category_name) VALUES($1) RETURNING category_id',[p.proposed_category_name])).rows[0].category_id;
+        }
+        await db.query("UPDATE public.process_type SET process_name=$2,category_id=$3,route_status='official',is_active=true,reviewed_by=$4,reviewed_at=NOW() WHERE p_id=$1",[p.p_id,name.trim(),category,req.user.u_id]);
+      } else await db.query("UPDATE public.process_type SET route_status='declined',reviewed_by=$2,reviewed_at=NOW() WHERE p_id=$1",[p.p_id,req.user.u_id]);
+      await db.query('COMMIT');
+      res.json({message:req.body.decision === 'approve' ? 'Route is now official.' : 'Route remains private. Existing documents continue processing.'});
+    } catch(err) {await db.query('ROLLBACK');throw err;} finally {db.release();}
   }));
   for (const method of ['post', 'put']) {
     app[method]('/api/document-categories' + (method === 'put' ? '/:categoryId' : ''), requireAuth, requireICT, handle(async (req, res) => {
@@ -62,7 +98,7 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
       FROM public.process_type p JOIN public.document_category c USING(category_id)
       JOIN public.route r ON p.r_id=r.r_id
       ${stops.map(i => `LEFT JOIN public.offices o${i} ON r.stop_${i}=o${i}.o_id`).join(' ')}
-      WHERE ($1::integer IS NULL OR p.category_id=$1)
+      WHERE p.route_status='official' AND ($1::integer IS NULL OR p.category_id=$1)
       AND strpos(lower(p.process_name),lower($2)) > 0
       AND ($3::boolean IS NULL OR p.is_active=$3)
       ORDER BY lower(c.category_name),lower(p.process_name),p.p_id`,
@@ -85,13 +121,13 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
         await client.query('BEGIN');
         // Serialize name checks for these workflow writers.
         await client.query('SELECT pg_advisory_xact_lock(90412027)');
-        const duplicate = await client.query('SELECT p_id FROM public.process_type WHERE lower(btrim(process_name))=lower($1) AND p_id<>$2', [processName.trim(), editing ? req.params.processId : 0]);
+        const duplicate = await client.query("SELECT p_id FROM public.process_type WHERE route_status='official' AND lower(btrim(process_name))=lower($1) AND p_id<>$2", [processName.trim(), editing ? req.params.processId : 0]);
         if (duplicate.rows.length) throw fail(409, 'That process name already exists.');
         const category = await client.query('SELECT category_id FROM public.document_category WHERE category_id=$1 FOR KEY SHARE', [categoryId]);
         if (!category.rows.length) throw fail(400, 'Select an existing document category.');
         const routeStops = [...stops.map(Number), ...Array(7 - stops.length).fill(null)];
         if (editing) {
-          const current = await client.query('SELECT r_id FROM public.process_type WHERE p_id=$1 FOR UPDATE', [req.params.processId]);
+          const current = await client.query("SELECT r_id FROM public.process_type WHERE p_id=$1 AND route_status='official' FOR UPDATE", [req.params.processId]);
           if (!current.rows.length) throw fail(404, 'Pipeline not found.');
           await client.query(`UPDATE public.route SET ${routeStops.map((_, i) => `stop_${i + 1}=$${i + 1}`).join(',')} WHERE r_id=$8`, [...routeStops,current.rows[0].r_id]);
           await client.query('UPDATE public.process_type SET process_name=$1,category_id=$2,is_active=$3 WHERE p_id=$4', [processName.trim(), categoryId, isActive, req.params.processId]);
@@ -109,7 +145,7 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const current = await client.query('SELECT r_id FROM public.process_type WHERE p_id=$1 FOR UPDATE', [req.params.processId]);
+      const current = await client.query("SELECT r_id FROM public.process_type WHERE p_id=$1 AND route_status='official' FOR UPDATE", [req.params.processId]);
       if (!current.rows.length) throw fail(404, 'Pipeline not found.');
       await client.query('DELETE FROM public.process_type WHERE p_id=$1', [req.params.processId]);
       await client.query('DELETE FROM public.route WHERE r_id=$1 AND NOT EXISTS (SELECT 1 FROM public.process_type WHERE r_id=$1)', [current.rows[0].r_id]);
