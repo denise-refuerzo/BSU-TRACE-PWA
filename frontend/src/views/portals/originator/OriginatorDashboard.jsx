@@ -38,6 +38,7 @@ export default function OriginatorDashboard() {
     form, setForm, passForm, setPassForm,
     selectedRoutePreview, estimatedDate,
     recentDocStops, documents, processTypes,
+    workflowsLoading, workflowError, retryWorkflows,
     pendingCount, mostRecentDoc,
     saveProfileChanges, updatePasswordRequest,
     handleProcessChange, submitDocument, toggleTwoFactorAuth,
@@ -67,7 +68,7 @@ export default function OriginatorDashboard() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
       
       <PWAInstallBanner />
 
@@ -240,8 +241,9 @@ export default function OriginatorDashboard() {
           processTypes={processTypes}
           estimatedDate={estimatedDate}
           selectedRoutePreview={selectedRoutePreview}
-          setSelectedRoutePreview={(val) => {}}
-          setEstimatedDate={(val) => {}}
+          workflowsLoading={workflowsLoading}
+          workflowError={workflowError}
+          retryWorkflows={retryWorkflows}
         />
       )}
 

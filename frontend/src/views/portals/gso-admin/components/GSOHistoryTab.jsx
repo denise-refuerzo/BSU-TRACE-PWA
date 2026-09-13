@@ -1,3 +1,4 @@
+import {formatPhilippineDateTime} from '../../../../utils/philippineTime';
 import React from 'react';
 import { Search, Filter, Eye, FileText, Inbox, Clock } from 'lucide-react';
 
@@ -75,25 +76,7 @@ export default function GSOHistoryTab({
             </thead>
             <tbody className="divide-y divide-gray-100">
               {currentHistoryPageRows.map((log, index) => {
-                const rawTimestamp = log.action_timestamp;
-                let formattedTime = 'N/A';
-                
-                if (rawTimestamp) {
-                  const localizedString = String(rawTimestamp).replace(/(\+00:00|\+00|Z)$/i, '');
-                  const d = new Date(localizedString);
-                  
-                  formattedTime = d.toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric', 
-                    year: 'numeric' 
-                  }) + ', ' + 
-                  d.toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit', 
-                    hour12: true 
-                  });
-                }
-
+                const formattedTime = formatPhilippineDateTime(log.action_timestamp);
                 const actionType = log.action_type;
                 const isScannedIn = actionType === 'Scanned In';
                 const isScannedOut = actionType === 'Scanned Out' || actionType === 'Approved & Signed';

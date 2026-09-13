@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X, School } from 'lucide-react';
 import { fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -14,7 +14,9 @@ import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
 
 // --- EXTRACTED MODALS ---
 import ScannerModal from "./modals/ScannerModal";
-import PipelineVerificationModal from "./modals/PipelineVerificationModal";
+import OfficeDocumentModal from "./modals/OfficeDocumentModal";
+import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
+import OriginatorResourcesTab from '../originator/components/OriginatorResourcesTab';
 
 // --- SHARED COMPONENTS ---
 import UserProfileTab from "../../shared/components/UserProfileTab";
@@ -22,6 +24,7 @@ import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
 import OfficeChatHub from "../../shared/OfficeChatHub";
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
+import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -41,6 +44,7 @@ export default function ProcessorDashboard() {
   // --- CORE UI STATE ---
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   
   // --- MODAL & ACTION STATE ---
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -48,11 +52,11 @@ export default function ProcessorDashboard() {
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
+  const scanBusy = useRef(false);
   const [scanMode, setScanMode] = useState('time-in');
   const [simulatedQrInput, setSimulatedQrPayload] = useState('');
   
-  const [selectedAdHocOffice, setSelectedAdHocOffice] = useState('');
-  const [isAdHocProcessing, setIsAdHocProcessing] = useState(false);
+
 
   // --- PASSWORD STATE ---
   const [currentPassword, setCurrentPassword] = useState('');
@@ -96,71 +100,45 @@ export default function ProcessorDashboard() {
     setShowPipelineModal(true);
   };
 
-  // Row click transition from Dashboard: switches to documents tab and opens modal
-  const handleRowDocumentClick = (doc) => {
-    setActiveTab('documents');
-    handleOpenPipelineDetails(doc, false);
-  };
+// Row click transition: switches view to 'documents' and opens the Document Verification Detail modal
+const handleRowDocumentClick = (doc) => {
+  setActiveTab('documents');
+  handleOpenPipelineDetails(doc, false);
+};
 
-  // Notification click handler
-  const handleNotificationClick = (notif) => {
-    const allKnownDocs = [...(processorData.incomingDocs || []), ...(processorData.pipelineDocs || [])];
-    const matchedDoc = allKnownDocs.find(d => 
-      (notif.ini_id && d.ini_id === notif.ini_id) || 
-      (notif.title && d.title?.toLowerCase() === notif.title?.toLowerCase())
-    );
+// Notification click: switches view to 'documents' and deep-links to that specific document's modal
+const handleNotificationClick = async (notif) => {
+  setActiveTab('documents');
 
-    if (matchedDoc) {
-      handleOpenPipelineDetails(matchedDoc, false);
-    } else {
-      setActiveTab('documents');
-    }
-  };
+  const targetIniId = notif.ini_id;
+  const allKnownDocs = processorData.pipelineDocs || [];
 
-  const getRouteStopsArray = (doc) => {
-    const match = processorData.processTypes.find(p => p.process_name === doc.process_name);
-    if (match) {
-      const stops = [];
-      for (let i = 1; i <= 7; i++) {
-        if (match[`stop_${i}_name`]) stops.push(match[`stop_${i}_name`]);
-      }
-      return stops;
-    }
-    return [doc.current_office || 'Active Office'];
-  };
+  // 1. Try finding in loaded pipeline documents
+  let matchedDoc = allKnownDocs.find(d => 
+    (targetIniId && d.ini_id === targetIniId) || 
+    (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
+  );
 
-  const handleExecuteAdHocDetour = async (e) => {
-    e.preventDefault();
-    if (!selectedAdHocOffice) {
-      return minimalSwal.fire({ icon: 'warning', title: 'Required', text: 'Please select a target verification destination office step first.' });
-    }
-    
-    setIsAdHocProcessing(true);
+  // 2. If found, open the verification modal immediately
+  if (matchedDoc) {
+    handleOpenPipelineDetails(matchedDoc, false);
+    return;
+  }
+
+  // 3. Fallback: If the document isn't in pipelineDocs yet, fetch it directly
+  if (targetIniId) {
     try {
-      const res = await fetchWithAuth('/api/processor/documents/ad-hoc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          iniId: selectedDoc.ini_id,
-          targetOfficeId: parseInt(selectedAdHocOffice),
-          currentOfficeId: processorData.processorOfficeId,
-          executorUserId: parseInt(userId)
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        minimalSwal.fire({ icon: 'success', title: 'Detour Activated', text: data.message });
-        setShowPipelineModal(false);
-        setSelectedAdHocOffice('');
-        processorData.fetchProcessorMeta();
-      } else {
-        minimalSwal.fire({ icon: 'error', title: 'Error', text: data.error });
+      const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
+      const freshDocs = await res.json();
+      const docFromFresh = Array.isArray(freshDocs) ? freshDocs.find(d => d.ini_id === targetIniId) : null;
+      if (docFromFresh) {
+        handleOpenPipelineDetails(docFromFresh, false);
       }
-    } catch (err) { 
-      minimalSwal.fire({ icon: 'error', title: 'Network Error', text: 'Network communication error routing detour.' }); 
+    } catch (err) {
+      console.error("Error opening notification document:", err);
     }
-    finally { setIsAdHocProcessing(false); }
-  };
+  }
+};
 
   const executeSimulatedScanner = async (e, scannedCode = null) => {
     if (e) e.preventDefault();
@@ -170,6 +148,8 @@ export default function ProcessorDashboard() {
       return minimalSwal.fire({ icon: 'warning', title: 'Input Required', text: 'Please type or scan a valid reference token string first.' });
     }
     
+    if (scanBusy.current) return;
+    scanBusy.current = true;
     const targetUrl = scanMode === 'time-in' 
       ? '/api/documents/scan-in' 
       : '/api/documents/scan-out';
@@ -192,7 +172,7 @@ export default function ProcessorDashboard() {
       }
     } catch (err) { 
       minimalSwal.fire({ icon: 'error', title: 'Network Error', text: 'Failed to establish server authentication checks.' }); 
-    }
+    } finally { scanBusy.current = false; }
   };
 
   const handleUpdateProfile = async (e) => {
@@ -304,7 +284,7 @@ export default function ProcessorDashboard() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
       
       <PWAInstallBanner />
       
@@ -328,7 +308,7 @@ export default function ProcessorDashboard() {
               />
               <div>
                 <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
-                <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Office Processor</span>
+                <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Office Portal</span>
               </div>
             </div>
             <button 
@@ -345,6 +325,10 @@ export default function ProcessorDashboard() {
             </button>
             <button onClick={() => { handleTabSelect('documents'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setPipelinePage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'documents' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <FileText size={18} /> Documents
+            </button>
+            <button onClick={() => handleTabSelect('submissions')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold ${activeTab === 'submissions' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><FileText size={18}/> Office Submissions</button>
+            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'resources' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+              <School size={18} /> School Resources
             </button>
             <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <History size={18} /> History
@@ -391,7 +375,7 @@ export default function ProcessorDashboard() {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'documents' ? 'Office Processing System' : activeTab === 'history' ? 'Office Transaction Ledger' : 'Processor Dashboard'}
+                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resources' ? 'School Resources' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Office Processing System' : activeTab === 'history' ? 'Office Transaction Ledger' : 'Office Dashboard'}
               </h2>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
             </div>
@@ -426,9 +410,15 @@ export default function ProcessorDashboard() {
           {activeTab === 'documents' && (
             <ProcessorPipelineTab 
               {...processorData} 
+              setActiveTab={setActiveTab}
+              targetDocId={activeNotificationDocId}
+              onClearTargetDocId={() => setActiveNotificationDocId(null)}
+              setIsIncomingModalOpen={processorData.setIsIncomingModalOpen}
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
           )}
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} onProcessed={processorData.fetchProcessorMeta} />}
+          {activeTab === 'resources' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} />}
           {activeTab === 'history' && (
             <ProcessorHistoryTab 
               {...processorData} 
@@ -444,7 +434,7 @@ export default function ProcessorDashboard() {
               handleUpdateProfile={handleUpdateProfile}
               toggle2FA={toggle2FA}
               setShowPassModal={setShowPassModal}
-              roleLabel="Processor"
+              roleLabel="Office Staff"
             />
           )}
         </div>
@@ -461,17 +451,13 @@ export default function ProcessorDashboard() {
       )}
 
       {showPipelineModal && selectedDoc && (
-        <PipelineVerificationModal 
-          setShowPipelineModal={setShowPipelineModal}
+        <OfficeDocumentModal
           selectedDoc={selectedDoc}
           isHistoryDetails={isHistoryDetails}
-          getRouteStopsArray={getRouteStopsArray}
-          handleExecuteAdHocDetour={handleExecuteAdHocDetour}
-          selectedAdHocOffice={selectedAdHocOffice}
-          setSelectedAdHocOffice={setSelectedAdHocOffice}
           officesList={processorData.officesList}
           processorOfficeId={processorData.processorOfficeId}
-          isAdHocProcessing={isAdHocProcessing}
+          onClose={() => setShowPipelineModal(false)}
+          onRefresh={processorData.fetchProcessorMeta}
         />
       )}
  
@@ -482,6 +468,15 @@ export default function ProcessorDashboard() {
           newPassword={newPassword} setNewPassword={setNewPassword}
           confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
           handleUpdatePassword={handleUpdatePassword}
+        />
+      )}
+
+      {processorData.isIncomingModalOpen && (
+        <IncomingDocumentsModal 
+          isOpen={processorData.isIncomingModalOpen}
+          onClose={() => processorData.setIsIncomingModalOpen(false)}
+          documents={processorData.expectedIncomingList}
+          isLoading={processorData.isIncomingLoading}
         />
       )}
 

@@ -1,3 +1,4 @@
+import OfficeSubmissionsTab from '../processor/components/OfficeSubmissionsTab';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -11,7 +12,9 @@ import { useGSOAdminData } from './hooks/useGSOAdminData';
 
 // Tab Components
 import GSODashboardTab from './components/GSODashboardTab';
-import GSOResourcesTab from './components/GSOResourcesTab';
+import ResourceManagementTab from './components/ResourceManagementTab';
+import VehicleAssignmentModal from './modals/VehicleAssignmentModal';
+import {confirmResourceAction, resourceSuccess, resourceError} from './resourceActions';
 import GSOProcurementTab from './components/GSOProcurementTab';
 import GSOHistoryTab from './components/GSOHistoryTab';
 import OperationalAnalyticsTab from './components/OperationalAnalyticsTab';
@@ -27,7 +30,7 @@ import QRScannerModal from './modals/QRScannerModal';
 import AddAssetModal from './modals/AddAssetModal';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 import MasterChecklistModal from './modals/MasterChecklistModal';
-import DocumentAuditModal from './modals/DocumentAuditModal';
+import OfficeDocumentModal from '../processor/modals/OfficeDocumentModal';
 import EditAssetModal from './modals/EditAssetModal';
 import ExportLogsModal from './modals/ExportLogsModal';
 import FacilityBlackoutModal from './modals/FacilityBlackoutModal';
@@ -170,6 +173,8 @@ export default function GSOAdminDashboard() {
 
   const [showActiveChecklistModal, setShowActiveChecklistModal] = useState(false);
   const [activeChecklistBooking, setActiveChecklistBooking] = useState(null);
+  const [assignmentRequest, setAssignmentRequest] = useState(null);
+  const [checklistBusy, setChecklistBusy] = useState(false);
   const [activeChecklistItems, setActiveChecklistItems] = useState([]);
   const [masterChecklistItems, setMasterChecklistItems] = useState([]);
   const [newChecklistName, setNewChecklistName] = useState('');
@@ -281,6 +286,7 @@ export default function GSOAdminDashboard() {
   const handleAddMasterChecklistItem = async (e) => {
     e.preventDefault();
     if (!newChecklistName.trim()) return;
+    if (!await confirmResourceAction('Add this requirement?', newChecklistName.trim())) return;
     const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
     const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
 
@@ -294,17 +300,24 @@ export default function GSOAdminDashboard() {
         setNewChecklistName('');
         const updated = await fetchWithAuth(`/api/procurement/templates/${targetType}`);
         if (updated.ok) setMasterChecklistItems(await updated.json());
+        await resourceSuccess('Requirement added.');
+      } else {
+        await resourceError(new Error((await res.json()).error || 'Could not add requirement.'));
       }
     } catch (err) { console.error("Error adding template item:", err); }
   };
 
   const handleDeleteMasterChecklistItem = async (templateId) => {
+    if (!await confirmResourceAction('Delete this requirement?', 'This will remove the requirement from the master checklist.')) return;
     try {
       const res = await fetchWithAuth(`/api/procurement/templates/${templateId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
         setMasterChecklistItems(prev => prev.filter(item => item.template_id !== templateId));
+        await resourceSuccess('Requirement deleted.');
+      } else {
+        await resourceError(new Error((await res.json()).error || 'Could not delete requirement.'));
       }
     } catch (err) { console.error("Error deleting template item:", err); }
   };
@@ -317,11 +330,16 @@ export default function GSOAdminDashboard() {
         setActiveChecklistItems(await res.json());
         setShowActiveChecklistModal(true);
       }
-    } catch (err) { console.error("Error fetching checklist:", err); }
+      else await resourceError(new Error((await res.json()).error || 'Could not load request requirements.'));
+    } catch (err) { await resourceError(err); }
   };
 
   const handleToggleChecklistItem = async (checkId, currentStatus) => {
+    if (checklistBusy) return;
+    setChecklistBusy(true);
     try {
+      const willConfirm = !currentStatus && activeChecklistItems.every(item => item.check_id === checkId || item.is_checked);
+      if (!await confirmResourceAction(willConfirm ? 'Confirm this request?' : 'Update this requirement?', willConfirm ? 'All documents will be marked received. The system will check availability before confirming the request.' : currentStatus ? 'Unchecking a requirement returns this request to Pending.' : 'Confirm that this document has been received and verified.')) return;
       const res = await fetchWithAuth(`/api/procurement/checklists/${checkId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -331,9 +349,16 @@ export default function GSOAdminDashboard() {
         setActiveChecklistItems(prev => prev.map(item => 
           item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
         ));
+        const result = await res.json();
+        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Reserved'}));
         fetchProcurementData();
+        await resourceSuccess(result.allChecked ? 'Request confirmed.' : 'Requirement updated. Request is pending.');
+      } else {
+        const result = await res.json();
+        await minimalSwal.fire({icon:'warning',title:'Request could not be confirmed',text:result.error || 'Please review the assignment and schedule.'});
       }
-    } catch (err) { console.error("Error updating checklist:", err); }
+    } catch (err) { await resourceError(err); }
+    finally { setChecklistBusy(false); }
   };
 
   const handleGeneratePDF = () => {
@@ -553,7 +578,7 @@ export default function GSOAdminDashboard() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
 
       <PWAInstallBanner />
 
@@ -592,6 +617,7 @@ export default function GSOAdminDashboard() {
             <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
+            <button onClick={() => handleTabSelect('submissions')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold text-neutral-400 hover:text-white"><Archive size={18}/> Office Submissions</button>
             <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'resources' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <Archive size={18} /> School Resources
             </button>
@@ -688,8 +714,14 @@ export default function GSOAdminDashboard() {
             />
           )}
 
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} />}
           {activeTab === 'resources' && (
-            <GSOResourcesTab
+            <ResourceManagementTab
+              onOpenRequest={(request) => {
+                setActiveTab('procurement');
+                setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
+                handleViewChecklist(request);
+              }}
               assetsList={assetsList}
               equipmentInventory={equipmentInventory}
               assetBlackouts={assetBlackouts}
@@ -713,6 +745,7 @@ export default function GSOAdminDashboard() {
               setShowPrintModal={setShowPrintModal}
               setShowChecklistMakerModal={setShowChecklistMakerModal}
               handleViewChecklist={handleViewChecklist}
+              handleAssignVehicle={setAssignmentRequest}
               targetSection={procurementTargetSection}
               setTargetSection={setProcurementTargetSection}
             />
@@ -776,10 +809,20 @@ export default function GSOAdminDashboard() {
       </div>
 
       {/* RENDER MODALS */}
+      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={fetchProcurementData} />}
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
         scanMode={scanMode} setScanMode={setScanMode}
-        simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload} executeSimulatedScanner={() => {}}
+        simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload} executeSimulatedScanner={async (event, code) => {
+          event?.preventDefault();
+          try {
+            const response=await fetchWithAuth(`/api/documents/scan-${scanMode === "time-in" ? "in" : "out"}`, {method:"POST", headers:{"Content-Type":"application/json"},body:JSON.stringify({qrCode:code || simulatedQrInput})});
+            const result=await response.json();
+            if (!response.ok) throw new Error(result.error);
+            setShowScannerModal(false);setSimulatedQrPayload("");fetchGSOMeta();
+            minimalSwal.fire({icon:"success",text:result.message});
+          } catch (error) {minimalSwal.fire({icon:"error",text:error.message});}
+        }}
       />
       <AddAssetModal 
         showAddAssetModal={showAddAssetModal} setShowAddAssetModal={setShowAddAssetModal}
@@ -791,18 +834,9 @@ export default function GSOAdminDashboard() {
         newPassword={newPassword} setNewPassword={setNewPassword}
         confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} handleUpdatePassword={() => {}}
       />
-      <DocumentAuditModal 
-        showDetailsModal={showDetailsModal} setShowDetailsModal={setShowDetailsModal}
-        selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
-        isAwaitingScanIn={isAwaitingScanIn} isInVerification={isInVerification} isActionAltered={isActionAltered}
-        showAdHocForm={showAdHocForm} setShowAdHocForm={setShowAdHocForm} showSendBackForm={showSendBackForm} setShowSendBackForm={setShowSendBackForm}
-        selectedAdHocOffice={selectedAdHocOffice} setSelectedAdHocOffice={setSelectedAdHocOffice}
-        officesList={officesList} gsoOfficeId={gsoOfficeId} isActionProcessing={isActionProcessing}
-        returnReason={returnReason} setReturnReason={setReturnReason}
-        handleExecuteAdHocDetour={() => {}} handleExecuteReturn={() => {}} handleSignDocument={() => {}}
-        setScanMode={setScanMode} setShowScannerModal={setShowScannerModal} setSimulatedQrPayload={setSimulatedQrPayload}
-        handleNavigateToChat={handleNavigateToChat}
-      />
+      {showDetailsModal && selectedDoc && <OfficeDocumentModal selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
+        processorOfficeId={gsoOfficeId} officesList={officesList} onClose={() => setShowDetailsModal(false)} onRefresh={fetchGSOMeta} onOpenChat={handleNavigateToChat} />}
+
       <MasterChecklistModal
         showChecklistMakerModal={showChecklistMakerModal} setShowChecklistMakerModal={setShowChecklistMakerModal}
         activeChecklistTab={activeChecklistTab} setActiveChecklistTab={setActiveChecklistTab}
@@ -834,6 +868,7 @@ export default function GSOAdminDashboard() {
         showActiveChecklistModal={showActiveChecklistModal} setShowActiveChecklistModal={setShowActiveChecklistModal}
         activeChecklistBooking={activeChecklistBooking} activeChecklistItems={activeChecklistItems} 
         handleToggleChecklistItem={handleToggleChecklistItem}
+        busy={checklistBusy}
       />
       <IncomingDocumentsModal
         isOpen={showIncomingModal}

@@ -3,6 +3,7 @@ import React from 'react';
 export default function CampusInfrastructureTab({
   handleCreateDepartment, newDeptName, setNewDeptName,
   handleCreateOffice, newOfficeName, setNewOfficeName, infraSummary
+  , offices, editInfrastructure, deleteInfrastructure
 }) {
   return (
     <div className="space-y-6 text-left animate-in fade-in duration-200">
@@ -83,6 +84,14 @@ export default function CampusInfrastructureTab({
         </div>
       </div>
 
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Registered Departments</h4>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {(infraSummary.departments || []).map(d => <div key={d.id} className="trace-category-card rounded-xl border p-3 flex items-center justify-between"><span className="font-semibold text-sm">{d.name}</span><span className="flex gap-2"><button type="button" className="text-xs text-red-800 underline" onClick={() => editInfrastructure('department',d.id,d.name)}>Edit</button><button type="button" className="text-xs text-red-800 underline" onClick={() => deleteInfrastructure('department',d.id,d.name)}>Delete</button></span></div>)}
+          {!(infraSummary.departments || []).length && <p className="text-sm text-gray-500">No departments registered.</p>}
+        </div>
+      </div>
+
       {/* ACTIVE STATION CAPACITY MONITORS */}
       <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
         <div className="mb-6 border-b border-gray-100 pb-4">
@@ -112,13 +121,13 @@ export default function CampusInfrastructureTab({
                 </span>
               </div>
               
-              <span className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-wider whitespace-nowrap shrink-0 shadow-sm ${
+              <div className="flex items-center gap-2"><span className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-wider whitespace-nowrap shrink-0 shadow-sm ${
                 off.staff_count > 0 
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                   : 'bg-red-50 text-[#D32F2F] border border-red-200'
               }`}>
                 {off.staff_count} {off.staff_count === 1 ? 'STAFF' : 'STAFF'}
-              </span>
+              </span><button type="button" className="text-xs text-red-800 underline" onClick={() => { const found=offices.find(o=>o.name===off.office_name); if(found) editInfrastructure('office',found.id,off.office_name); }}>Edit</button><button type="button" className="text-xs text-red-800 underline" onClick={() => { const found=offices.find(o=>o.name===off.office_name); if(found) deleteInfrastructure('office',found.id,off.office_name); }}>Delete</button></div>
             </div>
           ))}
 

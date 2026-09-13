@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Filter, Search, Inbox, FileText } from 'lucide-react';
 
 export default function ProcessorPipelineTab({
+  resolveOfficeStatus,
   search,
   setSearch,
   setPipelinePage,
@@ -9,10 +10,41 @@ export default function ProcessorPipelineTab({
   setFilterStatus,
   currentPipeDocs,
   filteredPipelineDocs,
+  pipelineDocs,
   pipelinePage,
   totalPipePages,
-  handleOpenPipelineDetails
+  handleOpenPipelineDetails,
+  setActiveTab,
+  setIsIncomingModalOpen,
+  targetDocId = null,
+  onClearTargetDocId = null
 }) {
+  const tableRef = useRef(null);
+
+  // Deep link handler: triggers verification modal and smooth scrolls
+  useEffect(() => {
+    if (targetDocId && pipelineDocs && pipelineDocs.length > 0) {
+      const matched = pipelineDocs.find(d => d.ini_id === parseInt(targetDocId));
+      if (matched) {
+        handleOpenPipelineDetails(matched, false);
+        if (tableRef.current) {
+          tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+      if (onClearTargetDocId) onClearTargetDocId();
+    }
+  }, [targetDocId, pipelineDocs]);
+
+  const handleFilterChange = (val) => {
+    if (val === 'Incoming') {
+      if (setActiveTab) setActiveTab('dashboard');
+      if (setIsIncomingModalOpen) setIsIncomingModalOpen(true);
+      return;
+    }
+    setFilterStatus(val);
+    setPipelinePage(1);
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto text-left animate-in fade-in duration-200">
       
@@ -23,7 +55,10 @@ export default function ProcessorPipelineTab({
       </div>
 
       {/* ACTIVE REQUESTS MATRIX TABLE */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      <div 
+        ref={tableRef}
+        className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col scroll-mt-6"
+      >
         
         {/* Table Controls Header */}
         <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-gray-50/50">
@@ -47,13 +82,13 @@ export default function ProcessorPipelineTab({
               <Filter size={14} className="text-gray-400" />
               <select 
                 value={filterStatus} 
-                onChange={e => { setFilterStatus(e.target.value); setPipelinePage(1); }} 
+                onChange={e => handleFilterChange(e.target.value)} 
                 className="bg-transparent text-xs outline-none cursor-pointer font-medium text-gray-700 appearance-none pr-2"
               >
                 <option value="All">All Statuses</option>
-                <option value="Incoming">Incoming Docs</option>
+                <option value="Incoming">Incoming Docs (Open Modal)</option>
                 <option value="Awaiting Scan-In">Awaiting Scan-In</option>
-                <option value="Pending">Pending Docs</option>
+                <option value="Signed">Signed / Ready for Release</option><option value="Action Required">Action Required</option><option value="Pending">Pending Docs</option>
                 <option value="In Verification">In Verification</option>
                 <option value="Completed">Completed Docs</option>
               </select>
@@ -75,9 +110,8 @@ export default function ProcessorPipelineTab({
             </thead>
             <tbody className="divide-y divide-gray-100">
               {currentPipeDocs.map((doc, index) => {
-                const statusLower = doc.status?.toLowerCase();
-                const isCompleted = statusLower === 'completed' || doc.time_out;
-                const isInVerification = statusLower === 'in verification';
+                const isCompleted = Boolean(doc.time_out);
+                const isInVerification = resolveOfficeStatus(doc) === 'In Verification';
 
                 return (
                   <tr key={index} className="hover:bg-gray-50/50 transition-colors group">
@@ -97,24 +131,22 @@ export default function ProcessorPipelineTab({
                     <td className="p-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
                         isCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 
-                        isInVerification ? 'bg-red-50 text-[#D32F2F] border border-red-200' : 
-                        'bg-blue-50 text-blue-700 border border-blue-200'
+                        isInVerification ? 'bg-purple-50 text-purple-700 border border-purple-200' : 
+                        'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
                           isCompleted ? 'bg-emerald-500' : 
-                          isInVerification ? 'bg-[#D32F2F]' : 
-                          'bg-blue-500'
+                          isInVerification ? 'bg-purple-500' : 
+                          'bg-amber-500'
                         }`}></span>
-                        {!doc.time_in ? 'Incoming' : doc.time_out ? 'Completed' : doc.status || 'Pending'}
+                        {resolveOfficeStatus(doc)}
                       </span>
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
                         {doc.next_office ? (
                           <>
-                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                            </svg>
+                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                             {doc.next_office}
                           </>
                         ) : (
@@ -127,10 +159,7 @@ export default function ProcessorPipelineTab({
                         onClick={() => handleOpenPipelineDetails(doc, false)} 
                         className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-red-50 hover:text-[#D32F2F] hover:border-red-200 transition-all text-[11px] shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-100"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                         View Details
                       </button>
                     </td>

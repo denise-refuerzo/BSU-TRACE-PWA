@@ -1,5 +1,5 @@
-import React from 'react';
-import { Camera, Building, User, ShieldCheck, Landmark, Download, CheckCircle2, ArrowLeft } from 'lucide-react';
+import ProfilePicture from './ProfilePicture';
+import { Building, User, ShieldCheck, Landmark, Download, CheckCircle2 } from 'lucide-react';
 import { usePWA } from '../context/PWAContext';
 
 export default function UserProfileTab({
@@ -12,8 +12,7 @@ export default function UserProfileTab({
   twoFaEnabled,
   toggle2FA,
   handleUpdateProfile,
-  setShowPassModal,
-  handleBack // <-- We will pass this from the parent
+  setShowPassModal
 }) {
   const { isInstallable, isInstalled, installApp } = usePWA();
 
@@ -30,13 +29,8 @@ export default function UserProfileTab({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Header Profile Banner */}
-        <div className="lg:col-span-3 bg-white border border-neutral-200 p-6 rounded-2xl flex items-center gap-6 shadow-sm">
-          <div className="relative">
-            <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt="Profile" className="w-24 h-24 rounded-2xl object-cover border-2 border-neutral-100 shadow-sm" />
-            <div className="absolute -bottom-1 -right-1 bg-red-800 p-1.5 rounded-lg text-white shadow-md cursor-pointer">
-              <Camera size={14} />
-            </div>
-          </div>
+        <div className="lg:col-span-3 bg-white border border-neutral-200 p-6 rounded-2xl flex flex-wrap items-center gap-6 shadow-sm">
+          <ProfilePicture name={profileName} />
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <h3 className="text-xl font-black text-neutral-900">{profileName || 'Portal User'}</h3>

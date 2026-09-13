@@ -1,3 +1,6 @@
+// Legacy timestamp-without-time-zone columns store Philippine wall time.
+// pg must interpret them consistently regardless of the deployment host timezone.
+process.env.TZ = 'Asia/Manila';
 const { Pool } = require('pg');
 require('dotenv').config();
 

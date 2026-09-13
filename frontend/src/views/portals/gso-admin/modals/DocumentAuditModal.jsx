@@ -75,13 +75,13 @@ export default function DocumentAuditModal({
               <div>
                 <span className="text-[9px] font-bold uppercase text-neutral-400 block">Time In Arrival</span>
                 <p className="font-mono text-xs font-bold mt-1 text-neutral-600">
-                  {selectedDoc.time_in ? new Date(selectedDoc.time_in).toLocaleTimeString('en-US') : <span className="text-blue-600">Awaiting Scan-In</span>}
+                  {selectedDoc.time_in ? new Date(selectedDoc.time_in).toLocaleTimeString('en-US', {timeZone:'Asia/Manila'}) : <span className="text-blue-600">Awaiting Scan-In</span>}
                 </p>
               </div>
               <div>
                 <span className="text-[9px] font-bold uppercase text-neutral-400 block">Time Out Departure</span>
                 <p className="font-mono text-xs font-bold mt-1 text-neutral-600">
-                  {selectedDoc.time_out ? new Date(selectedDoc.time_out).toLocaleTimeString('en-US') : <span className="text-amber-600">Still at GSO Station</span>}
+                  {selectedDoc.time_out ? new Date(selectedDoc.time_out).toLocaleTimeString('en-US', {timeZone:'Asia/Manila'}) : <span className="text-amber-600">Still at GSO Station</span>}
                 </p>
               </div>
               <div>
@@ -94,7 +94,7 @@ export default function DocumentAuditModal({
                   <span className="text-[8px] bg-purple-100 text-purple-700 font-black px-1 rounded">ML Placeholder</span>
                 </span>
                 <p className="font-bold text-purple-800 mt-1 text-xs">
-                  🕒 {selectedDoc.edc ? new Date(selectedDoc.edc).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Calculating (Awaiting ML Inference...)'}
+                  🕒 {selectedDoc.edc ? new Date(selectedDoc.edc).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' }) : 'Calculating (Awaiting ML Inference...)'}
                 </p>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import GSOFleetPanel from './GSOFleetPanel';
 import { Plus, Archive, Car, Building, Edit, Trash2, Calendar, Lock, ChevronLeft, ChevronRight, Package, CalendarX2 } from 'lucide-react';
 
 export default function GSOResourcesTab({
@@ -42,6 +43,8 @@ export default function GSOResourcesTab({
           <Plus size={16} strokeWidth={2.5} /> Add New Asset
         </button>
       </div>
+
+      <GSOFleetPanel assets={assetsList} />
 
       {/* TOP ROW: Management Table & Inventory Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

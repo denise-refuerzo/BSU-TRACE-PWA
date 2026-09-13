@@ -15,6 +15,7 @@ export default function GSOProcurementTab({
   setShowPrintModal,
   setShowChecklistMakerModal,
   handleViewChecklist,
+  handleAssignVehicle,
   targetSection,
   setTargetSection
 }) {
@@ -75,7 +76,7 @@ export default function GSOProcurementTab({
 
       {/* HELPER FUNCTION TO RENDER RESERVATION TABLES */}
       {[
-        { title: 'Vehicle Reservations', icon: <Car size={18} />, data: vehicleData, sKey: 'vehicle', border: 'border-t-blue-500', iconColor: 'text-blue-600', bg: 'bg-blue-50' },
+        { title: 'Van Requests', icon: <Car size={18} />, data: vehicleData, sKey: 'vehicle', border: 'border-t-blue-500', iconColor: 'text-blue-600', bg: 'bg-blue-50' },
         { title: 'Multimedia Room', icon: <Building size={18} />, data: multimediaData, sKey: 'multimedia', border: 'border-t-purple-500', iconColor: 'text-purple-600', bg: 'bg-purple-50' },
         { title: 'Gymnasium Reservations', icon: <Landmark size={18} />, data: gymData, sKey: 'gym', border: 'border-t-orange-500', iconColor: 'text-orange-600', bg: 'bg-orange-50' }
       ].map((block, idx) => (
@@ -156,7 +157,7 @@ export default function GSOProcurementTab({
                           res.status === 'Confirmed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${res.status === 'Confirmed' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                          {res.status}
+                          {res.status === 'Reserved' ? 'Pending' : res.status}
                         </span>
                       </td>
                       <td className="p-4 text-center">
@@ -167,6 +168,7 @@ export default function GSOProcurementTab({
                           <CheckSquare size={14} />
                           View Checklist
                         </button>
+                        {block.sKey === 'vehicle' && <button onClick={() => handleAssignVehicle(res)} className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 bg-white border border-gray-300 rounded-lg text-[11px] font-bold hover:bg-red-50">Assign Vehicle / Driver</button>}
                       </td>
                     </tr>
                   );

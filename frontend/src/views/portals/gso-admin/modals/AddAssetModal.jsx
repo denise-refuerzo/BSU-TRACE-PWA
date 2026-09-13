@@ -40,7 +40,6 @@ export default function AddAssetModal({
             >
               <option value="1">Room</option>
               <option value="2">Gymnasium</option>
-              <option value="4">Vehicle</option>
               <option value="3">Equipment / Furniture</option>
             </select>
           </div>

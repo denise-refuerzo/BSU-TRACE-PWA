@@ -1,3 +1,4 @@
+import {parsePhilippineTime} from '../../../utils/philippineTime';
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, X, Inbox, CheckCheck, CheckSquare, Square } from 'lucide-react';
 
@@ -61,9 +62,9 @@ export default function NotificationDropdown({
 
   const formatRelativeTime = (timestamp) => {
     if (!timestamp) return 'Just now';
-    const localizedString = String(timestamp).replace(/(\+00:00|\+00|Z)$/i, '');
+    const localizedString = timestamp;
     const now = new Date();
-    const past = new Date(localizedString);
+    const past = parsePhilippineTime(localizedString);
     const msPerMinute = 60 * 1000;
     const msPerHour = msPerMinute * 60;
     const msPerDay = msPerHour * 24;
