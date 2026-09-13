@@ -27,6 +27,12 @@ app.use(express.json());
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
 
 const failed2faAttemptsTracker = {};
+const TWO_FA_WINDOW_MS = 10 * 60 * 1000;
+const TWO_FA_MAX_ATTEMPTS = 5;
+const TWO_FA_RESEND_MS = 60 * 1000;
+const twoFaResendTracker = new Map();
+const newTwoFaCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+const twoFaExpiry = () => new Date(Date.now() + TWO_FA_WINDOW_MS);
 const generateSixDigitCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -69,9 +75,10 @@ app.post('/api/login', async (req, res) => {
     if (user.two_fa_enabled) {
       const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
 
+      const expiresAt = twoFaExpiry();
       await pool.query(
-        'UPDATE public."User" SET two_fa_code = $1 WHERE u_id = $2', 
-        [generatedPin, user.u_id]
+        'UPDATE public."User" SET two_fa_code = $1, two_fa_code_expires = $2, two_fa_attempts = 0 WHERE u_id = $3',
+        [generatedPin, expiresAt, user.u_id]
       );
 
       await sendSystemEmail(
@@ -84,6 +91,7 @@ app.post('/api/login', async (req, res) => {
         u_id: user.u_id,
         a_id: user.a_id,
         two_fa_enabled: true
+        ,two_fa_expires_at: expiresAt.toISOString(), resend_after_seconds: 60
       });
     }
 
@@ -170,7 +178,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
   try {
     // 1. Fetch the user, their OTP, and the extra profile details needed for the frontend JWT
     const result = await pool.query(
-      `SELECT u.u_id, u.username, u.a_id, u.two_fa_code, u.full_name, a.account_type 
+      `SELECT u.u_id, u.username, u.a_id, u.two_fa_enabled, u.two_fa_code, u.two_fa_code_expires, u.two_fa_attempts, u.is_active, u.full_name, a.account_type
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
        WHERE u.u_id = $1`,
@@ -184,8 +192,14 @@ app.post('/api/login/verify-2fa', async (req, res) => {
     const user = result.rows[0];
 
     // 2. Compare the input code with the database code
-    if (user.two_fa_code !== otpCode) {
-      return res.status(401).json({ error: 'Invalid verification code' });
+    if (!user.is_active || !user.two_fa_enabled || !/^\d{6}$/.test(String(otpCode || '')) ||
+        !user.two_fa_code || !user.two_fa_code_expires || new Date(user.two_fa_code_expires) < new Date())
+      return res.status(401).json({ error: 'Invalid or expired verification code' });
+    if (Number(user.two_fa_attempts || 0) >= TWO_FA_MAX_ATTEMPTS)
+      return res.status(429).json({ error: 'Too many attempts. Request a new verification code.' });
+    if (user.two_fa_code !== String(otpCode)) {
+      await pool.query('UPDATE public."User" SET two_fa_attempts = COALESCE(two_fa_attempts,0) + 1 WHERE u_id = $1', [userId]);
+      return res.status(401).json({ error: 'Invalid or expired verification code' });
     }
 
     // 3. If successful, generate the session token
@@ -194,7 +208,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
 
     // 4. Update the token in the DB and clear the temporary OTP code for security
     await pool.query(
-      'UPDATE public."User" SET session_token = $1 WHERE u_id = $2', 
+      'UPDATE public."User" SET session_token = $1, two_fa_code = NULL, two_fa_code_expires = NULL, two_fa_attempts = 0 WHERE u_id = $2',
       [sessionToken, user.u_id]
     );
 
@@ -226,14 +240,14 @@ app.post('/api/login/verify-2fa', async (req, res) => {
 // ==========================================
 // 1.3 VERIFY & ENABLE 2FA ENDPOINT
 // ==========================================
-app.post('/api/profile/:id/verify-enable-2fa', async (req, res) => {
+app.post('/api/profile/:id/verify-enable-2fa', requireAuth, async (req, res) => {
   const userId = req.params.id;
   const { otpCode } = req.body;
 
   try {
     // 1. Fetch the user's stored OTP
     const result = await pool.query(
-      'SELECT two_fa_code FROM public."User" WHERE u_id = $1',
+      'SELECT two_fa_code,two_fa_code_expires,two_fa_attempts,is_active FROM public."User" WHERE u_id = $1',
       [userId]
     );
 
@@ -242,13 +256,17 @@ app.post('/api/profile/:id/verify-enable-2fa', async (req, res) => {
     }
 
     // 2. Check if the code matches
-    if (result.rows[0].two_fa_code !== otpCode) {
+    const pending = result.rows[0];
+    if (!pending.is_active || !/^\d{6}$/.test(String(otpCode || '')) || !pending.two_fa_code ||
+        !pending.two_fa_code_expires || new Date(pending.two_fa_code_expires) < new Date() ||
+        Number(pending.two_fa_attempts || 0) >= TWO_FA_MAX_ATTEMPTS || pending.two_fa_code !== String(otpCode)) {
+      await pool.query('UPDATE public."User" SET two_fa_attempts = COALESCE(two_fa_attempts,0) + 1 WHERE u_id = $1', [userId]);
       return res.status(400).json({ error: 'Invalid verification code' });
     }
 
     // 3. Code matches! Enable 2FA and clear the temporary OTP code
     await pool.query(
-      'UPDATE public."User" SET two_fa_enabled = true, two_fa_code = NULL WHERE u_id = $1',
+      'UPDATE public."User" SET two_fa_enabled = true, two_fa_code = NULL, two_fa_code_expires = NULL, two_fa_attempts = 0 WHERE u_id = $1',
       [userId]
     );
 
@@ -530,6 +548,10 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
     if (twoFaEnabled && (!twoFaCode || twoFaCode.toString().length < 4)) {
       return res.status(400).json({ error: 'A valid numeric PIN (at least 4 digits) is required to enable Two-Factor Authentication.' });
     }
+    const current = await pool.query('SELECT two_fa_enabled FROM public."User" WHERE u_id=$1',[req.params.userId]);
+    if (!current.rows[0]) return res.status(404).json({error:'User not found.'});
+    if (twoFaEnabled && !current.rows[0].two_fa_enabled)
+      return res.status(409).json({error:'Verify the emailed 2FA code before enabling 2FA.'});
 
     // 3. Execute the update query across the shared "User" table
     await pool.query(
@@ -569,7 +591,7 @@ app.put('/api/profile/:userId/password', requireAuth, async (req, res) => {
 // ==========================================
 // 2.6 REQUEST OTP FOR PROFILE SECURITY CHANGES
 // ==========================================
-app.post('/api/users/:id/request-profile-otp', async (req, res) => {
+app.post('/api/users/:id/request-profile-otp', requireAuth, async (req, res) => {
   const userId = req.params.id;
 
   try {
@@ -579,7 +601,7 @@ app.post('/api/users/:id/request-profile-otp', async (req, res) => {
     const email = userRes.rows[0].uni_email;
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     
-    await pool.query('UPDATE public."User" SET two_fa_code = $1 WHERE u_id = $2', [generatedPin, userId]);
+    await pool.query('UPDATE public."User" SET two_fa_code = $1, two_fa_code_expires = $2, two_fa_attempts = 0 WHERE u_id = $3', [generatedPin, twoFaExpiry(), userId]);
     
     await sendSystemEmail(
       email,
@@ -653,6 +675,24 @@ app.post('/api/offices', requireAuth, async (req, res) => {
     console.error("Office drop node registration exception:", err);
     res.status(500).json({ error: 'Failed execution query write offices sequence context.' });
   }
+});
+
+app.post('/api/login/resend-2fa', async (req, res) => {
+  const userId = Number(req.body.userId);
+  if (!Number.isInteger(userId) || userId < 1) return res.status(400).json({error:'A valid user is required.'});
+  const last = twoFaResendTracker.get(userId) || 0;
+  if (Date.now() - last < TWO_FA_RESEND_MS) return res.status(429).json({error:'Please wait before requesting another code.'});
+  try {
+    const result = await pool.query('SELECT uni_email,full_name,two_fa_enabled,is_active FROM public."User" WHERE u_id=$1',[userId]);
+    const user = result.rows[0];
+    if (!user || !user.is_active || !user.two_fa_enabled) return res.status(400).json({error:'A 2FA challenge is not available.'});
+    const code = newTwoFaCode();
+    const expiresAt = twoFaExpiry();
+    await pool.query('UPDATE public."User" SET two_fa_code=$1,two_fa_code_expires=$2,two_fa_attempts=0 WHERE u_id=$3',[code,expiresAt,userId]);
+    await sendSystemEmail(user.uni_email,'BSU-Trace Login Verification',`Your new 2FA verification code is: ${code}. Do not share it.`);
+    twoFaResendTracker.set(userId,Date.now());
+    res.json({message:'A new verification code was sent.',two_fa_expires_at:expiresAt.toISOString(),resend_after_seconds:60});
+  } catch (error) { console.error('Resend 2FA Error:',error); res.status(500).json({error:'Unable to resend verification code.'}); }
 });
 
 // ICT-only infrastructure maintenance. Foreign-key constraints deliberately

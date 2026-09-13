@@ -1,5 +1,6 @@
 const {fail, isOffice, resolveRoute, assertAction} = require('./officeWorkflow');
 const crypto = require('node:crypto');
+const {routeProgress} = require('./routeProgress');
 
 module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
   app.get('/api/office/documents/:iniId', requireAuth, async (req,res) => {
@@ -20,7 +21,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
         WHERE h.ini_id=$1 ORDER BY h.history_id`,[doc.ini_id])).rows;
       const route=(await pool.query(`SELECT o.office_name FROM unnest($1::integer[]) WITH ORDINALITY AS r(o_id,position)
         JOIN public.offices o ON r.o_id=o.o_id ORDER BY r.position`,[doc.route_snapshot])).rows;
-      res.json({...doc,steps,actions,route_names:route.map(o=>o.office_name)});
+      res.json({...doc,steps,route_steps:routeProgress(doc.route_snapshot || [],steps).routeSteps,actions,route_names:route.map(o=>o.office_name)});
     } catch(err) {console.error(err);res.status(500).json({error:'Unable to load document details.'});}
   });
   const transaction = handler => async (req, res) => {
@@ -129,15 +130,32 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
           await db.query(`UPDATE public.processed_document SET s_id=1 WHERE pd_id=(SELECT pd_id
             FROM public.processed_document WHERE ini_id=$1 AND current_office_id=$2 AND time_out IS NULL
             ORDER BY pd_id DESC LIMIT 1)`, [doc.ini_id,step.adhoc_return_office_id]);
+          if (doc.route_snapshot?.length) {
+            const visits = (await db.query('SELECT * FROM public.processed_document WHERE ini_id=$1 ORDER BY pd_id', [doc.ini_id])).rows;
+            const progress = routeProgress(doc.route_snapshot,visits);
+            let following = progress.nextIndex + 1;
+            while (progress.credits.has(following)) following++;
+            await db.query(`UPDATE public.processed_document SET next_office_id=$2
+              WHERE ini_id=$1 AND is_adhoc IS NOT TRUE AND time_out IS NULL`,
+            [doc.ini_id,doc.route_snapshot[following] || null]);
+          }
           await audit(db,doc.ini_id,user,'Scanned Out');
           message = 'Verification completed. The document has returned to the requesting office.';
         } else {
           const sequence = doc.route_snapshot;
           if (!sequence?.length) throw fail(409,'This document needs its route migration before it can advance.');
-          const count = (await db.query(`SELECT COUNT(*)::int AS n FROM public.processed_document
-            WHERE ini_id=$1 AND is_adhoc IS NOT TRUE AND time_out IS NOT NULL AND s_id IN (3,5)`, [doc.ini_id])).rows[0].n;
-          if (sequence[count]) await insertStep(db,doc.ini_id,sequence[count],sequence[count+1]);
-          else await db.query('UPDATE public.processed_document SET s_id=5 WHERE pd_id=$1', [step.pd_id]);
+          const visits = (await db.query(`SELECT * FROM public.processed_document
+            WHERE ini_id=$1 ORDER BY pd_id`, [doc.ini_id])).rows;
+          const progress = routeProgress(sequence,visits);
+          const count = progress.nextIndex;
+          let following = count + 1;
+          while (progress.credits.has(following)) following++;
+          await db.query('UPDATE public.processed_document SET next_office_id=$2 WHERE pd_id=$1',
+            [step.pd_id,sequence[count] || null]);
+          if (sequence[count]) await insertStep(db,doc.ini_id,sequence[count],sequence[following]);
+          else await db.query(`UPDATE public.processed_document SET s_id=5,next_office_id=NULL
+            WHERE pd_id=$1 OR pd_id=(SELECT MAX(pd_id) FROM public.processed_document WHERE ini_id=$2)`,
+          [step.pd_id,doc.ini_id]);
           await audit(db,doc.ini_id,user,'Scanned Out');
           message = sequence[count] ? 'Released. The next office can now record Time In.' : 'Document processing completed.';
         }

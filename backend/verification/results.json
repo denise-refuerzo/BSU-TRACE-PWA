@@ -1,0 +1,71 @@
+[
+  {
+    "name": "Unauthenticated document reads are rejected",
+    "passed": true
+  },
+  {
+    "name": "Submission creates QR, route snapshot and first awaiting office",
+    "passed": true
+  },
+  {
+    "name": "Wrong office cannot receive, sign, return, release or detour",
+    "passed": true
+  },
+  {
+    "name": "Signing and releasing before receipt are rejected",
+    "passed": true
+  },
+  {
+    "name": "QR receipt and duplicate-scan prevention",
+    "passed": true
+  },
+  {
+    "name": "Normal passage through processor, signee, GSO and last office",
+    "passed": true
+  },
+  {
+    "name": "Completed documents reject further processing and have audit records",
+    "passed": true
+  },
+  {
+    "name": "Office-submitted document can complete its originating stop at submission",
+    "passed": true
+  },
+  {
+    "name": "College placeholder resolves to the submitter department office",
+    "passed": true
+  },
+  {
+    "name": "Ad hoc hold, return and completion credit",
+    "passed": true
+  },
+  {
+    "name": "Originator history retains skipped original route stop",
+    "passed": true
+  },
+  {
+    "name": "Normal correction requires release before resubmission and resumes same office",
+    "passed": true
+  },
+  {
+    "name": "Nested ad hoc detours return in reverse order without duplicate route visits",
+    "passed": true
+  },
+  {
+    "name": "Cross-account document and office reads are forbidden",
+    "passed": true
+  },
+  {
+    "name": "Notifications, office ledger, incoming list, KPIs and audit endpoints return data",
+    "passed": true
+  },
+  {
+    "name": "Resource and administration read endpoints work with the supplied schema",
+    "passed": true
+  },
+  {
+    "name": "2FA verification cannot create a session without an issued code",
+    "passed": false,
+    "error": "Expected rejection, got HTTP 200"
+  }
+]

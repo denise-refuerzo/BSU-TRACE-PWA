@@ -12,7 +12,7 @@ function StatusBadge({step}) {
     4:{label:'Needs correction',style:'bg-rose-50 text-rose-800 border-rose-200'},
     5:{label:'Completed',style:'bg-emerald-50 text-emerald-800 border-emerald-200'}
   };
-  const state=states[step?.s_id] || {label:step?.current_status || 'Pending',style:'bg-neutral-50 text-neutral-700 border-neutral-200'};
+  const state=step?.completed_via_adhoc ? {label:'Completed via ad hoc',style:'bg-emerald-50 text-emerald-800 border-emerald-200'} : states[step?.s_id] || {label:step?.current_status || 'Pending',style:'bg-neutral-50 text-neutral-700 border-neutral-200'};
   return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold whitespace-nowrap ${state.style}`}><span className="h-1.5 w-1.5 rounded-full bg-current"/>{state.label}</span>;
 }
 
@@ -88,11 +88,12 @@ export default function OfficeDocumentModal({selectedDoc,processorOfficeId,offic
             <h3 className="font-bold text-sm text-neutral-800 mb-3 flex items-center gap-2"><GitBranch size={16} className="text-rose-800"/>Pipeline route</h3>
             <ol className="grid sm:grid-cols-2 gap-2">
               {doc.route_names.map((name,i)=>{
-                const current=name===step?.office_name;
-                const done=!current && doc.steps.some(s=>s.office_name===name && s.time_out && [3,5].includes(s.s_id));
+                const routeStep=doc.route_steps?.findLast(s=>!s.is_adhoc && s.route_position===i);
+                const current=Boolean(step && routeStep?.pd_id===step.pd_id);
+                const done=!current && routeStep?.time_out && [3,5].includes(routeStep.s_id);
                 return <li key={i} aria-current={current?'step':undefined} className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs ${current?'bg-rose-50 border-rose-300 text-rose-900':'bg-neutral-50/60 border-neutral-100 text-neutral-600'}`}>
                   <span className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center font-bold ${current?'bg-rose-800 text-white':done?'bg-emerald-100 text-emerald-700':'bg-white border border-neutral-200 text-neutral-500'}`}>{done?<CheckCircle2 size={14}/>:i+1}</span>
-                  <span className="pt-0.5 leading-relaxed">{name}{current&&<span className="block text-[9px] font-bold uppercase tracking-wider text-rose-700 mt-0.5">Current step</span>}</span>
+                  <span className="pt-0.5 leading-relaxed">{name}{routeStep?.completed_via_adhoc&&<span className="block text-[9px] font-bold text-emerald-700 mt-0.5">Completed via ad hoc</span>}{current&&<span className="block text-[9px] font-bold uppercase tracking-wider text-rose-700 mt-0.5">Current step</span>}</span>
                 </li>;
               })}
             </ol>

@@ -10,6 +10,7 @@ const expectedDocumentsSql = `SELECT idoc.ini_id,idoc.title,idoc.qr_code,idoc.cr
     AND NOT EXISTS (SELECT 1 FROM public.processed_document received WHERE received.ini_id=idoc.ini_id
       AND received.current_office_id=$1 AND received.time_in IS NOT NULL)
   ORDER BY idoc.ini_id DESC`;
+const {routeProgress} = require('./routeProgress');
 module.exports = function registerOfficeDocumentReads(app, pool, requireAuth) {
 app.get('/api/documents/:userId', requireAuth, async (req, res) => {
   try {
@@ -21,6 +22,7 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
              idoc.qr_code, 
              idoc.created_at,
              idoc.submission_office_id,
+             idoc.route_snapshot,
              (SELECT full_name FROM public."User" WHERE u_id=idoc.u_id) AS submitted_by,
              pdoc.time_out AS release_time,
              pt.process_name,
@@ -37,6 +39,9 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
              (
               SELECT json_agg(json_build_object(
                 'office_name', off2.office_name,
+                'pd_id', p2.pd_id,
+                'current_office_id', p2.current_office_id,
+                's_id', p2.s_id,
                 'time_in', p2.time_in AT TIME ZONE 'Asia/Manila',
                 'time_out', p2.time_out AT TIME ZONE 'Asia/Manila',
                 'is_adhoc', p2.is_adhoc
@@ -56,7 +61,9 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
     `;
     if (Number(req.params.userId) !== Number(req.user.u_id)) return res.status(403).json({error:"Access denied."});
     const result = await pool.query(query, [req.user.u_id, [2,3,4].includes(Number(req.user.a_id)) ? req.user.o_id : null]);
-    res.json(result.rows);
+    res.json(result.rows.map(doc => ({...doc,
+      history_logs: routeProgress(doc.route_snapshot || [],doc.history_logs || []).history
+    })));
   } catch (err) { 
     console.error(err);
     res.status(500).json({ error: 'Failed mapping logs' }); 
