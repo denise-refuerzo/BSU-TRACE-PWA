@@ -68,7 +68,7 @@ export default function OfficeDocumentModal({selectedDoc,processorOfficeId,offic
                 <div><dt className="trace-field-label">Originating office</dt><dd className="font-semibold text-neutral-700">{doc.steps[0]?.office_name}</dd></div>
                 <div><dt className="trace-field-label">Submitted by</dt><dd className="font-semibold text-neutral-700">{doc.submitted_by}</dd></div>
                 <div><dt className="trace-field-label">Created</dt><dd className="text-neutral-600">{formatPhilippineDateTime(doc.created_at)}</dd></div>
-                <div><dt className="trace-field-label">Target delivery</dt><dd className="text-neutral-600">{formatPhilippineDate(doc.edc)}</dd></div>
+                <div><dt className="trace-field-label">Estimated delivery</dt><dd className="text-neutral-600">{doc.edc ? formatPhilippineDate(doc.edc) : 'Not set at submission'}</dd></div>
               </dl>
             </div>
             <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-4 flex flex-col items-center justify-center gap-3">
