@@ -131,7 +131,7 @@ export default function GSODashboardTab({
           {/* Descriptive Analytics */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
             <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 mb-3 tracking-wide">
-              <BarChart2 className="text-purple-600" size={14} /> Bottleneck Delay Evaluation
+              <BarChart2 className="text-purple-600" size={14} /> Bottleneck Delay Evaluation (Hours)
             </h3>
             <div className="flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -148,35 +148,8 @@ export default function GSODashboardTab({
             </div>
           </div>
 
-          {/* Prescriptive Analytics */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
-            <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 mb-3 tracking-wide">
-              <Package className="text-[#D32F2F]" size={14} /> Equipment Inventory Status
-            </h3>
-            <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 space-y-3 min-h-0">
-              {equipmentInventory?.map(item => {
-                const pAvail = Math.round((item.current_stock / item.capacity) * 100) || 0;
-                return (
-                  <div key={item.asd_id}>
-                    <div className="flex justify-between text-[9px] uppercase tracking-wider font-bold mb-1 text-gray-700">
-                      <span className="truncate">{item.asset_name}</span>
-                      <span>{pAvail}% Avail</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2.5 flex overflow-hidden shadow-inner">
-                      <div className="h-full bg-[#D32F2F]" style={{ width: `${pAvail}%` }}></div>
-                      <div className="h-full bg-red-100 border-l border-white/50" style={{ width: `${100-pAvail}%` }}></div>
-                    </div>
-                  </div>
-                );
-              })}
-              {(!equipmentInventory || equipmentInventory.length === 0) && (
-                <div className="text-center text-[10px] text-gray-400 font-bold mt-16">No equipment data.</div>
-              )}
-            </div>
-          </div>
-
           {/* Predictive Analytics */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
+          <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 tracking-wide">
                 <Activity className="text-indigo-600" size={14} /> Demand Forecast
