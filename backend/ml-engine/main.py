@@ -33,10 +33,11 @@ def get_bottlenecks():
 
 # Add this endpoint below your bottleneck route
 @app.get("/api/analytics/edc")
-def get_edc_forecasts():
+def get_edc_forecasts(route: str | None = None):
     """Endpoint serving Linear Regression EDC forecasts."""
     try:
-        data = calculate_edc()
+        ids = [int(x) for x in route.split(',') if x.strip()] if route else None
+        data = calculate_edc(ids)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"EDC engine error: {str(e)}")

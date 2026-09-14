@@ -55,12 +55,17 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     (ini_id,s_id,current_office_id,next_office_id) VALUES ($1,1,$2,$3)`, [id, office, next || null]);
 
   app.post('/api/documents', requireAuth, transaction(async (db, user, req) => {
-    const {title, processTypeId, edc, completeOriginProcessing = false} = req.body;
+    const {title, edc, customRoute, completeOriginProcessing = false} = req.body;
+    let {processTypeId} = req.body;
     if (![1,2,3,4].includes(Number(user.a_id))) throw fail(403, 'This account cannot submit documents.');
     if (typeof title !== 'string' || !title.trim() || title.trim().length > 150) throw fail(400, 'Enter a document title of up to 150 characters.');
-    if (!Number.isInteger(processTypeId) || typeof completeOriginProcessing !== 'boolean') throw fail(400, 'Select a valid pipeline and processing option.');
-    const route = (await db.query(`SELECT r.* FROM public.process_type p JOIN public.route r ON p.r_id=r.r_id
-      WHERE p.p_id=$1 AND p.is_active IS TRUE FOR SHARE OF p,r`, [processTypeId])).rows[0];
+    if ((!customRoute && !Number.isInteger(processTypeId)) || typeof completeOriginProcessing !== 'boolean') throw fail(400, 'Select a valid pipeline and processing option.');
+    if (typeof edc !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(edc) || Number.isNaN(Date.parse(`${edc}T00:00:00Z`)))
+      throw fail(400, 'Estimated delivery must be calculated before submitting the document.');
+    const custom = customRoute ? await require('./customRoutes').createCustomRoute(db,user,customRoute) : null;
+    if (custom) processTypeId = custom.processTypeId;
+    const route = custom ? custom.route : (await db.query(`SELECT r.* FROM public.process_type p JOIN public.route r ON p.r_id=r.r_id
+      WHERE p.p_id=$1 AND p.is_active IS TRUE AND p.route_status='official' FOR SHARE OF p,r`, [processTypeId])).rows[0];
     if (!route) throw fail(400, 'Select an active pipeline.');
     const sequence = resolveRoute(route, user);
     if (!sequence.length) throw fail(400, 'This pipeline has no office stops.');

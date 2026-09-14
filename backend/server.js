@@ -1804,7 +1804,7 @@ app.get('/api/analytics/bottlenecks', async (req, res) => {
 // ==========================================
 app.get('/api/analytics/edc', requireAuth, async (req, res) => {
     try {
-        const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/edc`);
+        const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/edc`, {params: req.query.route ? {route: req.query.route} : undefined});
         res.json(response.data);
     } catch (error) {
         console.error('Error fetching EDC analytics:', error.message);
