@@ -55,7 +55,7 @@ export function useGSOAdminData() {
       const res = await fetchWithAuth(`/api/profile/${userId}`);
       const data = await res.json();
       if (res.ok) {
-        setGsoOfficeName(data.office_name || 'General Services Office');
+        setGsoOfficeName(data.office_name || 'General Services');
         setGsoOfficeId(data.o_id);
         setProfileName(data.full_name || '');
         setProfileEmail(data.uni_email || '');
@@ -76,8 +76,9 @@ export function useGSOAdminData() {
     if (!officeId) return;
     try {
       const res = await fetchWithAuth(`/api/processor/documents/expected-count/${officeId}`);
+      if (!res.ok) throw new Error('Expected incoming count request failed (' + res.status + ').');
       const data = await res.json();
-      if (res.ok) setExpectedIncomingCount(data.count);
+      setExpectedIncomingCount(Number(data.count) || 0);
     } catch (err) { console.error("Expected incoming sync error:", err); }
   };
 

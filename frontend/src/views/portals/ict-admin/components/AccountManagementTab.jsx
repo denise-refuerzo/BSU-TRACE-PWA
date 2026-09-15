@@ -256,7 +256,7 @@ export default function AccountManagementTab({
                   
                   {form.accountType === 4 ? (
                     <div className="w-full border border-red-200 bg-white rounded-lg px-4 py-3 text-sm font-bold text-gray-800 shadow-sm flex items-center justify-between">
-                      <span>General Services Office (GSO)</span>
+                      <span>{offices.find(o => /general services|\bgso\b/i.test(o.name))?.name || 'General Services'}</span>
                       <span className="text-[10px] bg-red-100 text-[#D32F2F] px-2 py-1 rounded-md uppercase tracking-wider">Auto-Assigned</span>
                     </div>
                   ) : (
@@ -266,7 +266,7 @@ export default function AccountManagementTab({
                     >
                       <option value="">-- Choose Assigned Campus Branch Office Stop --</option>
                       {offices
-                        .filter(off => !off.name.includes('General Services Office') && !off.name.includes('GSO'))
+                        .filter(off => !/general services|\bgso\b/i.test(off.name))
                         .map((off) => (
                         <option key={off.id} value={off.id}>{off.name}</option>
                       ))}
@@ -324,9 +324,9 @@ export default function AccountManagementTab({
             <div className="p-4 bg-red-50/50 border border-red-100 rounded-xl hover:shadow-md transition-shadow">
               <div className="flex items-center gap-2 mb-1.5">
                 <svg className="w-4 h-4 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>
-                <p className="font-bold text-red-900 text-sm">GSO Admin</p>
+              <p className="font-bold text-red-900 text-sm">GSO Admin</p>
               </div>
-              <p className="text-xs text-red-800/80 leading-relaxed">Hybrid Processor/Signee role locked permanently to the General Services Office (GSO) for specialized operations.</p>
+              <p className="text-xs text-red-800/80 leading-relaxed">Hybrid Processor/Signee role locked permanently to the General Services office for specialized operations.</p>
             </div>
 
           </div>

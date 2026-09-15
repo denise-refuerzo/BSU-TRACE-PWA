@@ -85,7 +85,7 @@ export default function ManageAccountModal({
               
               {selectedUser.a_id === 4 ? (
                 <div className="w-full border border-red-200 bg-white rounded-lg px-2 py-2 font-bold text-red-800 flex items-center justify-between">
-                  <span>General Services Office (GSO)</span>
+                  <span>{offices.find(o => /general services|\bgso\b/i.test(o.name))?.name || 'General Services'}</span>
                   <span className="text-[9px] bg-red-100 px-1.5 py-0.5 rounded tracking-wider">Locked</span>
                 </div>
               ) : (
@@ -96,7 +96,7 @@ export default function ManageAccountModal({
                 >
                   <option value="">-- No Location Assigned --</option>
                   {offices
-                    .filter(off => !off.name.includes('General Services Office') && !off.name.includes('GSO'))
+                    .filter(off => !/general services|\bgso\b/i.test(off.name))
                     .map((off) => (
                     <option key={off.id} value={off.id}>{off.name}</option>
                   ))}

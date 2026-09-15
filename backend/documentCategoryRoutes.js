@@ -6,8 +6,12 @@ function validatePipeline(body) {
   if (typeof body.processName !== 'string' || !body.processName.trim() || body.processName.trim().length > 100)
     throw fail(400, 'Enter a process name of 1–100 characters.');
   if (!positiveId(body.categoryId)) throw fail(400, 'Select a valid document category.');
-  if (!Array.isArray(body.stops) || body.stops.length < 2 || body.stops.length > 7 || !body.stops.every(positiveId))
-    throw fail(400, 'Select between 2 and 7 valid office stops.');
+  if (!Array.isArray(body.stops) || body.stops.length < 2 || body.stops.length > 7)
+    throw fail(400, 'Select between 2 and 7 valid office or category stops.');
+  const validStops = body.stops.every(stop => positiveId(stop) || (stop && stop.type === 'group' && positiveId(stop.groupId)));
+  if (!validStops) throw fail(400, 'Every pipeline stop must be a valid office or office category.');
+  const stopKeys = body.stops.map(stop => positiveId(stop) ? `office:${stop}` : `group:${stop.groupId}`);
+  if (new Set(stopKeys).size !== stopKeys.length) throw fail(400, 'A pipeline cannot repeat the same office or category placeholder.');
   if (body.isActive !== undefined && typeof body.isActive !== 'boolean') throw fail(400, 'Invalid active status.');
 }
 module.exports = function registerDocumentCategories(app, pool, requireAuth) {
@@ -25,6 +29,16 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
       count(p.p_id) FILTER (WHERE p.is_active IS TRUE)::int AS active_pipeline_count
       FROM public.document_category c LEFT JOIN public.process_type p ON p.category_id=c.category_id AND p.route_status='official'
       GROUP BY c.category_id ORDER BY lower(c.category_name)`);
+    res.json(result.rows);
+  }));
+  app.get('/api/office-route-groups', requireAuth, handle(async (req, res) => {
+    const result = await pool.query(`SELECT g.group_id,g.group_name,g.description,
+      COALESCE(json_agg(json_build_object('id',o.o_id,'name',o.office_name) ORDER BY lower(o.office_name)) FILTER (WHERE o.o_id IS NOT NULL),'[]'::json) AS offices
+      FROM public.office_route_groups g
+      LEFT JOIN public.office_route_group_members m ON m.group_id=g.group_id
+      LEFT JOIN public.offices o ON o.o_id=m.office_id
+      WHERE g.is_active IS TRUE
+      GROUP BY g.group_id ORDER BY lower(g.group_name)`);
     res.json(result.rows);
   }));
   app.get('/api/custom-routes', requireAuth, requireICT, handle(async (req,res) => {
@@ -94,10 +108,10 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
     if (typeof q !== 'string' || q.length > 100 || (active !== undefined && !['true','false'].includes(active))) throw fail(400, 'Invalid search filters.');
     const stops = Array.from({length: 7}, (_, i) => i + 1);
     const result = await pool.query(`SELECT p.p_id,p.process_name,p.is_active,p.category_id,c.category_name,c.description AS category_description,r.r_id,
-      ${stops.map(i => `r.stop_${i},o${i}.office_name AS stop_${i}_name`).join(',')}
+      ${stops.map(i => `r.stop_${i},o${i}.office_name AS stop_${i}_name,r.stop_${i}_group_id,g${i}.group_name AS stop_${i}_group_name,CASE WHEN r.stop_${i}_group_id IS NULL THEN 'office' ELSE 'group' END AS stop_${i}_kind`).join(',')}
       FROM public.process_type p JOIN public.document_category c USING(category_id)
       JOIN public.route r ON p.r_id=r.r_id
-      ${stops.map(i => `LEFT JOIN public.offices o${i} ON r.stop_${i}=o${i}.o_id`).join(' ')}
+      ${stops.map(i => `LEFT JOIN public.offices o${i} ON r.stop_${i}=o${i}.o_id LEFT JOIN public.office_route_groups g${i} ON r.stop_${i}_group_id=g${i}.group_id`).join(' ')}
       WHERE p.route_status='official' AND ($1::integer IS NULL OR p.category_id=$1)
       AND strpos(lower(p.process_name),lower($2)) > 0
       AND ($3::boolean IS NULL OR p.is_active=$3)
@@ -125,14 +139,33 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
         if (duplicate.rows.length) throw fail(409, 'That process name already exists.');
         const category = await client.query('SELECT category_id FROM public.document_category WHERE category_id=$1 FOR KEY SHARE', [categoryId]);
         if (!category.rows.length) throw fail(400, 'Select an existing document category.');
-        const routeStops = [...stops.map(Number), ...Array(7 - stops.length).fill(null)];
+        const routeStops = Array.from({length: 7}, (_, index) => {
+          const stop = stops[index];
+          return positiveId(stop) ? Number(stop) : null;
+        });
+        const routeGroups = Array.from({length: 7}, (_, index) => {
+          const stop = stops[index];
+          return stop && typeof stop === 'object' ? Number(stop.groupId) : null;
+        });
+        const groupIds = routeGroups.filter(Boolean);
+        if (groupIds.length) {
+          const groups = await client.query(`SELECT g.group_id,MIN(m.office_id)::integer AS anchor_office_id FROM public.office_route_groups g
+            JOIN public.office_route_group_members m ON m.group_id=g.group_id
+            WHERE g.is_active IS TRUE AND g.group_id = ANY($1::integer[])
+            GROUP BY g.group_id`, [groupIds]);
+          if (groups.rowCount !== new Set(groupIds).size) throw fail(400, 'Every selected office category must be active and valid.');
+          const anchors = new Map(groups.rows.map(group => [Number(group.group_id), Number(group.anchor_office_id)]));
+          routeGroups.forEach((groupId, index) => {
+            if (groupId) routeStops[index] = anchors.get(groupId);
+          });
+        }
         if (editing) {
           const current = await client.query("SELECT r_id FROM public.process_type WHERE p_id=$1 AND route_status='official' FOR UPDATE", [req.params.processId]);
           if (!current.rows.length) throw fail(404, 'Pipeline not found.');
-          await client.query(`UPDATE public.route SET ${routeStops.map((_, i) => `stop_${i + 1}=$${i + 1}`).join(',')} WHERE r_id=$8`, [...routeStops,current.rows[0].r_id]);
+          await client.query(`UPDATE public.route SET ${routeStops.map((_, i) => `stop_${i + 1}=$${i + 1},stop_${i + 1}_group_id=$${i + 8}`).join(',')} WHERE r_id=$15`, [...routeStops, ...routeGroups, current.rows[0].r_id]);
           await client.query('UPDATE public.process_type SET process_name=$1,category_id=$2,is_active=$3 WHERE p_id=$4', [processName.trim(), categoryId, isActive, req.params.processId]);
         } else {
-          const route = await client.query('INSERT INTO public.route(stop_1,stop_2,stop_3,stop_4,stop_5,stop_6,stop_7) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING r_id', routeStops);
+          const route = await client.query('INSERT INTO public.route(stop_1,stop_2,stop_3,stop_4,stop_5,stop_6,stop_7,stop_1_group_id,stop_2_group_id,stop_3_group_id,stop_4_group_id,stop_5_group_id,stop_6_group_id,stop_7_group_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING r_id', [...routeStops, ...routeGroups]);
           await client.query('INSERT INTO public.process_type(process_name,r_id,category_id,is_active) VALUES($1,$2,$3,$4)', [processName.trim(),route.rows[0].r_id,categoryId,isActive]);
         }
         await client.query('COMMIT');

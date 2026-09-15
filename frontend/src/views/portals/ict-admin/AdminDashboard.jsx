@@ -17,6 +17,7 @@ import OperationalAnalytics from './components/OperationalAnalyticsTab';
 
 // --- MODALS ---
 import ManageAccountModal from './modals/ManageAccountModal';
+import OfficeEditModal from './modals/OfficeEditModal';
 
 // -- Shared Component --
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
@@ -200,6 +201,12 @@ export default function AdminDashboard() {
         setSelectedUser={accountProps.setSelectedUser}
         handleUpdateAccount={accountProps.handleUpdateAccount}
         offices={accountProps.offices}
+      />
+      <OfficeEditModal
+        office={matrixProps.editingOffice}
+        offices={matrixProps.offices}
+        onClose={() => matrixProps.setEditingOffice(null)}
+        onSave={matrixProps.saveOfficeEdit}
       />
     </div>
   );

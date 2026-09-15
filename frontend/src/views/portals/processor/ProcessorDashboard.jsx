@@ -14,7 +14,7 @@ import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
 
 // --- EXTRACTED MODALS ---
 import ScannerModal from "./modals/ScannerModal";
-import OfficeDocumentModal from "./modals/OfficeDocumentModal";
+import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
 import OriginatorResourcesTab from '../originator/components/OriginatorResourcesTab';
 
@@ -432,6 +432,7 @@ const handleNotificationClick = async (notif) => {
             <UserProfileTab 
               {...processorData} 
               handleUpdateProfile={handleUpdateProfile}
+              setTwoFaEnabled={processorData.setTwoFaEnabled}
               toggle2FA={toggle2FA}
               setShowPassModal={setShowPassModal}
               roleLabel="Office Staff"
@@ -451,7 +452,7 @@ const handleNotificationClick = async (notif) => {
       )}
 
       {showPipelineModal && selectedDoc && (
-        <OfficeDocumentModal
+        <DocumentTrackingModal
           selectedDoc={selectedDoc}
           isHistoryDetails={isHistoryDetails}
           officesList={processorData.officesList}
@@ -463,7 +464,8 @@ const handleNotificationClick = async (notif) => {
  
       {showPassModal && (
         <ChangePasswordModal 
-          setShowPassModal={setShowPassModal}
+          isOpen={showPassModal}
+          onClose={() => setShowPassModal(false)}
           currentPassword={currentPassword} setCurrentPassword={setCurrentPassword}
           newPassword={newPassword} setNewPassword={setNewPassword}
           confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}

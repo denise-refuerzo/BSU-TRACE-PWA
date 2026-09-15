@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function CampusInfrastructureTab({
   handleCreateDepartment, newDeptName, setNewDeptName,
-  handleCreateOffice, newOfficeName, setNewOfficeName, infraSummary
+  handleCreateOffice, newOfficeName, setNewOfficeName, newOfficeCategory, setNewOfficeCategory, officeCategoryEnabled, setOfficeCategoryEnabled, infraSummary
   , offices, editInfrastructure, deleteInfrastructure
 }) {
   return (
@@ -14,9 +14,9 @@ export default function CampusInfrastructureTab({
         <p className="text-sm text-gray-500 mt-1">Manage institutional departments and administrative office routing nodes.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* REGISTER DEPARTMENT CARD */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col hover:shadow-md transition-shadow">
           <div className="mb-5">
             <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 uppercase tracking-wide">
               <div className="p-1.5 bg-red-50 text-[#D32F2F] rounded-lg">
@@ -30,7 +30,7 @@ export default function CampusInfrastructureTab({
               Expands available institutional scopes for user account creation and directory mapping.
             </p>
           </div>
-          <form onSubmit={handleCreateDepartment} className="flex flex-col sm:flex-row gap-3">
+          <form onSubmit={handleCreateDepartment} className="flex flex-col gap-3 mt-5">
             <input 
               type="text" 
               required 
@@ -41,7 +41,7 @@ export default function CampusInfrastructureTab({
             />
             <button 
               type="submit" 
-              className="px-5 py-2.5 bg-gray-900 hover:bg-black text-white text-sm font-bold rounded-lg shadow-sm transition-colors cursor-pointer whitespace-nowrap flex items-center justify-center gap-2"
+              className="w-full px-5 py-2.5 bg-gray-900 hover:bg-black text-white text-sm font-bold rounded-lg shadow-sm transition-colors cursor-pointer whitespace-nowrap flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
               Add Dept
@@ -50,7 +50,7 @@ export default function CampusInfrastructureTab({
         </div>
 
         {/* REGISTER OFFICE CARD */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col hover:shadow-md transition-shadow">
           <div className="mb-5">
             <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 uppercase tracking-wide">
               <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
@@ -64,7 +64,7 @@ export default function CampusInfrastructureTab({
               Populates available routing nodes for workflow blueprints and user assignments.
             </p>
           </div>
-          <form onSubmit={handleCreateOffice} className="flex flex-col sm:flex-row gap-3">
+          <form onSubmit={handleCreateOffice} className="flex flex-col gap-3 mt-5">
             <input 
               type="text" 
               required 
@@ -73,6 +73,27 @@ export default function CampusInfrastructureTab({
               placeholder="e.g. Guidance Office, Cashier" 
               className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-all" 
             />
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input type="checkbox" checked={officeCategoryEnabled} onChange={e => setOfficeCategoryEnabled(e.target.checked)} className="accent-blue-600" />
+              Add this office to a category
+            </label>
+            {officeCategoryEnabled && <>
+              <input
+                type="text"
+                list="office-category-suggestions"
+                value={newOfficeCategory}
+                onChange={e => setNewOfficeCategory(e.target.value)}
+                placeholder="Start typing a category or create a new one"
+                maxLength={150}
+                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-all"
+              />
+              <datalist id="office-category-suggestions">
+                {[...new Set([
+                  ...offices.map(office => office.category),
+                  ...(infraSummary.officeCapacity || []).map(office => office.office_category)
+                ].filter(Boolean))].sort().map(category => <option key={category} value={category} />)}
+              </datalist>
+            </>}
             <button 
               type="submit" 
               className="px-5 py-2.5 bg-gray-900 hover:bg-black text-white text-sm font-bold rounded-lg shadow-sm transition-colors cursor-pointer whitespace-nowrap flex items-center justify-center gap-2"
@@ -116,9 +137,10 @@ export default function CampusInfrastructureTab({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
                 </div>
-                <span className="text-sm font-semibold text-gray-800 truncate" title={off.office_name}>
-                  {off.office_name}
-                </span>
+                <div className="min-w-0">
+                  <span className="text-sm font-semibold text-gray-800 truncate block" title={off.office_name}>{off.office_name}</span>
+                  {off.office_category && <span className="text-[10px] text-gray-500 truncate block" title={off.office_category}>{off.office_category}</span>}
+                </div>
               </div>
               
               <div className="flex items-center gap-2"><span className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-wider whitespace-nowrap shrink-0 shadow-sm ${

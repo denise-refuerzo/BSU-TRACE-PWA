@@ -16,6 +16,7 @@ export default function DocumentSubmissionModal({
   canCompleteOriginProcessing = false,
   submitting = false,
   submissionError = ''
+  , placeholderSelections = {}
 }) {
   const [catalog,setCatalog] = useState({offices:[],categories:[]});
   const [catalogError,setCatalogError] = useState('');
@@ -26,10 +27,17 @@ export default function DocumentSubmissionModal({
   })).then(([offices,categories])=>{if(!cancelled){setCatalog({offices:offices.filter(o=>Number(o.id)!==999),categories});setCatalogError('');}})
     .catch(err=>{if(!cancelled)setCatalogError(err.message);}).finally(()=>{if(!cancelled)setCatalogLoading(false);});return()=>{cancelled=true;};},[retry]);
   const custom = form.customRoute;
+  const selectedOfficial = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
+  const placeholderStops = selectedOfficial ? Array.from({length: 7}, (_, index) => ({
+    position: index + 1,
+    groupId: selectedOfficial[`stop_${index + 1}_group_id`],
+    groupName: selectedOfficial[`stop_${index + 1}_group_name`]
+  })).filter(stop => stop.groupId) : [];
   const changeCustom = patch => setForm({...form,customRoute:{...custom,...patch},completeOriginProcessing:false});
   const customValid = custom && custom.processName.trim() && (custom.categoryId || custom.categoryName.trim()) && custom.stops.every(Boolean) && !catalogLoading && !catalogError;
   const close = () => { handleProcessChange(''); setShowModal(false); };
-  const verified = custom ? customValid : processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId));
+  const placeholdersComplete = placeholderStops.every(stop => placeholderSelections[stop.groupId]);
+  const verified = custom ? customValid : processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId)) && placeholdersComplete;
   return (
     <div className="fixed inset-0 bg-neutral-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
       <div role="dialog" aria-modal="true" aria-labelledby="document-submission-heading" className="bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl border flex flex-col text-left animate-in fade-in zoom-in-95 duration-150">
@@ -85,6 +93,10 @@ export default function DocumentSubmissionModal({
               </div>
             </div>
           )}
+          {!custom && placeholderStops.length > 0 && <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
+            <div><p className="text-[10px] font-bold uppercase tracking-wider text-blue-800">Complete flexible route stops</p><p className="text-xs text-blue-900/80 mt-1">Choose the actual office for each category placeholder in this official pipeline.</p></div>
+            {placeholderStops.map(stop => <label key={stop.position} className="block text-sm font-semibold text-blue-950">Stop {stop.position}: {stop.groupName}<select required value={placeholderSelections[stop.groupId] || ''} onChange={event => setForm({...form, placeholderSelections: {...placeholderSelections, [stop.groupId]: Number(event.target.value)}})} className="w-full mt-1 border border-blue-200 rounded-lg p-2 bg-white text-sm"><option value="">Select an office from this category...</option>{catalog.offices.filter(office => office.category === stop.groupName).map(office => <option key={office.id} value={office.id}>{office.name}</option>)}</select></label>)}
+          </div>}
           {submissionError && <p role="alert" className="text-sm text-red-800">{submissionError}</p>}
           {canCompleteOriginProcessing && <label className="flex items-start gap-3 p-4 border border-red-200 bg-red-50 rounded-xl text-sm">
             <input type="checkbox" checked={!!form.completeOriginProcessing} onChange={e=>setForm({...form,completeOriginProcessing:e.target.checked})}/>
