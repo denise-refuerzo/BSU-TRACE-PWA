@@ -426,6 +426,20 @@ app.get('/api/accounts', requireAuth, async (req, res) => {
 // ==========================================
 // 2.1 CREATE NEW ACCOUNT ENDPOINT
 // ==========================================
+const findGsoOfficeId = async (db) => {
+  const result = await db.query(`
+    SELECT o_id
+    FROM public.offices
+    WHERE LOWER(BTRIM(office_name)) IN ('general services', 'general services office', 'gso')
+       OR LOWER(office_name) LIKE '%general services%'
+    ORDER BY CASE WHEN LOWER(BTRIM(office_name)) = 'general services' THEN 0
+                  WHEN LOWER(BTRIM(office_name)) = 'general services office' THEN 1
+                  ELSE 2 END, o_id
+    LIMIT 1
+  `);
+  return result.rows[0] ? Number(result.rows[0].o_id) : null;
+};
+
 app.post('/api/accounts', requireAuth, async (req, res) => {
   const { username, password, fullName, email, departmentId, officeId } = req.body;
   const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
@@ -447,9 +461,20 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     
-    const assignedOfficeId = (parseInt(accountType) === 2 || parseInt(accountType) === 3 || parseInt(accountType) === 4) && officeId 
-      ? parseInt(officeId) 
-      : null;
+    let assignedOfficeId = ([2, 3, 4].includes(accountType) && officeId) ? parseInt(officeId) : null;
+
+    if (accountType === 4) {
+      const gsoOfficeId = await findGsoOfficeId(pool);
+      if (!gsoOfficeId) return res.status(409).json({ error: 'The General Services office must be registered before creating its administrator account.' });
+      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 LIMIT 1');
+      if (existingGso.rowCount) return res.status(409).json({ error: 'A GSO Admin account already exists. Manage that account instead of creating another one.' });
+      assignedOfficeId = gsoOfficeId;
+    } else if (assignedOfficeId) {
+      const gsoOfficeId = await findGsoOfficeId(pool);
+      if (gsoOfficeId && assignedOfficeId === gsoOfficeId) {
+        return res.status(400).json({ error: 'The General Services Office is reserved for the single GSO Admin account.' });
+      }
+    }
 
     const assignedDepartmentId = departmentId ? parseInt(departmentId) : 1;
 
@@ -484,9 +509,20 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Rejection: This username identifier is already registered to another user account.' });
     }
 
-    const assignedOfficeId = (parseInt(accountType) === 2 || parseInt(accountType) === 3 || parseInt(accountType) === 4) && officeId 
-      ? parseInt(officeId) 
-      : null;
+    let assignedOfficeId = ([2, 3, 4].includes(accountType) && officeId) ? parseInt(officeId) : null;
+
+    if (accountType === 4) {
+      const gsoOfficeId = await findGsoOfficeId(pool);
+      if (!gsoOfficeId) return res.status(409).json({ error: 'The General Services office must be registered before assigning the GSO Admin role.' });
+      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 AND u_id <> $1 LIMIT 1', [parseInt(userId)]);
+      if (existingGso.rowCount) return res.status(409).json({ error: 'A GSO Admin account already exists. Only one GSO Admin account is allowed.' });
+      assignedOfficeId = gsoOfficeId;
+    } else if (assignedOfficeId) {
+      const gsoOfficeId = await findGsoOfficeId(pool);
+      if (gsoOfficeId && assignedOfficeId === gsoOfficeId) {
+        return res.status(400).json({ error: 'The General Services Office is reserved for the single GSO Admin account.' });
+      }
+    }
 
     const assignedDepartmentId = departmentId ? parseInt(departmentId) : 1;
 
@@ -622,7 +658,7 @@ app.post('/api/users/:id/request-profile-otp', requireAuth, async (req, res) => 
 app.get('/api/offices', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT o_id AS id, office_name AS name FROM public.offices ORDER BY office_name ASC'
+      'SELECT o_id AS id, office_name AS name, office_category AS category FROM public.offices ORDER BY office_name ASC'
     );
     res.json(result.rows);
   } catch (err) {
@@ -657,19 +693,41 @@ app.post('/api/departments', requireAuth, async (req, res) => {
 // ==========================================
 // 3.2 CREATE OFFICE ENDPOINT
 // ==========================================
+const syncOfficeRouteGroup = async (db, officeId, category) => {
+  await db.query('DELETE FROM public.office_route_group_members WHERE office_id=$1', [officeId]);
+  if (!category) return;
+  await db.query('INSERT INTO public.office_route_groups (group_name) VALUES ($1) ON CONFLICT DO NOTHING', [category]);
+  const group = await db.query('SELECT group_id FROM public.office_route_groups WHERE LOWER(BTRIM(group_name))=LOWER($1) LIMIT 1', [category]);
+  if (group.rows[0]) await db.query('INSERT INTO public.office_route_group_members (group_id, office_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [group.rows[0].group_id, officeId]);
+};
+
 app.post('/api/offices', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
   const { officeName } = req.body;
+  const officeCategory = String(req.body.officeCategory ?? '').trim() || null;
   if (!officeName || officeName.trim() === "") {
     return res.status(400).json({ error: 'Rejection: Office destination tags cannot be instantiated as empty text strings.' });
   }
+  if (officeCategory && officeCategory.length > 150) {
+    return res.status(400).json({ error: 'Office category must be 150 characters or fewer.' });
+  }
 
   try {
-    const checkDup = await pool.query('SELECT * FROM public.offices WHERE LOWER(office_name) = $1', [officeName.trim().toLowerCase()]);
+    const checkDup = await pool.query('SELECT * FROM public.offices WHERE LOWER(BTRIM(office_name)) = $1', [officeName.trim().toLowerCase()]);
     if (checkDup.rows.length > 0) {
       return res.status(400).json({ error: 'Rejection: A structural branch mapping this destination name is already registered.' });
     }
 
-    await pool.query('INSERT INTO public.offices (office_name) VALUES ($1)', [officeName.trim()]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const created = await client.query('INSERT INTO public.offices (office_name, office_category) VALUES ($1, $2) RETURNING o_id', [officeName.trim(), officeCategory]);
+      await syncOfficeRouteGroup(client, created.rows[0].o_id, officeCategory);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
     res.status(201).json({ message: 'Success: Physical campus office station indexed into global catalogs!' });
   } catch (err) {
     console.error("Office drop node registration exception:", err);
@@ -712,8 +770,26 @@ app.delete('/api/departments/:id', requireAuth, async (req, res) => {
 app.put('/api/offices/:id', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
   const name = String(req.body.officeName || '').trim();
+  const category = String(req.body.officeCategory ?? '').trim() || null;
   if (!name) return res.status(400).json({error: 'Office name is required.'});
-  try { const r = await pool.query('UPDATE public.offices SET office_name=$1 WHERE o_id=$2 RETURNING o_id', [name, req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Office not found.'}); res.json({message:'Office updated.'}); }
+  if (category && category.length > 150) return res.status(400).json({error: 'Office category must be 150 characters or fewer.'});
+  try {
+    const duplicate = await pool.query('SELECT o_id FROM public.offices WHERE LOWER(BTRIM(office_name)) = $1 AND o_id <> $2', [name.toLowerCase(), req.params.id]);
+    if (duplicate.rowCount) return res.status(409).json({error: 'That office already exists.'});
+    const client = await pool.connect();
+    let r;
+    try {
+      await client.query('BEGIN');
+      r = await client.query('UPDATE public.offices SET office_name=$1, office_category=$2 WHERE o_id=$3 RETURNING o_id', [name, category, req.params.id]);
+      if (r.rowCount) await syncOfficeRouteGroup(client, r.rows[0].o_id, category);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
+    if (!r.rowCount) return res.status(404).json({error:'Office not found.'});
+    res.json({message:'Office and category updated.'});
+  }
   catch (e) { res.status(e.code === '23505' ? 409 : 500).json({error: e.code === '23505' ? 'That office already exists.' : 'Unable to update office.'}); }
 });
 app.delete('/api/offices/:id', requireAuth, async (req, res) => {
@@ -1688,11 +1764,19 @@ app.get('/api/admin/infrastructure-summary', async (req, res) => {
       ORDER BY a.a_id ASC
     `);
     const officeCapacityRes = await pool.query(`
-      SELECT off.office_name, COUNT(u.u_id)::int as staff_count 
+      SELECT off.o_id, off.office_name, off.office_category,
+        COUNT(u.u_id)::int AS staff_count,
+        COALESCE(
+          json_agg(
+            json_build_object('user_id', u.u_id, 'full_name', u.full_name, 'username', u.username)
+            ORDER BY lower(u.full_name)
+          ) FILTER (WHERE u.u_id IS NOT NULL),
+          '[]'::json
+        ) AS staff
       FROM public.offices off 
       LEFT JOIN public."User" u ON off.o_id = u.o_id 
-      GROUP BY off.office_name 
-      ORDER BY office_name ASC
+      GROUP BY off.o_id, off.office_name, off.office_category
+      ORDER BY off.office_name ASC
     `);
 
     res.json({

@@ -53,7 +53,7 @@ export default function useOriginatorData() {
   const [showPassModal, setShowPassModal] = useState(false);
   const [generatedQr, setGeneratedQr] = useState('');
   
-  const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false });
+  const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, placeholderSelections: {} });
   const [passForm, setPassForm] = useState({ currentPassword: '', newPassword: '', confirmNew: '' });
   const [selectedRoutePreview, setSelectedRoutePreview] = useState([]);
   const [estimatedDate, setEstimatedDate] = useState('');
@@ -261,9 +261,13 @@ export default function useOriginatorData() {
     const selected = processTypes.find(p => p.p_id === parseInt(pId));
     if (selected && selected.is_active === true) {
       const stops = [];
-      for (let i = 1; i <= 7; i++) if (selected[`stop_${i}_name`]) stops.push(selected[`stop_${i}_name`]);
+      for (let i = 1; i <= 7; i++) {
+        const kind = selected[`stop_${i}_kind`];
+        const name = kind === 'group' ? selected[`stop_${i}_group_name`] : selected[`stop_${i}_name`];
+        if (name) stops.push(kind === 'group' ? `${name} category` : name);
+      }
       setSelectedRoutePreview(stops);
-      setForm({ ...form, processTypeId: pId });
+      setForm({ ...form, processTypeId: pId, placeholderSelections: {} });
       
       const prediction = edcPredictions.find(e => e.process_id === parseInt(pId));
       if (prediction) {
@@ -276,7 +280,7 @@ export default function useOriginatorData() {
       }
     } else {
       setSelectedRoutePreview([]);
-      setForm({ ...form, processTypeId: '' });
+      setForm({ ...form, processTypeId: '', placeholderSelections: {} });
       setEstimatedDate('');
     }
   };
@@ -302,7 +306,8 @@ export default function useOriginatorData() {
           title: form.title, 
           processTypeId: parseInt(form.processTypeId), 
           customRoute: form.customRoute,
-          edc: edcPayload
+          edc: edcPayload,
+          placeholderSelections: form.placeholderSelections || {}
         })
       });
       
@@ -312,7 +317,7 @@ export default function useOriginatorData() {
       setGeneratedQr(data.qrCode);
       setShowModal(false);
       setShowQrModal(true);
-      setForm({ title: '', processTypeId: '', confirmation: false });
+      setForm({ title: '', processTypeId: '', confirmation: false, placeholderSelections: {} });
       setSelectedRoutePreview([]);
       setEstimatedDate('');
       fetchDashboardLedger();

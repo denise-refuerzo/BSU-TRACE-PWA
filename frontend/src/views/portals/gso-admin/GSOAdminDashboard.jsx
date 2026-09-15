@@ -30,7 +30,7 @@ import QRScannerModal from './modals/QRScannerModal';
 import AddAssetModal from './modals/AddAssetModal';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 import MasterChecklistModal from './modals/MasterChecklistModal';
-import OfficeDocumentModal from '../processor/modals/OfficeDocumentModal';
+import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 import EditAssetModal from './modals/EditAssetModal';
 import ExportLogsModal from './modals/ExportLogsModal';
 import FacilityBlackoutModal from './modals/FacilityBlackoutModal';
@@ -834,7 +834,7 @@ export default function GSOAdminDashboard() {
         newPassword={newPassword} setNewPassword={setNewPassword}
         confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} handleUpdatePassword={() => {}}
       />
-      {showDetailsModal && selectedDoc && <OfficeDocumentModal selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
+      {showDetailsModal && selectedDoc && <DocumentTrackingModal selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
         processorOfficeId={gsoOfficeId} officesList={officesList} onClose={() => setShowDetailsModal(false)} onRefresh={fetchGSOMeta} onOpenChat={handleNavigateToChat} />}
 
       <MasterChecklistModal

@@ -7,6 +7,7 @@ export function useRolesPermissions() {
 
   // --- CATALOG INDICES STATES ---
   const [offices, setOffices] = useState([]);
+  const [routeGroups, setRouteGroups] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState('');
@@ -23,6 +24,9 @@ export function useRolesPermissions() {
   // --- CAMPUS STRUCTURES FORM STATES ---
   const [newDeptName, setNewDeptName] = useState('');
   const [newOfficeName, setNewOfficeName] = useState('');
+  const [newOfficeCategory, setNewOfficeCategory] = useState('');
+  const [officeCategoryEnabled, setOfficeCategoryEnabled] = useState(false);
+  const [editingOffice, setEditingOffice] = useState(null);
 
   useEffect(() => {
     fetchBaselineCatalogs();
@@ -38,6 +42,9 @@ export function useRolesPermissions() {
       const officeRes = await fetchWithAuth('/api/offices');
       const officeData = await officeRes.json();
       if (officeRes.ok) setOffices(officeData);
+      const groupRes = await fetchWithAuth('/api/office-route-groups');
+      const groupData = await groupRes.json();
+      if (groupRes.ok) setRouteGroups(groupData);
 
       const processRes = await fetchWithAuth('/api/process-types');
       const processData = await processRes.json();
@@ -72,7 +79,8 @@ export function useRolesPermissions() {
 
   const handleStopSelectorChange = (index, value) => {
     const updated = [...selectedStops];
-    const parsedValue = value ? parseInt(value) : null;
+    const current = updated[index];
+    const parsedValue = value ? (current?.type === 'group' ? {type: 'group', groupId: parseInt(value, 10)} : parseInt(value, 10)) : null;
     updated[index] = parsedValue;
 
     // Automated Chain-Limiting Guard: If an admin clears a middle step out, clear all downstream choices
@@ -81,6 +89,13 @@ export function useRolesPermissions() {
         updated[i] = null;
       }
     }
+    setSelectedStops(updated);
+  };
+
+  const handleStopKindChange = (index, kind) => {
+    const updated = [...selectedStops];
+    updated[index] = kind === 'group' ? {type: 'group', groupId: null} : null;
+    for (let i = index + 1; i < updated.length; i += 1) updated[i] = null;
     setSelectedStops(updated);
   };
 
@@ -95,7 +110,7 @@ export function useRolesPermissions() {
   // --- PROCESS TEMPLATE ROUTING TRANSACTION SUBMISSION ---
   const handleProcessFormSubmit = async (e) => {
     e.preventDefault();
-    const processedStopsPayload = selectedStops.filter(s => s !== null);
+    const processedStopsPayload = selectedStops.filter(s => s !== null && (Number.isInteger(s) || (s?.type === 'group' && Number.isInteger(s.groupId))));
 
     if (processedStopsPayload.length < 2) {
       Swal.fire('Configuration Rejection', 'Invalid configuration path: A minimum sequence of 2 office locations must be assigned.', 'error');
@@ -172,13 +187,15 @@ export function useRolesPermissions() {
       const response = await fetchWithAuth('/api/offices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ officeName: newOfficeName })
+        body: JSON.stringify({ officeName: newOfficeName, officeCategory: officeCategoryEnabled ? newOfficeCategory : '' })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
 
       Swal.fire('Registered!', data.message, 'success');
       setNewOfficeName('');
+      setNewOfficeCategory('');
+      setOfficeCategoryEnabled(false);
       fetchBaselineCatalogs();
     } catch (err) {
       Swal.fire('Operation Blocked', err.message, 'error');
@@ -186,12 +203,24 @@ export function useRolesPermissions() {
   };
 
   const editInfrastructure = async (type, id, current) => {
-    const result = await Swal.fire({title:`Rename ${type}`, input:'text', inputValue:current, inputLabel:`New ${type} name`, showCancelButton:true, confirmButtonText:'Save', confirmButtonColor:'#8c1023', inputValidator:value => !value?.trim() ? 'A name is required.' : undefined});
-    const value = result.isConfirmed ? result.value : '';
-    if (!value || value.trim() === current) return;
-    const response = await fetchWithAuth(`/api/${type === 'department' ? 'departments' : 'offices'}/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(type === 'department' ? {departmentName:value} : {officeName:value}) });
+    if (type === 'department') {
+      const result = await Swal.fire({title:'Rename department', input:'text', inputValue:current, inputLabel:'New department name', showCancelButton:true, confirmButtonText:'Save', confirmButtonColor:'#8c1023', inputValidator:value => !value?.trim() ? 'A name is required.' : undefined});
+      const value = result.isConfirmed ? result.value : '';
+      if (!value || value.trim() === current) return;
+      const response = await fetchWithAuth(`/api/departments/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({departmentName:value}) });
+      const data = await response.json(); if (!response.ok) return Swal.fire('Operation blocked', data.error, 'error');
+      Swal.fire('Updated', data.message, 'success'); fetchBaselineCatalogs();
+      return;
+    }
+    const office = offices.find(item => String(item.id) === String(id));
+    const officeSummary = (infraSummary.officeCapacity || []).find(item => String(item.o_id) === String(id));
+    setEditingOffice({ id, name: office?.name || current, category: office?.category || officeSummary?.office_category || '', staff: officeSummary?.staff || [] });
+  };
+  const saveOfficeEdit = async value => {
+    if (!editingOffice) return;
+    const response = await fetchWithAuth(`/api/offices/${editingOffice.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value) });
     const data = await response.json(); if (!response.ok) return Swal.fire('Operation blocked', data.error, 'error');
-    Swal.fire('Updated', data.message, 'success'); fetchBaselineCatalogs();
+    setEditingOffice(null); Swal.fire('Updated', data.message, 'success'); fetchBaselineCatalogs();
   };
   const deleteInfrastructure = async (type, id, current) => {
     const result = await Swal.fire({title:`Delete ${current}?`, text:'Accounts, blueprints, and documents that reference this item are protected. The deletion will be blocked while dependencies remain; related records will not be silently deleted.', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#8c1023'});
@@ -208,14 +237,16 @@ export function useRolesPermissions() {
 
   return {
     activeTab, setActiveTab,
-    offices, processTypes, infraSummary,
+    offices, routeGroups, processTypes, infraSummary,
     categories, categoryId, setCategoryId, catalogError, refreshCatalogs: fetchBaselineCatalogs,
     newProcessName, setNewProcessName,
     selectedStops, setSelectedStops,
     formMeta, setFormMeta,
     newDeptName, setNewDeptName,
     newOfficeName, setNewOfficeName,
-    handleAddStopSlot, handleRemoveTrailingStopSlot, handleStopSelectorChange,
+    newOfficeCategory, setNewOfficeCategory, officeCategoryEnabled, setOfficeCategoryEnabled,
+    editingOffice, setEditingOffice, saveOfficeEdit,
+    handleAddStopSlot, handleRemoveTrailingStopSlot, handleStopSelectorChange, handleStopKindChange,
     resetWorkflowForm, handleProcessFormSubmit, handleCreateDepartment, handleCreateOffice, editInfrastructure, deleteInfrastructure, deletePipeline
   };
 }
