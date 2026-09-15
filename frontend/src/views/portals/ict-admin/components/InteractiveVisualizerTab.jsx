@@ -4,14 +4,18 @@ import CustomRouteReview from './CustomRouteReview';
 
 export default function InteractiveVisualizerTab({
   formMeta, setFormMeta, newProcessName, setNewProcessName, selectedStops, setSelectedStops,
-  handleStopSelectorChange, handleAddStopSlot, handleRemoveTrailingStopSlot,
-  offices, resetWorkflowForm, handleProcessFormSubmit, processTypes,
+  handleStopSelectorChange, handleStopKindChange, handleAddStopSlot, handleRemoveTrailingStopSlot,
+  offices, routeGroups, resetWorkflowForm, handleProcessFormSubmit, processTypes,
   categories, categoryId, setCategoryId, catalogError, refreshCatalogs, deletePipeline
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-200">
       
       <div className="lg:col-span-3">
+        <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-950">
+          <p className="font-bold flex items-center gap-2"><span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-700 text-white text-xs">?</span> How flexible routing works</p>
+          <p className="mt-2 text-xs leading-relaxed text-blue-900">For official pipelines, each stop can be a fixed office or an office-category placeholder. A placeholder lets the submitter choose one actual office from ICT’s allowed category, and that choice is saved to the document’s route snapshot. Custom routes remain explicit and always use specific offices.</p>
+        </div>
         {catalogError && <p role="alert" className="text-red-700 mb-3">{catalogError} <button type="button" onClick={refreshCatalogs} className="underline">Retry</button></p>}
         <div className="mb-8"><CustomRouteReview onChanged={refreshCatalogs} /></div>
         <CategoryManagement categories={categories} onChanged={refreshCatalogs} />
@@ -86,22 +90,31 @@ export default function InteractiveVisualizerTab({
                     {index + 1}
                   </span>
                   
-                  <div className="flex-1 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                  <div className="flex-1 relative space-y-2">
+                    <div className="absolute top-10 bottom-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                     </div>
                     <select
+                      aria-label={`Stop ${index + 1} type`}
+                      value={stop?.type === 'group' ? 'group' : 'office'}
+                      onChange={e => handleStopKindChange(index, e.target.value)}
+                      className="w-full bg-white border border-blue-200 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-100"
+                    >
+                      <option value="office">Specific office</option>
+                      <option value="group">Category placeholder</option>
+                    </select>
+                    <select
                       required={index < 2}
-                      value={stop || ''}
+                      value={stop?.type === 'group' ? (stop.groupId || '') : (stop || '')}
                       onChange={e => handleStopSelectorChange(index, e.target.value)}
                       className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-red-100 focus:border-[#D32F2F] transition-all cursor-pointer shadow-sm appearance-none"
                     >
                       <option value="" className="text-gray-400">
                         {index < 2 ? `-- Select Target Stop Location (Required) --` : `-- Select Downstream Station (Optional) --`}
                       </option>
-                      {offices.map(o => (
-                        <option key={o.id} value={o.id}>{o.name}</option>
-                      ))}
+                      {stop?.type === 'group'
+                        ? routeGroups.filter(group => group.offices?.length).map(group => <option key={group.group_id} value={group.group_id}>{group.group_name} category ({group.offices.length} offices)</option>)
+                        : offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -184,8 +197,8 @@ export default function InteractiveVisualizerTab({
 
         <div className="space-y-3 overflow-y-auto custom-scrollbar flex-1 pr-2">
           {processTypes.map((p) => {
-            const stopsArray = [p.stop_1_name, p.stop_2_name, p.stop_3_name, p.stop_4_name, p.stop_5_name, p.stop_6_name, p.stop_7_name].filter(Boolean);
-            const stopsIdsArray = [p.stop_1, p.stop_2, p.stop_3, p.stop_4, p.stop_5, p.stop_6, p.stop_7].filter(Boolean);
+            const stopsArray = Array.from({length: 7}, (_, index) => p[`stop_${index + 1}_kind`] === 'group' ? `${p[`stop_${index + 1}_group_name`]} category` : p[`stop_${index + 1}_name`]).filter(Boolean);
+            const stopsIdsArray = Array.from({length: 7}, (_, index) => p[`stop_${index + 1}_kind`] === 'group' ? {type: 'group', groupId: p[`stop_${index + 1}_group_id`]} : p[`stop_${index + 1}`]).filter(Boolean);
             const isSelectedCard = formMeta.currentProcessId === p.p_id;
 
             return (

@@ -59,8 +59,8 @@ export function useAccountManagement() {
     
     // GSO Admin Auto-Assignment Interceptor
     if (form.accountType === 4) {
-      const gsoOffice = offices.find(o => o.name.includes('General Services Office') || o.name.includes('GSO'));
-      submissionFormPayload.officeId = gsoOffice ? gsoOffice.id : 3; // Fallback to ID 3
+      const gsoOffice = offices.find(o => /general services|\bgso\b/i.test(o.name));
+      submissionFormPayload.officeId = gsoOffice?.id || null;
     } else if (form.accountType !== 2 && form.accountType !== 3) {
       submissionFormPayload.officeId = null;
     }
@@ -107,8 +107,8 @@ export function useAccountManagement() {
           // GSO Admin Auto-Assignment Interceptor for Updates
           let payloadOfficeId = selectedUser.o_id;
           if (selectedUser.a_id === 4) {
-            const gsoOffice = offices.find(o => o.name.includes('General Services Office') || o.name.includes('GSO'));
-            payloadOfficeId = gsoOffice ? gsoOffice.id : 3;
+            const gsoOffice = offices.find(o => /general services|\bgso\b/i.test(o.name));
+            payloadOfficeId = gsoOffice?.id || null;
           } else if (selectedUser.a_id !== 2 && selectedUser.a_id !== 3) {
             payloadOfficeId = null;
           }

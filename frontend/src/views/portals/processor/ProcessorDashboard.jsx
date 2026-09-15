@@ -14,7 +14,7 @@ import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
 
 // --- EXTRACTED MODALS ---
 import ScannerModal from "./modals/ScannerModal";
-import OfficeDocumentModal from "./modals/OfficeDocumentModal";
+import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
 import OriginatorResourcesTab from '../originator/components/OriginatorResourcesTab';
 
@@ -452,7 +452,7 @@ const handleNotificationClick = async (notif) => {
       )}
 
       {showPipelineModal && selectedDoc && (
-        <OfficeDocumentModal
+        <DocumentTrackingModal
           selectedDoc={selectedDoc}
           isHistoryDetails={isHistoryDetails}
           officesList={processorData.officesList}

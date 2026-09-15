@@ -1,13 +1,16 @@
-const {fail, isOffice, resolveRoute, assertAction} = require('./officeWorkflow');
+const {fail, isOffice, resolveRoute, resolveTemplateRoute, assertAction} = require('./officeWorkflow');
 const crypto = require('node:crypto');
 const {routeProgress} = require('./routeProgress');
 
 module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
   app.get('/api/office/documents/:iniId', requireAuth, async (req,res) => {
     try {
-      const doc=(await pool.query(`SELECT i.*,p.process_name,u.full_name AS submitted_by
+      const doc=(await pool.query(`SELECT i.*,p.process_name,u.full_name AS submitted_by,
+        requestor_office.office_name AS requestor_office_name
         FROM public.initial_document i JOIN public.process_type p USING(p_id)
-        JOIN public."User" u ON i.u_id=u.u_id WHERE ini_id=$1`,[req.params.iniId])).rows[0];
+        JOIN public."User" u ON i.u_id=u.u_id
+        LEFT JOIN public.offices requestor_office ON u.o_id=requestor_office.o_id
+        WHERE ini_id=$1`,[req.params.iniId])).rows[0];
       if (!doc) return res.status(404).json({error:'Document not found.'});
       const steps=(await pool.query(`SELECT pd.*,o.office_name,s.current_status,n.office_name AS next_office_name FROM public.processed_document pd
         JOIN public.offices o ON pd.current_office_id=o.o_id JOIN public.status s USING(s_id)
@@ -55,7 +58,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     (ini_id,s_id,current_office_id,next_office_id) VALUES ($1,1,$2,$3)`, [id, office, next || null]);
 
   app.post('/api/documents', requireAuth, transaction(async (db, user, req) => {
-    const {title, edc, customRoute, completeOriginProcessing = false} = req.body;
+    const {title, edc, customRoute, completeOriginProcessing = false, placeholderSelections = {}} = req.body;
     let {processTypeId} = req.body;
     if (![1,2,3,4].includes(Number(user.a_id))) throw fail(403, 'This account cannot submit documents.');
     if (typeof title !== 'string' || !title.trim() || title.trim().length > 150) throw fail(400, 'Enter a document title of up to 150 characters.');
@@ -67,7 +70,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     const route = custom ? custom.route : (await db.query(`SELECT r.* FROM public.process_type p JOIN public.route r ON p.r_id=r.r_id
       WHERE p.p_id=$1 AND p.is_active IS TRUE AND p.route_status='official' FOR SHARE OF p,r`, [processTypeId])).rows[0];
     if (!route) throw fail(400, 'Select an active pipeline.');
-    const sequence = resolveRoute(route, user);
+    const sequence = custom ? resolveRoute(route, user) : await resolveTemplateRoute(db, route, user, placeholderSelections);
     if (!sequence.length) throw fail(400, 'This pipeline has no office stops.');
     if (completeOriginProcessing && (!isOffice(user) || Number(user.o_id) !== sequence[0]))
       throw fail(403, 'Only staff of the pipeline’s originating office may complete its processing upon submission.');

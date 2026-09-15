@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MoreVertical, Search, Filter, Plus, QrCode, FileText, AlertTriangle, ChevronLeft, ChevronRight, CheckCircle, Zap, MapPin } from 'lucide-react';
-import TrackingDetailsModal from '../modals/TrackingDetailsModal';
+import DocumentTrackingModal from '../../../shared/modals/DocumentTrackingModal';
 import ViewTrackingQrModal from '../modals/ViewTrackingQrModal';
 
 export default function OriginatorDocumentsTab({ 
@@ -459,12 +459,11 @@ export default function OriginatorDocumentsTab({
 
       {/* MODAL INJECTIONS */}
       {showDetailsModal && activeDetailsDoc && (
-        <TrackingDetailsModal 
-          activeDetailsDoc={activeDetailsDoc} 
-          setShowDetailsModal={setShowDetailsModal} 
-          activeRouteStops={activeRouteStops} 
-          getRenderStops={getRenderStops} 
-          onOpenChatWithDoc={onOpenChatWithDoc}
+        <DocumentTrackingModal
+          selectedDoc={activeDetailsDoc}
+          onClose={() => setShowDetailsModal(false)}
+          onOpenChat={onOpenChatWithDoc}
+          readOnly
         />
       )}
 

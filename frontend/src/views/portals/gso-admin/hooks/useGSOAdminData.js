@@ -55,7 +55,7 @@ export function useGSOAdminData() {
       const res = await fetchWithAuth(`/api/profile/${userId}`);
       const data = await res.json();
       if (res.ok) {
-        setGsoOfficeName(data.office_name || 'General Services Office');
+        setGsoOfficeName(data.office_name || 'General Services');
         setGsoOfficeId(data.o_id);
         setProfileName(data.full_name || '');
         setProfileEmail(data.uni_email || '');
