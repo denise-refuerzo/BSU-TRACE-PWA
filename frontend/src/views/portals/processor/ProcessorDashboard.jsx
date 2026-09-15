@@ -432,6 +432,7 @@ const handleNotificationClick = async (notif) => {
             <UserProfileTab 
               {...processorData} 
               handleUpdateProfile={handleUpdateProfile}
+              setTwoFaEnabled={processorData.setTwoFaEnabled}
               toggle2FA={toggle2FA}
               setShowPassModal={setShowPassModal}
               roleLabel="Office Staff"
@@ -463,7 +464,8 @@ const handleNotificationClick = async (notif) => {
  
       {showPassModal && (
         <ChangePasswordModal 
-          setShowPassModal={setShowPassModal}
+          isOpen={showPassModal}
+          onClose={() => setShowPassModal(false)}
           currentPassword={currentPassword} setCurrentPassword={setCurrentPassword}
           newPassword={newPassword} setNewPassword={setNewPassword}
           confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}

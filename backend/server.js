@@ -279,6 +279,47 @@ app.post('/api/profile/:id/verify-enable-2fa', requireAuth, async (req, res) => 
 });
 
 // ==========================================
+// 1.3.1 VERIFY & DISABLE 2FA ENDPOINT
+// ==========================================
+app.post('/api/profile/:id/verify-disable-2fa', requireAuth, async (req, res) => {
+  const userId = req.params.id;
+  const { otpCode } = req.body;
+
+  try {
+    // 1. Fetch the user's stored OTP
+    const result = await pool.query(
+      'SELECT two_fa_code,two_fa_code_expires,two_fa_attempts,is_active FROM public."User" WHERE u_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // 2. Check if the code matches
+    const pending = result.rows[0];
+    if (!pending.is_active || !/^\d{6}$/.test(String(otpCode || '')) || !pending.two_fa_code ||
+        !pending.two_fa_code_expires || new Date(pending.two_fa_code_expires) < new Date() ||
+        Number(pending.two_fa_attempts || 0) >= TWO_FA_MAX_ATTEMPTS || pending.two_fa_code !== String(otpCode)) {
+      await pool.query('UPDATE public."User" SET two_fa_attempts = COALESCE(two_fa_attempts,0) + 1 WHERE u_id = $1', [userId]);
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    // 3. Code matches! Disable 2FA and clear the temporary OTP code
+    await pool.query(
+      'UPDATE public."User" SET two_fa_enabled = false, two_fa_code = NULL, two_fa_code_expires = NULL, two_fa_attempts = 0 WHERE u_id = $1',
+      [userId]
+    );
+
+    res.status(200).json({ message: 'Two-Factor Authentication has been successfully disabled.' });
+
+  } catch (error) {
+    console.error('Disable 2FA Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ==========================================
 // 1.4 FORGOT PASSWORD: IDENTIFY USER
 // ==========================================
 app.post('/api/auth/forgot-password/identify', async (req, res) => {
