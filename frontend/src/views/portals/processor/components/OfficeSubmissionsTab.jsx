@@ -9,7 +9,6 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const userId = localStorage.getItem('userId');
   
   // --- STATE ---
-  const [estimateBase, setEstimateBase] = useState(() => Date.now());
   const [documents, setDocuments] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +27,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   
   const [predictions, setPredictions] = useState([]);
   const [customHours, setCustomHours] = useState(null);
+  const [customDeliveryDate, setCustomDeliveryDate] = useState(null);
   const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false });
 
   // --- OPTIMIZATION: Search Debouncing ---
@@ -52,15 +52,14 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
 
   useEffect(() => { let cancelled = false; fetchWithAuth('/api/analytics/edc').then(async res => { if (res.ok) { const data = await res.json(); if (!cancelled && Array.isArray(data)) setPredictions(data); } }).catch(() => {}); return () => { cancelled = true; }; }, []);
 
-  useEffect(() => { let cancelled = false; const ids = form.customRoute?.stops?.filter(Boolean); if (!ids?.length) { setCustomHours(null); return; } fetchWithAuth(`/api/analytics/edc?route=${ids.join(',')}`).then(async r => r.ok ? r.json() : []).then(d => { if (!cancelled) setCustomHours(d[0]?.estimated_hours_to_complete ?? null); }).catch(() => setCustomHours(null)); return () => { cancelled = true; }; }, [form.customRoute?.stops?.join(',')]);
+  useEffect(() => { let cancelled = false; const ids = form.customRoute?.stops?.filter(Boolean); if (!ids?.length) { setCustomHours(null); setCustomDeliveryDate(null); return; } fetchWithAuth(`/api/analytics/edc?route=${ids.join(',')}`).then(async r => r.ok ? r.json() : []).then(d => { if (!cancelled) { setCustomHours(d[0]?.estimated_hours_to_complete ?? null); setCustomDeliveryDate(d[0]?.estimated_delivery_date ?? null); } }).catch(() => { setCustomHours(null); setCustomDeliveryDate(null); }); return () => { cancelled = true; }; }, [form.customRoute?.stops?.join(',')]);
 
   // --- LOGIC ---
   const process = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
   const eligible = form.customRoute ? Number(form.customRoute.stops[0]) === Number(officeId) : process && Number(process.resolved_origin_office_id) === Number(officeId);
   const hours = Number(predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete);
-  const estimate = Number.isFinite(hours) && hours >= 0 ? new Date(estimateBase + hours * 3600000) : null;
-  const edc = estimate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(estimate) : null;
-  const customEdc = form.customRoute?.stops?.every(Boolean) && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + customHours * 3600000)) : null;
+  const edc = Number.isFinite(hours) && hours >= 0 ? predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_delivery_date : null;
+  const customEdc = form.customRoute?.stops?.every(Boolean) && customHours !== null ? customDeliveryDate : null;
   const resolvedEdc = form.customRoute ? customEdc : edc;
 
   const submit = async e => {
@@ -156,7 +155,7 @@ export default function OfficeSubmissionsTab({officeId,onProcessed=()=>{}}) {
           <p className="text-xs text-neutral-500 font-medium mt-1">Manage and track documents submitted by your office.</p>
         </div>
         <button 
-          onClick={() => { setEstimateBase(Date.now()); setLoading(true); setShowModal(true); workflows(); }} 
+          onClick={() => { setLoading(true); setShowModal(true); workflows(); }} 
           className="flex items-center justify-center gap-2 bg-red-800 hover:bg-red-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200"
         >
           <Plus size={16} /> Submit Document
@@ -334,7 +333,7 @@ export default function OfficeSubmissionsTab({officeId,onProcessed=()=>{}}) {
           workflowsLoading={loading} 
           workflowError={workflowError} 
           retryWorkflows={() => { setLoading(true); workflows(); }} 
-          estimatedDate={form.customRoute ? (customEdc ? formatPhilippineDate(customEdc) : 'Complete the route to calculate') : (estimate ? formatPhilippineDate(estimate) : "Estimate unavailable")} 
+          estimatedDate={form.customRoute ? (customEdc ? formatPhilippineDate(customEdc) : 'Complete the route to calculate') : (edc ? formatPhilippineDate(edc) : "Estimate unavailable")} 
           selectedRoutePreview={process?.resolved_route_names || []} 
           canCompleteOriginProcessing={eligible} 
           submitting={busy} 
