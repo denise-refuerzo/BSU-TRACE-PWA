@@ -375,7 +375,7 @@ const handleNotificationClick = async (notif) => {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resources' ? 'School Resources' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Office Processing System' : activeTab === 'history' ? 'Office Transaction Ledger' : 'Office Dashboard'}
+                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resources' ? 'School Resources' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Office Processing System' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
               </h2>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
             </div>

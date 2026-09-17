@@ -92,7 +92,7 @@ export default function OriginatorDashboard() {
               />
               <div>
                 <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
-                <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Originator</span>
+                <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">Faculty</span>
               </div>
             </div>
             <button 

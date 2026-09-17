@@ -143,7 +143,7 @@ export default function OriginatorResourcesTab({ userId, officeName = '' }) {
   }, []);
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER & TABS SECTION */}
       <div className="trace-section-banner bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-5">

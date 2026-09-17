@@ -3,7 +3,7 @@ import { fetchWithAuth } from '../../../../api';
 import DocumentSubmissionModal from '../../originator/modals/DocumentSubmissionModal';
 import OfficeDocumentModal from '../../../shared/modals/DocumentTrackingModal';
 import { formatPhilippineDateTime, formatPhilippineDate } from '../../../../utils/philippineTime';
-import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Eye, Inbox, Building, Filter } from 'lucide-react';
+import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Building, Filter, MoreVertical } from 'lucide-react';
 
 export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} }) {
   const userId = localStorage.getItem('userId');
@@ -13,7 +13,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const [documents, setDocuments] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isDocsLoading, setIsDocsLoading] = useState(true); // Tracks initial document load
+  const [isDocsLoading, setIsDocsLoading] = useState(true);
   const [error, setError] = useState('');
   const [workflowError, setWorkflowError] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -31,7 +31,6 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false });
 
   // --- OPTIMIZATION: Search Debouncing ---
-  // Prevents the UI from stuttering by waiting 300ms after the user stops typing
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
@@ -85,22 +84,12 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   // --- UI HELPERS ---
   const getStatusStyles = (status) => {
     const s = status?.toLowerCase() || '';
-    if (s.includes('completed') || s.includes('finalized')) return 'bg-green-50 text-green-700 border-green-200';
-    if (s.includes('verification') || s.includes('transit') || s.includes('routing')) return 'bg-purple-50 text-purple-700 border-purple-200';
-    if (s.includes('action required') || s.includes('halted')) return 'bg-red-50 text-red-700 border-red-200';
-    return 'bg-amber-50 text-amber-700 border-amber-200';
-  };
-
-  const getStatusDot = (status) => {
-    const s = status?.toLowerCase() || '';
-    if (s.includes('completed') || s.includes('finalized')) return 'bg-green-500';
-    if (s.includes('verification') || s.includes('transit') || s.includes('routing')) return 'bg-purple-500';
-    if (s.includes('action required') || s.includes('halted')) return 'bg-red-500';
-    return 'bg-amber-500';
+    if (s.includes('completed') || s.includes('finalized')) return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    if (s.includes('action required') || s.includes('halted')) return 'bg-red-50 text-[#D32F2F] border border-red-200';
+    return 'bg-amber-50 text-amber-700 border border-amber-200';
   };
 
   // --- OPTIMIZATION: Data Memoization ---
-  // React will only recalculate this list if documents, search, or filters change
   const filteredDocs = useMemo(() => {
     return documents.filter(d => {
       const matchesSearch = (d.title + ' ' + d.qr_code).toLowerCase().includes(debouncedSearch.toLowerCase());
@@ -110,17 +99,17 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   }, [documents, debouncedSearch, filterStatus]);
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-neutral-900 tracking-tight">Office Submissions</h2>
-          <p className="text-xs text-neutral-500 font-medium mt-1">Manage and track documents submitted by your office.</p>
+          <h2 className="text-xl font-black text-gray-900 tracking-tight">Office Submissions</h2>
+          <p className="text-xs text-gray-500 font-medium mt-1">Manage and track documents submitted by your office.</p>
         </div>
         <button 
           onClick={() => { setEstimateBase(Date.now()); setLoading(true); setShowModal(true); workflows(); }} 
-          className="flex items-center justify-center gap-2 bg-red-800 hover:bg-red-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200"
+          className="flex items-center justify-center gap-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200 w-full sm:w-auto"
         >
           <Plus size={16} /> Submit Document
         </button>
@@ -128,39 +117,30 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
 
       {error && !showModal && (
         <div className="p-3 bg-red-50 border border-red-100 text-red-800 text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm">
-          <AlertCircle size={16} /> {error}
+          <AlertCircle size={16} className="shrink-0" /> {error}
         </div>
       )}
 
       {/* MATRIX TABLE CONTAINER */}
-      <div className="bg-white border border-neutral-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col scroll-mt-6">
         
         {/* Table Controls Header */}
-        <div className="p-4 border-b border-neutral-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-neutral-50/50">
+        <div className="p-5 border-b border-gray-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-gray-50/50">
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-black text-neutral-900 tracking-tight uppercase">Submitted Documents Matrix</h3>
+            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <svg className="w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+              Submitted Documents
+            </h3>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Search Bar */}
-            <div className="relative flex-1 sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={14} />
-              <input 
-                type="text" 
-                placeholder="Search by title or ID..." 
-                value={search} 
-                onChange={e => setSearch(e.target.value)} 
-                className="w-full pl-9 pr-4 py-2 text-xs border border-neutral-300 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-white font-bold text-neutral-800 placeholder:text-neutral-400 shadow-sm transition-shadow transition-colors duration-200" 
-              />
-            </div>
-
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Filter Dropdown */}
-            <div className="flex items-center gap-2 border border-neutral-300 rounded-xl px-3 py-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-red-800 transition-shadow transition-colors duration-200 cursor-pointer">
-              <Filter size={14} className="text-neutral-500" />
+            <div className="flex items-center gap-1.5 border border-gray-300 rounded-lg px-3 py-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-[#D32F2F] focus-within:border-[#D32F2F] transition-all cursor-pointer w-full sm:w-auto">
+              <Filter size={14} className="text-gray-400 shrink-0" />
               <select 
                 value={filterStatus} 
                 onChange={e => setFilterStatus(e.target.value)} 
-                className="bg-transparent text-xs outline-none cursor-pointer font-bold text-neutral-700 appearance-none pr-4"
+                className="bg-transparent text-xs outline-none cursor-pointer font-medium text-gray-700 appearance-none w-full pr-2"
               >
                 <option value="All">All Statuses</option>
                 <option value="Action Required">Action Required</option>
@@ -169,89 +149,112 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                 <option value="Completed">Completed</option>
               </select>
             </div>
+
+            {/* Search Bar */}
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
+              <input 
+                type="text" 
+                placeholder="Search by title or ID..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] bg-white shadow-sm transition-all" 
+              />
+            </div>
           </div>
         </div>
 
-        {/* Table Body */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
+        {/* Table Body - Mobile Friendly Horizontal Scroll */}
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[1000px] text-left text-sm border-collapse">
             <thead>
-              <tr className="bg-neutral-50 border-b border-neutral-200">
-                <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-400">Document Title</th>
-                <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-400">Submitted By</th>
-                <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-400">Current Office</th>
-                <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-400">Status</th>
-                <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-400 text-right">Actions</th>
+              <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-wider">
+                <th className="p-4">Document Name</th>
+                <th className="p-4">Reference ID (QR)</th>
+                <th className="p-4">Process Type</th>
+                <th className="p-4">Est. Completion</th>
+                <th className="p-4">Current Location</th>
+                <th className="p-4 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-gray-100">
               
               {/* OPTIMIZATION: Skeleton Loaders for Initial Fetch */}
               {isDocsLoading && documents.length === 0 ? (
                 [...Array(4)].map((_, i) => (
                   <tr key={`skeleton-${i}`}>
-                    <td className="px-5 py-4">
+                    <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-neutral-200 animate-pulse"></div>
+                        <div className="w-10 h-10 rounded-lg bg-gray-200 animate-pulse shrink-0"></div>
                         <div className="space-y-2">
-                          <div className="h-4 w-48 bg-neutral-200 rounded animate-pulse"></div>
-                          <div className="h-3 w-32 bg-neutral-100 rounded animate-pulse"></div>
+                          <div className="h-4 w-48 bg-gray-200 rounded animate-pulse"></div>
+                          <div className="h-3 w-32 bg-gray-100 rounded animate-pulse"></div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4"><div className="h-4 w-24 bg-neutral-200 rounded animate-pulse"></div></td>
-                    <td className="px-5 py-4"><div className="h-4 w-32 bg-neutral-200 rounded animate-pulse"></div></td>
-                    <td className="px-5 py-4"><div className="h-6 w-20 bg-neutral-200 rounded-md animate-pulse"></div></td>
-                    <td className="px-5 py-4 text-right"><div className="h-8 w-24 bg-neutral-200 rounded-lg animate-pulse ml-auto"></div></td>
+                    <td className="p-4"><div className="h-6 w-24 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="p-4"><div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="p-4"><div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="p-4"><div className="h-6 w-24 bg-gray-200 rounded-md animate-pulse"></div></td>
+                    <td className="p-4 text-center"><div className="h-8 w-8 bg-gray-200 rounded-lg animate-pulse mx-auto"></div></td>
                   </tr>
                 ))
               ) : filteredDocs.length > 0 ? (
                 /* Actual Rendered Data */
                 filteredDocs.map(d => (
-                  <tr key={d.ini_id} className="hover:bg-neutral-50/80 transition-colors duration-150 group">
-                    <td className="px-5 py-4">
+                  <tr key={d.ini_id} 
+                      onClick={() => setSelected(d)}
+                      className={`transition-colors cursor-pointer group ${selected?.ini_id === d.ini_id ? 'bg-red-50/40' : 'hover:bg-gray-50/80'}`}>
+                    <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-neutral-100 border border-neutral-200 group-hover:bg-white group-hover:border-red-200 transition-colors duration-150">
-                          <FileText size={16} className="text-neutral-500 group-hover:text-red-800 transition-colors duration-150" />
+                        <div className={`p-2 rounded-lg transition-all duration-150 shrink-0 ${selected?.ini_id === d.ini_id ? 'bg-white shadow-sm border border-red-100' : 'bg-gray-50 border border-gray-100 group-hover:bg-white group-hover:border-red-100 group-hover:shadow-sm'}`}>
+                          <FileText size={16} className={`transition-colors duration-150 ${selected?.ini_id === d.ini_id ? 'text-[#D32F2F]' : 'text-gray-500 group-hover:text-[#D32F2F]'}`} />
                         </div>
                         <div>
-                          <p className="font-bold text-neutral-900 text-sm leading-tight">{d.title}</p>
-                          <p className="text-[10px] font-bold text-neutral-400 mt-1 uppercase tracking-wide">
+                          <p className="font-bold text-gray-900 text-sm leading-tight line-clamp-2">{d.title}</p>
+                          <p className="text-[10px] text-gray-500 font-medium mt-1 uppercase tracking-wide">
                             {formatPhilippineDateTime(d.created_at)}
                           </p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-xs font-semibold text-neutral-700">{d.submitted_by}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2 text-xs font-bold text-neutral-700">
-                        <Building size={14} className="text-neutral-400" />
-                        {d.current_office}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm border ${getStatusStyles(d.status)}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${getStatusDot(d.status)}`}></span>
-                        {d.status}
+                    <td className="p-4">
+                      <span className="font-mono font-bold text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2 py-1 rounded whitespace-nowrap">
+                        {d.qr_code}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-right">
+                    <td className="p-4">
+                      <span className="flex items-center gap-1.5 text-xs text-gray-700 font-medium whitespace-nowrap">
+                        <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                        {d.process_name}
+                      </span>
+                    </td>
+                    <td className="p-4 text-xs text-gray-600 font-medium whitespace-nowrap">
+                      {d.edc ? new Date(d.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
+                    </td>
+                    <td className="p-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm whitespace-nowrap ${getStatusStyles(d.status)}`}>
+                        {d.status?.toLowerCase() === 'completed' ? 'Completed' : 
+                         d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
                       <button 
-                        onClick={() => setSelected(d)}
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-neutral-300 text-neutral-700 font-bold rounded-lg hover:bg-red-50 hover:text-red-800 hover:border-red-200 shadow-sm cursor-pointer focus:outline-none transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200 text-[11px]"
+                        onClick={(e) => { e.stopPropagation(); setSelected(d); }}
+                        className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 hover:shadow-sm text-gray-500 hover:text-gray-900 mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
                       >
-                        <Eye size={14} /> View Details
+                        <MoreVertical size={16} />
                       </button>
                       
                       {d.status?.toLowerCase() === 'action required' && (
-                        <div className="mt-3 text-left bg-red-50 border border-red-100 p-3 rounded-xl min-w-[200px]">
+                        <div className="mt-3 text-left bg-red-50 border border-red-200 p-3 rounded-xl min-w-[200px]" onClick={e => e.stopPropagation()}>
                           <p className="text-[11px] text-red-800 font-medium mb-2 leading-relaxed">
                             <strong className="block text-[10px] uppercase tracking-wider mb-0.5">Remarks:</strong>
                             {d.last_action}
                           </p>
                           {d.release_time ? (
                             <button 
-                              onClick={() => setRevision({ ...d })}
+                              onClick={(e) => { e.stopPropagation(); setRevision({ ...d }); }}
                               className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-red-700 hover:text-red-900 cursor-pointer mt-2 transform active:scale-95 transition-[transform,colors] duration-200"
                             >
                               <RefreshCw size={12} /> Correct & Resubmit
@@ -269,13 +272,13 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
               ) : (
                 /* Empty State */
                 <tr>
-                  <td colSpan="5" className="px-5 py-12 text-center bg-neutral-50/50">
+                  <td colSpan="6" className="p-12 text-center bg-gray-50/50">
                     <div className="flex flex-col items-center justify-center">
-                      <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mb-3">
-                        <Inbox className="w-8 h-8 text-neutral-300" />
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                        <Inbox className="w-8 h-8 text-gray-300" />
                       </div>
-                      <p className="text-sm font-bold text-neutral-600">No submissions found</p>
-                      <p className="text-xs text-neutral-500 mt-1 font-medium">Try adjusting your filters or search terms.</p>
+                      <p className="text-sm font-bold text-gray-600">No submissions found</p>
+                      <p className="text-xs text-gray-500 mt-1 font-medium">Try adjusting your filters or search terms.</p>
                     </div>
                   </td>
                 </tr>
@@ -319,7 +322,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
       {/* Resubmit Revision Modal */}
       {revision && (
         <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-xs z-[100] p-4 flex items-center justify-center animate-in fade-in duration-150">
-          <form onSubmit={resubmit} className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 text-left">
+          <form onSubmit={resubmit} className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-auto overflow-hidden animate-in zoom-in-95 duration-200 text-left">
             
             <div className="p-4 bg-neutral-900 text-white font-bold text-sm flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -338,36 +341,36 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-neutral-400 uppercase mb-1 tracking-wide">Document Title</label>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1 tracking-wide">Document Title</label>
                 <input 
                   required 
                   maxLength={150} 
                   value={revision.title} 
                   onChange={e => setRevision({ ...revision, title: e.target.value })} 
-                  className="w-full px-4 py-2 text-xs border border-neutral-300 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-neutral-50 font-bold text-neutral-800 transition-shadow transition-colors duration-200"
+                  className="w-full px-4 py-2 text-xs border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#D32F2F] bg-gray-50 font-bold text-gray-900 transition-all duration-200"
                 />
               </div>
 
               <label className="flex items-start gap-3 cursor-pointer group">
-                <div className="relative flex items-center mt-0.5">
+                <div className="relative flex items-center mt-0.5 shrink-0">
                   <input type="checkbox" required className="peer sr-only" />
-                  <div className="w-4 h-4 border-2 border-neutral-300 rounded flex items-center justify-center peer-checked:bg-red-800 peer-checked:border-red-800 transition-colors duration-150">
+                  <div className="w-4 h-4 border-2 border-gray-300 rounded flex items-center justify-center peer-checked:bg-[#D32F2F] peer-checked:border-[#D32F2F] transition-colors duration-150">
                     <svg className="w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                   </div>
                 </div>
-                <span className="text-xs font-medium text-neutral-600 leading-snug group-hover:text-neutral-900 transition-colors duration-150">
+                <span className="text-xs font-medium text-gray-600 leading-snug group-hover:text-gray-900 transition-colors duration-150">
                   I confirm that I have corrected the physical document and its supporting materials according to the remarks above.
                 </span>
               </label>
 
-              {error && <p role="alert" className="text-xs font-bold text-red-600 flex items-center gap-1"><AlertCircle size={14}/> {error}</p>}
+              {error && <p role="alert" className="text-xs font-bold text-red-600 flex items-center gap-1"><AlertCircle size={14} className="shrink-0"/> {error}</p>}
             </div>
 
-            <div className="p-4 bg-neutral-50 border-t border-neutral-100 flex justify-end gap-2">
-              <button disabled={busy} type="button" onClick={() => setRevision(null)} className="px-5 py-2 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-700 text-xs font-bold rounded-xl shadow-sm cursor-pointer transform active:scale-95 transition-[transform,colors] duration-200">
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
+              <button disabled={busy} type="button" onClick={() => setRevision(null)} className="px-5 py-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-bold rounded-lg shadow-sm cursor-pointer transform active:scale-95 transition-all duration-200">
                 Cancel
               </button>
-              <button disabled={busy} type="submit" className="px-6 py-2 bg-red-800 hover:bg-red-900 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md cursor-pointer disabled:opacity-50 transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200">
+              <button disabled={busy} type="submit" className="px-6 py-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow-md cursor-pointer disabled:opacity-50 transform active:scale-95 hover:-translate-y-0.5 transition-all duration-200">
                 {busy ? 'Processing...' : 'Resubmit'}
               </button>
             </div>
