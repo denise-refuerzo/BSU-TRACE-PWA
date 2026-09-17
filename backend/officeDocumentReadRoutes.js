@@ -250,6 +250,18 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
 // ==========================================
 // 7.5 FETCH INCOMING DOCUMENTS LIST ENDPOINT
 // ==========================================
+app.get('/api/processor/documents/expected-count/:officeId', requireAuth, async (req, res) => {
+  if (![2,3,4].includes(Number(req.user.a_id)) || Number(req.user.o_id) !== Number(req.params.officeId)) return res.status(403).json({error:"Access is limited to your assigned office."});
+  const officeId = parseInt(req.params.officeId);
+  try {
+    const result = await pool.query(`SELECT COUNT(*)::integer AS count FROM (${expectedDocumentsSql}) AS incoming`, [officeId]);
+    res.json({count: result.rows[0]?.count || 0});
+  } catch (err) {
+    console.error("Expected incoming documents count error:", err);
+    res.status(500).json({ error: "Failed to count expected documents." });
+  }
+});
+
 app.get('/api/processor/documents/expected-list/:officeId', requireAuth, async (req, res) => {
   if (![2,3,4].includes(Number(req.user.a_id)) || Number(req.user.o_id) !== Number(req.params.officeId)) return res.status(403).json({error:"Access is limited to your assigned office."});
   const officeId = parseInt(req.params.officeId);

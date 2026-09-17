@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; 
 import { fetchWithAuth } from "../../../../api";
+import { formatPhilippineDate } from '../../../../utils/philippineTime';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -57,6 +58,7 @@ export default function useOriginatorData() {
   const [passForm, setPassForm] = useState({ currentPassword: '', newPassword: '', confirmNew: '' });
   const [selectedRoutePreview, setSelectedRoutePreview] = useState([]);
   const [estimatedDate, setEstimatedDate] = useState('');
+  const [estimatedDatePayload, setEstimatedDatePayload] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [recentDocStops, setRecentDocStops] = useState([]);
 
@@ -114,6 +116,37 @@ export default function useOriginatorData() {
     };
     fetchEDC();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const customRoute = form.customRoute;
+    const stops = customRoute?.stops || [];
+
+    if (!customRoute || stops.length < 2 || stops.some(stop => !stop)) {
+      if (customRoute) {
+        setEstimatedDate('');
+        setEstimatedDatePayload('');
+      }
+      return () => { cancelled = true; };
+    }
+
+    fetchWithAuth(`/api/analytics/edc?route=${stops.join(',')}`)
+      .then(async res => res.ok ? res.json() : [])
+      .then(data => {
+        if (cancelled) return;
+        const deliveryDate = data[0]?.estimated_delivery_date || '';
+        setEstimatedDatePayload(deliveryDate);
+        setEstimatedDate(deliveryDate ? formatPhilippineDate(deliveryDate) : '');
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEstimatedDate('');
+          setEstimatedDatePayload('');
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [form.customRoute?.stops?.join(',')]);
 
   useEffect(() => {
     fetchLiveNotificationFeeds();
@@ -271,17 +304,18 @@ export default function useOriginatorData() {
       
       const prediction = edcPredictions.find(e => e.process_id === parseInt(pId));
       if (prediction) {
-        const hours = prediction.estimated_hours_to_complete;
-        const futureDate = new Date();
-        futureDate.setHours(futureDate.getHours() + hours);
-        setEstimatedDate(futureDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
+        const deliveryDate = prediction.estimated_delivery_date;
+        setEstimatedDatePayload(deliveryDate || '');
+        setEstimatedDate(deliveryDate ? formatPhilippineDate(deliveryDate) : 'Estimation pending...');
       } else {
         setEstimatedDate("Estimation pending...");
+        setEstimatedDatePayload('');
       }
     } else {
       setSelectedRoutePreview([]);
       setForm({ ...form, processTypeId: '', placeholderSelections: {} });
       setEstimatedDate('');
+      setEstimatedDatePayload('');
     }
   };
 
@@ -291,11 +325,7 @@ export default function useOriginatorData() {
       alert('Choose an active pipeline from the suggestions before submitting.');
       return;
     }
-    let edcPayload = null;
-    if (estimatedDate && estimatedDate !== "Estimation pending...") {
-      const d = new Date(estimatedDate);
-      edcPayload = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }
+    const edcPayload = estimatedDatePayload || null;
   
     try {
       const res = await fetchWithAuth('/api/documents', {
