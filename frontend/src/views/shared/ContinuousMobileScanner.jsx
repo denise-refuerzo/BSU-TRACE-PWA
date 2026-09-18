@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { Html5Qrcode } from 'html5-qrcode';
 import { CheckCircle2, AlertCircle, ArrowDownLeft, ArrowUpRight, Wifi, WifiOff, Smartphone } from 'lucide-react';
 
 const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
@@ -13,12 +13,13 @@ export default function ContinuousMobileScanner() {
   const [connected, setConnected] = useState(false);
   const [scanMode, setScanMode] = useState('time-in'); // 'time-in' | 'time-out'
   const [status, setStatus] = useState('ready'); // 'ready' | 'processing' | 'success' | 'error'
-  const [feedback, setFeedback] = useState({ title: '', message: 'Position document QR code within the frame' });
-  const [debugLog, setDebugLog] = useState('Camera initialized...');
+  const [feedback, setFeedback] = useState({ title: '', message: 'Align document QR code inside the box' });
+  const [debugLog, setDebugLog] = useState('Initializing camera engine...');
 
   const socketRef = useRef(null);
   const lastScanRef = useRef(null);
   const cooldownTimerRef = useRef(null);
+  const html5QrCodeRef = useRef(null);
 
   // 1. Screen Wake Lock
   useEffect(() => {
@@ -52,11 +53,11 @@ export default function ContinuousMobileScanner() {
     if (!roomId) return;
 
     socketRef.current = io(SOCKET_URL, {
-    transports: ['websocket'], // CRITICAL: Forces pure WebSocket, skips Vercel long-polling failure
-    secure: true,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000
+      transports: ['websocket'],
+      secure: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000
     });
 
     socketRef.current.on('connect', () => {
@@ -96,37 +97,54 @@ export default function ContinuousMobileScanner() {
     };
   }, [roomId]);
 
-  // 3. Scan Handler
-  const handleScan = (detectedCodes) => {
-    if (!detectedCodes) return;
+  // 3. Start Html5Qrcode Scanner Engine
+  useEffect(() => {
+    const qrRegionId = 'html5qr-code-full-region';
     
-    // Extract raw string value safely across different scanner output types
-    const rawValue = Array.isArray(detectedCodes) 
-      ? detectedCodes[0]?.rawValue || detectedCodes[0]?.value 
-      : detectedCodes?.rawValue || detectedCodes;
+    // Small delay to ensure the DOM div element is mounted before starting scanner
+    const timer = setTimeout(() => {
+      if (!html5QrCodeRef.current) {
+        html5QrCodeRef.current = new Html5Qrcode(qrRegionId);
+      }
 
-    if (!rawValue) return;
+      const config = { fps: 15, qrbox: { width: 250, height: 250 } };
 
-    const qrText = String(rawValue).trim();
-    setDebugLog(`Detected: ${qrText}`);
+      html5QrCodeRef.current.start(
+        { facingMode: 'environment' }, 
+        config,
+        (decodedText) => {
+          const qrText = String(decodedText).trim();
+          setDebugLog(`Scanned: ${qrText}`);
 
-    if (qrText && qrText !== lastScanRef.current && status === 'ready' && connected) {
-      lastScanRef.current = qrText;
-      setStatus('processing');
-      setFeedback({ title: 'Relaying to Desktop...', message: qrText });
+          if (qrText && qrText !== lastScanRef.current && status === 'ready' && connected) {
+            lastScanRef.current = qrText;
+            setStatus('processing');
+            setFeedback({ title: 'Relaying to Desktop...', message: qrText });
 
-      socketRef.current.emit('forward-scan', {
-        roomId,
-        qrData: qrText,
-        scanMode
+            socketRef.current.emit('forward-scan', {
+              roomId,
+              qrData: qrText,
+              scanMode
+            });
+          }
+        },
+        () => {
+          // Frame miss callback (ignored to keep performance smooth)
+        }
+      ).catch((err) => {
+        console.error('Camera initialization failed:', err);
+        setDebugLog(`Cam Error: ${err?.message || err}`);
+        setFeedback({ title: 'Camera Error', message: 'Could not access camera. Check browser permissions.' });
       });
-    }
-  };
+    }, 300);
 
-  const handleError = (err) => {
-    console.error('QR Scanner Error:', err);
-    setDebugLog(`Cam Error: ${err?.message || err}`);
-  };
+    return () => {
+      clearTimeout(timer);
+      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        html5QrCodeRef.current.stop().catch(err => console.error('Failed to stop scanner:', err));
+      }
+    };
+  }, [connected, roomId, scanMode, status]);
 
   if (!roomId) {
     return (
@@ -187,21 +205,13 @@ export default function ContinuousMobileScanner() {
         </button>
       </div>
 
-      {/* Camera Viewfinder with Explicit Constraints */}
-      <div className="relative w-full max-w-sm mx-auto aspect-square rounded-2xl overflow-hidden border-4 transition-colors duration-300 shadow-2xl flex items-center justify-center bg-black"
+      {/* Html5Qrcode Reader Viewport Container */}
+      <div className="relative w-full max-w-sm mx-auto aspect-square rounded-2xl overflow-hidden border-4 transition-colors duration-300 shadow-2xl bg-black"
         style={{
           borderColor: status === 'success' ? '#10B981' : status === 'error' ? '#EF4444' : scanMode === 'time-in' ? '#D32F2F' : '#F5F5F5'
         }}
       >
-        <Scanner
-          onResult={handleScan}
-          onError={handleError}
-          constraints={{
-            facingMode: 'environment', // Forces rear camera on mobile
-          }}
-          formats={['qr_code']} // Explicitly targets standard QR codes
-          options={{ delayBetweenScanAttempts: 200 }}
-        />
+        <div id="html5qr-code-full-region" className="w-full h-full" />
       </div>
 
       {/* Feedback Banner */}
@@ -224,7 +234,7 @@ export default function ContinuousMobileScanner() {
         </p>
       </div>
 
-      {/* Live Debug Text so you can see scanner output on phone screen */}
+      {/* Live Debug Text */}
       <div className="text-center py-1 text-[9px] text-neutral-400 font-mono truncate">
         Status: {debugLog}
       </div>
