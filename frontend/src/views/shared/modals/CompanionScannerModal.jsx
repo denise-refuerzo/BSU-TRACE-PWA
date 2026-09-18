@@ -16,7 +16,7 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
 
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
-    transports: ['websocket'], // Force pure websocket immediately, skip polling fallback loops
+    transports: ['polling', 'websocket'], // Force pure websocket immediately, skip polling fallback loops
     secure: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
