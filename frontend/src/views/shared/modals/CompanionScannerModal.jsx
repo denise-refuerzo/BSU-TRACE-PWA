@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import QRCode from 'react-qr-code';
-import { fetchWithAuth } from '../../../../api';
-import { X, Smartphone, Wifi, CheckCircle, AlertCircle } from 'lucide-react';
+import { fetchWithAuth } from '../../../api.js';
+import { X, Smartphone, Wifi, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 
 const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
@@ -16,8 +16,8 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
 
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
-      transports: ['websocket'],
-      secure: true
+    transports: ['websocket'], // CRITICAL: Direct WebSocket connection
+    secure: true
     });
 
     socketRef.current.on('connect', () => {
@@ -31,15 +31,6 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
     // Handle document scan received from phone
     socketRef.current.on('companion-scanned-doc', async ({ qrData, scanMode }) => {
       setIsPhoneConnected(true);
-
-      // --- SANITIZE QR DATA ---
-      // If the QR code contains a full URL, extract just the TRK- identifier
-      let cleanQrCode = String(qrData).trim();
-      const trkMatch = cleanQrCode.match(/(TRK-[a-zA-Z0-9-]+)/);
-      if (trkMatch) {
-        cleanQrCode = trkMatch[1];
-      }
-
       const endpoint = scanMode === 'time-out' ? '/api/documents/scan-out' : '/api/documents/scan-in';
 
       try {
@@ -47,44 +38,39 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
         const res = await fetchWithAuth(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ qrCode: cleanQrCode })
+          body: JSON.stringify({ qrCode: qrData })
         });
 
         const data = await res.json();
-        
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to process document');
-        }
+        if (!res.ok) throw new Error(data.error || 'Failed to process document');
 
         // Relay success back to phone
         socketRef.current.emit('scan-result-relay', {
           roomId,
           success: true,
-          title: cleanQrCode,
+          title: qrData,
           message: data.message || `Document ${scanMode === 'time-out' ? 'Released' : 'Timed In'}`
         });
 
         // Add to desktop feed
         setActivityLogs(prev => [
-          { id: Date.now(), success: true, text: `${scanMode.toUpperCase()}: ${cleanQrCode}`, time: new Date().toLocaleTimeString() },
+          { id: Date.now(), success: true, text: `${scanMode.toUpperCase()}: ${qrData}`, time: new Date().toLocaleTimeString() },
           ...prev.slice(0, 9)
         ]);
 
         if (onScanSuccess) onScanSuccess();
 
       } catch (err) {
-        console.error('Companion scan execution error:', err.message);
-
-        // Relay specific error back to phone
+        // Relay error back to phone
         socketRef.current.emit('scan-result-relay', {
           roomId,
           success: false,
-          title: cleanQrCode,
+          title: qrData,
           message: err.message
         });
 
         setActivityLogs(prev => [
-          { id: Date.now(), success: false, text: `Failed (${cleanQrCode}): ${err.message}`, time: new Date().toLocaleTimeString() },
+          { id: Date.now(), success: false, text: `Failed: ${err.message}`, time: new Date().toLocaleTimeString() },
           ...prev.slice(0, 9)
         ]);
       }
@@ -126,7 +112,7 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
             <div className="bg-white p-3 rounded-lg shadow-sm border border-neutral-200">
               <QRCode value={companionUrl} size={150} />
             </div>
-            <p className="test-[11px] font-medium text-neutral-500 mt-3 text-center leading-snug">
+            <p className="text-[11px] font-medium text-neutral-500 mt-3 text-center leading-snug">
               Point your phone's native camera at this QR code.<br/>
               No login required on mobile.
             </p>
