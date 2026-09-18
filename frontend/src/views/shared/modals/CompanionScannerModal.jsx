@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
-import QRCode from '../../../../../backend/node_modules/react-qr-code';
+import QRCode from 'react-qr-code';
 import { fetchWithAuth } from '../../../api.js';
 import { X, Smartphone, Wifi, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 
