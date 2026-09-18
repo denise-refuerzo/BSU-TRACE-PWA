@@ -5,7 +5,9 @@ from services.edc_service import calculate_edc
 from services.peak_demand_service import calculate_peak_demand
 from services.route_performance_service import (
     calculate_document_routing_efficiency, 
-    calculate_vehicle_scheduling_performance
+    calculate_vehicle_scheduling_performance,
+    recommend_optimized_routing,
+    recommend_vehicle_allocation
 )
 from services.system_health_service import get_system_health_metrics
 
@@ -69,6 +71,23 @@ def get_system_health():
         return get_system_health_metrics()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Health monitoring error: {str(e)}")
+    
+@app.get("/api/analytics/decision-support/route-optimization")
+def get_route_recommendation(route: str):
+    """Provides decision-support routing recommendations based on current bottlenecks."""
+    try:
+        stops = [int(x) for x in route.split(',') if x.strip()]
+        return recommend_optimized_routing(stops)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/decision-support/vehicle-allocation")
+def get_vehicle_recommendation(date: str, passengers: int = 1):
+    """Recommends optimal fleet resource allocation for a given date."""
+    try:
+        return recommend_vehicle_allocation(date, passengers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import os
