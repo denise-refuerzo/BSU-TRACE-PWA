@@ -25,15 +25,23 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: [
+    'https://bsu-trace.vercel.app', // Make sure this matches your exact Vercel domain
+    /\.vercel\.app$/,            
+    'http://localhost:5173',     
+    'http://localhost:3000'
+  ],
   credentials: true
 }));
-app.use(express.json());
 
-// 4. Initialize Socket.io with matching CORS
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: [
+      'https://bsu-trace.vercel.app',
+      /\.vercel\.app$/,
+      'http://localhost:5173',
+      'http://localhost:3000'
+    ],
     credentials: true,
     methods: ['GET', 'POST']
   }
