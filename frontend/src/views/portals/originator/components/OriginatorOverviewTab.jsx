@@ -39,7 +39,7 @@ export default function OriginatorOverviewTab({
   const currentLedgerDocs = filteredLedger.slice((matrixPage - 1) * itemsPerPage, matrixPage * itemsPerPage);
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200">
       
       {/* KPI STATS SECTION */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
@@ -112,7 +112,7 @@ export default function OriginatorOverviewTab({
           <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-3 pb-5 border-b border-gray-100">
             <div>
               <h4 className="text-xs font-black tracking-widest text-gray-400 uppercase mb-1.5 group-hover:text-[#D32F2F] transition-colors">
-                Active Pipeline Monitoring &rarr;
+                Active Document Monitoring &rarr;
               </h4>
               <p className="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <svg className="w-5 h-5 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -238,7 +238,7 @@ export default function OriginatorOverviewTab({
           <div className="flex items-center gap-3">
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              Document Ledger Matrix
+              Document List
             </h3>
             {selectedKpiFilter !== 'All' && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-neutral-200 text-neutral-800">
@@ -265,8 +265,8 @@ export default function OriginatorOverviewTab({
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="p-4 text-[11px] uppercase font-bold tracking-wider text-gray-500">Title / ID</th>
-                <th className="p-4 text-[11px] uppercase font-bold tracking-wider text-gray-500">Workflow Type</th>
+                <th className="p-4 text-[11px] uppercase font-bold tracking-wider text-gray-500">Document Name</th>
+                <th className="p-4 text-[11px] uppercase font-bold tracking-wider text-gray-500">Category</th>
                 <th className="p-4 text-[11px] uppercase font-bold tracking-wider text-gray-500">Status</th>
               </tr>
             </thead>

@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@yudiel/react-qr-scanner": "^2.6.0",
     "axios": "^1.18.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -20,11 +21,14 @@
     "nodemailer": "^9.0.1",
     "pg": "^8.22.0",
     "qrcode": "^1.5.4",
+    "react-qr-code": "^2.2.0",
     "sharp": "^0.35.4",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "nodemon": "^3.1.14"
   }
 }

@@ -160,7 +160,7 @@ export default function OriginatorDocumentsTab({
   const renderTimelineNodes = getRenderStops(selectedDoc, activeRouteStops);
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* LIVE DOCUMENT TRACKING PANEL */}
       {selectedDoc ? (
@@ -359,7 +359,7 @@ export default function OriginatorDocumentsTab({
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-wider">
                 <th className="p-4">Document Name</th>
                 <th className="p-4">Reference ID (QR)</th>
-                <th className="p-4">Process Type</th>
+                <th className="p-4">Category</th>
                 <th className="p-4">Est. Completion</th>
                 <th className="p-4">Current Location</th>
                 <th className="p-4 text-center">Action</th>

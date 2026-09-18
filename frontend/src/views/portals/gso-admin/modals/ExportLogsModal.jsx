@@ -20,7 +20,7 @@ export default function ExportLogsModal({
         
         <div className="p-4 border-b bg-[#FDFBF9] flex items-center justify-between">
           <h3 className="font-bold text-neutral-900 text-sm flex items-center gap-2">
-            <Download size={16} className="text-neutral-700" /> Export Procurement Logs
+          <Download className="text-neutral-700" size="{16}"/> Download Request Records
           </h3>
           <button onClick={() => setShowPrintModal(false)} className="text-neutral-400 hover:text-neutral-600"><X size={16} /></button>
         </div>
@@ -29,7 +29,7 @@ export default function ExportLogsModal({
           <label className="block text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2">Select Target Database</label>
           
           <div className="bg-neutral-100 p-1 rounded-xl flex font-bold text-[10px] mb-4 flex-wrap">
-            {['Vehicle', 'Multimedia Room', 'Gymnasium', 'Logistics History'].map((tab) => (
+            {['Vehicles', 'Multimedia Room', 'Gymnasium', 'Supplies & Equipment'].map((tab) => (
               <button 
                 key={tab}
                 onClick={() => setPrintTargetTab(tab)}

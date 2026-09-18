@@ -6,6 +6,7 @@ import AdminDashboard from './views/portals/ict-admin/AdminDashboard';
 import OriginatorDashboard from './views/portals/originator/OriginatorDashboard';
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
 import GSOAdminDashboard from './views/portals/gso-admin/GSOAdminDashboard';
+import ContinuousMobileScanner from './views/shared/ContinuousMobileScanner'; // Import companion view
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/companion" element={<ContinuousMobileScanner />} /> {/* Unauthenticated scanner */}
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/gso-dashboard" element={<GSOAdminDashboard />} />
           <Route path="/dashboard" element={<OriginatorDashboard />} />

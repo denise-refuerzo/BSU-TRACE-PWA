@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X, School } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X, School, Smartphone } from 'lucide-react';
 import { fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -25,6 +25,7 @@ import OfficeChatHub from "../../shared/OfficeChatHub";
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
+import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -51,13 +52,12 @@ export default function ProcessorDashboard() {
   const [isHistoryDetails, setIsHistoryDetails] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showCompanionModal, setShowCompanionModal] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
   const scanBusy = useRef(false);
   const [scanMode, setScanMode] = useState('time-in');
   const [simulatedQrInput, setSimulatedQrPayload] = useState('');
   
-
-
   // --- PASSWORD STATE ---
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -100,45 +100,45 @@ export default function ProcessorDashboard() {
     setShowPipelineModal(true);
   };
 
-// Row click transition: switches view to 'documents' and opens the Document Verification Detail modal
-const handleRowDocumentClick = (doc) => {
-  setActiveTab('documents');
-  handleOpenPipelineDetails(doc, false);
-};
+  // Row click transition: switches view to 'documents' and opens the Document Verification Detail modal
+  const handleRowDocumentClick = (doc) => {
+    setActiveTab('documents');
+    handleOpenPipelineDetails(doc, false);
+  };
 
-// Notification click: switches view to 'documents' and deep-links to that specific document's modal
-const handleNotificationClick = async (notif) => {
-  setActiveTab('documents');
+  // Notification click: switches view to 'documents' and deep-links to that specific document's modal
+  const handleNotificationClick = async (notif) => {
+    setActiveTab('documents');
 
-  const targetIniId = notif.ini_id;
-  const allKnownDocs = processorData.pipelineDocs || [];
+    const targetIniId = notif.ini_id;
+    const allKnownDocs = processorData.pipelineDocs || [];
 
-  // 1. Try finding in loaded pipeline documents
-  let matchedDoc = allKnownDocs.find(d => 
-    (targetIniId && d.ini_id === targetIniId) || 
-    (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
-  );
+    // 1. Try finding in loaded pipeline documents
+    let matchedDoc = allKnownDocs.find(d => 
+      (targetIniId && d.ini_id === targetIniId) || 
+      (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
+    );
 
-  // 2. If found, open the verification modal immediately
-  if (matchedDoc) {
-    handleOpenPipelineDetails(matchedDoc, false);
-    return;
-  }
-
-  // 3. Fallback: If the document isn't in pipelineDocs yet, fetch it directly
-  if (targetIniId) {
-    try {
-      const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
-      const freshDocs = await res.json();
-      const docFromFresh = Array.isArray(freshDocs) ? freshDocs.find(d => d.ini_id === targetIniId) : null;
-      if (docFromFresh) {
-        handleOpenPipelineDetails(docFromFresh, false);
-      }
-    } catch (err) {
-      console.error("Error opening notification document:", err);
+    // 2. If found, open the verification modal immediately
+    if (matchedDoc) {
+      handleOpenPipelineDetails(matchedDoc, false);
+      return;
     }
-  }
-};
+
+    // 3. Fallback: If the document isn't in pipelineDocs yet, fetch it directly
+    if (targetIniId) {
+      try {
+        const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
+        const freshDocs = await res.json();
+        const docFromFresh = Array.isArray(freshDocs) ? freshDocs.find(d => d.ini_id === targetIniId) : null;
+        if (docFromFresh) {
+          handleOpenPipelineDetails(docFromFresh, false);
+        }
+      } catch (err) {
+        console.error("Error opening notification document:", err);
+      }
+    }
+  };
 
   const executeSimulatedScanner = async (e, scannedCode = null) => {
     if (e) e.preventDefault();
@@ -344,15 +344,23 @@ const handleNotificationClick = async (notif) => {
           </nav>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
+          {/* COMPANION SCANNER BUTTON */}
+          <button 
+            onClick={() => { setShowCompanionModal(true); setIsSidebarOpen(false); }}
+            className="w-full py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider cursor-pointer"
+          >
+            <Smartphone size={16} /> Mobile Scanner
+          </button>
+          
           <button 
             onClick={() => { setScanMode('time-in'); setShowScannerModal(true); setIsSidebarOpen(false); }}
             className="w-full py-3 bg-red-700 hover:bg-red-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider cursor-pointer"
           >
-            <Camera size={16} /> Scan Document
+            <Camera size={16} /> Web Scanner
           </button>
           
-          <div className="border-t border-neutral-700 pt-4">
+          <div className="border-t border-neutral-700 pt-3">
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
               <LogOut size={16} /> Sign Out
             </button>
@@ -375,7 +383,7 @@ const handleNotificationClick = async (notif) => {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resources' ? 'School Resources' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Office Processing System' : activeTab === 'history' ? 'Office Transaction Ledger' : 'Office Dashboard'}
+                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resources' ? 'School Resources' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Office Processing System' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
               </h2>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
             </div>
@@ -448,6 +456,13 @@ const handleNotificationClick = async (notif) => {
           scanMode={scanMode} setScanMode={setScanMode}
           simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload}
           executeSimulatedScanner={executeSimulatedScanner}
+        />
+      )}
+
+      {showCompanionModal && (
+        <CompanionScannerModal 
+          onClose={() => setShowCompanionModal(false)} 
+          onScanSuccess={processorData.fetchProcessorMeta} 
         />
       )}
 

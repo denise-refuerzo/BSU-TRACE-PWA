@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http'); // 1. Added http
+const { Server } = require('socket.io'); // 2. Added socket.io
 const cors = require('cors');
 const jwt = require('jwt-simple');
 const bcrypt = require('bcrypt');
@@ -13,16 +15,55 @@ require('dotenv').config();
 // 0. SERVER INITIALIZATION & SETUP
 // ==========================================
 const app = express();
+const server = http.createServer(app); // 3. Wrap Express
+
+const allowedOrigins = [
+  'https://bsu-trace.vercel.app',
+  /\.vercel\.app$/,
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+
 app.use(cors({
-  origin: [
-    'https://bsu-trace.vercel.app',
-    /\.vercel\.app$/,            // Allows preview deployments
-    'http://localhost:5173',     // Vite local frontend
-    'http://localhost:3000'
-  ],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());
+
+// 4. Initialize Socket.io with matching CORS
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST']
+  }
+});
+
+// ==========================================
+// 0.1 COMPANION SCANNER WEBSOCKET RELAYS
+// ==========================================
+io.on('connection', (socket) => {
+  // Join temporary pairing room between PC and Phone
+  socket.on('join-companion-room', (roomId) => {
+    socket.join(roomId);
+    // Notify room that another device has connected
+    socket.to(roomId).emit('companion-device-joined');
+  });
+
+  // Phone sends scanned QR code + Mode ('time-in' or 'time-out')
+  socket.on('forward-scan', ({ roomId, qrData, scanMode }) => {
+    socket.to(roomId).emit('companion-scanned-doc', { qrData, scanMode });
+  });
+
+  // PC reports API processing status back to the Phone
+  socket.on('scan-result-relay', ({ roomId, success, message, title }) => {
+    socket.to(roomId).emit('scan-result', { success, message, title });
+  });
+
+  socket.on('disconnect', () => {
+    // Clean socket disconnection
+  });
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
 
@@ -1616,19 +1657,38 @@ app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose, b.status,
+             b.department,
              b.created_at, 
              CASE 
                 WHEN b.status = 'Confirmed' THEN b.updated_at 
                 ELSE NULL 
              END as updated_at,
              u.full_name as requestor,
-             COALESCE(gm.start_time, vr.pick_up_time) as start_time,
-             COALESCE(gm.end_time, vr.drop_off_time) as end_time,
-             ad.asset_name
+             u.uni_email as requestor_email,
+             COALESCE(gm.start_time, vr.pick_up_time)::text as start_time,
+             COALESCE(gm.end_time, vr.drop_off_time)::text as end_time,
+             ad.asset_name,
+             -- Vehicle specific details
+             vr.destination,
+             vr.passenger_count,
+             vr.official_passengers,
+             vr.vehicle_to_be_used,
+             vr.designated_driver,
+             vr.plate_number,
+             vr.license_number,
+             vr.prepared_by_name,
+             vr.prepared_by_position,
+             vr.recommending_approval_name,
+             vr.recommending_approval_position,
+             st.service_type as trip_type,
+             -- Facility / Room specific details
+             gm.expected_attendees,
+             gm.request_details
       FROM public.bookings b
       JOIN public."User" u ON b.u_id = u.u_id
       LEFT JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id
       LEFT JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id
+      LEFT JOIN public.service_type st ON vr.sv_id = st.sv_id
       LEFT JOIN public.asset_details ad ON (gm.asd_id = ad.asd_id OR vr.asd_id = ad.asd_id)
       ORDER BY b.reservation_date DESC
     `;
@@ -1968,6 +2028,7 @@ app.get('/api/analytics/system-health', requireAuth, async (req, res) => {
 // ==========================================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Change app.listen to server.listen so WebSockets run on the same port
+server.listen(PORT, () => {
+  console.log(`Server & WebSocket running on port ${PORT}`);
 });

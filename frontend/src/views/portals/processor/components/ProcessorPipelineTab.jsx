@@ -46,11 +46,11 @@ export default function ProcessorPipelineTab({
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER SECTION */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900">Documents Pipeline</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-gray-900">Documents</h2>
         <p className="text-sm text-gray-500 mt-1">Review and process active administrative requests across campus stations.</p>
       </div>
 
@@ -101,8 +101,8 @@ export default function ProcessorPipelineTab({
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-wider">
-                <th className="p-4">Title</th>
-                <th className="p-4">Form Type</th>
+                <th className="p-4">Document Name</th>
+                <th className="p-4">Category</th>
                 <th className="p-4">Current Status</th>
                 <th className="p-4">Next Office</th>
                 <th className="p-4 text-center">Action</th>
