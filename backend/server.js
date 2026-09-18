@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http'); // 1. Added http
+const { Server } = require('socket.io'); // 2. Added socket.io
 const cors = require('cors');
 const jwt = require('jwt-simple');
 const bcrypt = require('bcrypt');
@@ -13,16 +15,55 @@ require('dotenv').config();
 // 0. SERVER INITIALIZATION & SETUP
 // ==========================================
 const app = express();
+const server = http.createServer(app); // 3. Wrap Express
+
+const allowedOrigins = [
+  'https://bsu-trace.vercel.app',
+  /\.vercel\.app$/,
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+
 app.use(cors({
-  origin: [
-    'https://bsu-trace.vercel.app',
-    /\.vercel\.app$/,            // Allows preview deployments
-    'http://localhost:5173',     // Vite local frontend
-    'http://localhost:3000'
-  ],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());
+
+// 4. Initialize Socket.io with matching CORS
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST']
+  }
+});
+
+// ==========================================
+// 0.1 COMPANION SCANNER WEBSOCKET RELAYS
+// ==========================================
+io.on('connection', (socket) => {
+  // Join temporary pairing room between PC and Phone
+  socket.on('join-companion-room', (roomId) => {
+    socket.join(roomId);
+    // Notify room that another device has connected
+    socket.to(roomId).emit('companion-device-joined');
+  });
+
+  // Phone sends scanned QR code + Mode ('time-in' or 'time-out')
+  socket.on('forward-scan', ({ roomId, qrData, scanMode }) => {
+    socket.to(roomId).emit('companion-scanned-doc', { qrData, scanMode });
+  });
+
+  // PC reports API processing status back to the Phone
+  socket.on('scan-result-relay', ({ roomId, success, message, title }) => {
+    socket.to(roomId).emit('scan-result', { success, message, title });
+  });
+
+  socket.on('disconnect', () => {
+    // Clean socket disconnection
+  });
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
 
@@ -1968,6 +2009,7 @@ app.get('/api/analytics/system-health', requireAuth, async (req, res) => {
 // ==========================================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Change app.listen to server.listen so WebSockets run on the same port
+server.listen(PORT, () => {
+  console.log(`Server & WebSocket running on port ${PORT}`);
 });
