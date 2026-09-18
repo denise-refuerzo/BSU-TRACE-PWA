@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { CheckCircle2, AlertCircle, ArrowDownLeft, ArrowUpRight, Wifi, WifiOff, Smartphone } from 'lucide-react';
 
-const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
+const SOCKET_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export default function ContinuousMobileScanner() {
   const [searchParams] = useSearchParams();
@@ -14,12 +14,13 @@ export default function ContinuousMobileScanner() {
   const [scanMode, setScanMode] = useState('time-in'); // 'time-in' | 'time-out'
   const [status, setStatus] = useState('ready'); // 'ready' | 'processing' | 'success' | 'error'
   const [feedback, setFeedback] = useState({ title: '', message: 'Position document QR code within the frame' });
+  const [debugLog, setDebugLog] = useState('Camera initialized...');
 
   const socketRef = useRef(null);
   const lastScanRef = useRef(null);
   const cooldownTimerRef = useRef(null);
 
-  // 1. Screen Wake Lock (Keeps mobile screen awake indefinitely)
+  // 1. Screen Wake Lock
   useEffect(() => {
     let wakeLock = null;
     const requestWakeLock = async () => {
@@ -51,34 +52,34 @@ export default function ContinuousMobileScanner() {
     if (!roomId) return;
 
     socketRef.current = io(SOCKET_URL, {
-    transports: ['websocket'], // CRITICAL: Forces pure WebSocket, skips Vercel long-polling failure
-    secure: true,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000
+      transports: ['websocket'],
+      secure: true,
+      reconnection: true,
     });
 
     socketRef.current.on('connect', () => {
       setConnected(true);
       socketRef.current.emit('join-companion-room', roomId);
+      setDebugLog('Connected to server room.');
     });
 
-    socketRef.current.on('disconnect', () => setConnected(false));
+    socketRef.current.on('disconnect', () => {
+      setConnected(false);
+      setDebugLog('Disconnected from server.');
+    });
 
-    // Listen for the desktop confirming the database update
     socketRef.current.on('scan-result', ({ success, message, title }) => {
       setStatus(success ? 'success' : 'error');
       setFeedback({
         title: title || (success ? 'Success' : 'Error'),
         message: message || ''
       });
+      setDebugLog(`Result: ${message}`);
 
-      // Haptic Vibration feedback
       if (navigator.vibrate) {
         navigator.vibrate(success ? [100, 50, 100] : [300]);
       }
 
-      // Reset to ready state after 2 seconds
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
       cooldownTimerRef.current = setTimeout(() => {
         setStatus('ready');
@@ -95,13 +96,18 @@ export default function ContinuousMobileScanner() {
 
   // 3. Scan Handler
   const handleScan = (detectedCodes) => {
-    // Support @yudiel/react-qr-scanner output formats
-    const rawValue = Array.isArray(detectedCodes) ? detectedCodes[0]?.rawValue : detectedCodes;
+    if (!detectedCodes) return;
+    
+    // Extract raw string value safely across different scanner output types
+    const rawValue = Array.isArray(detectedCodes) 
+      ? detectedCodes[0]?.rawValue || detectedCodes[0]?.value 
+      : detectedCodes?.rawValue || detectedCodes;
+
     if (!rawValue) return;
 
     const qrText = String(rawValue).trim();
+    setDebugLog(`Detected: ${qrText}`);
 
-    // Prevent spamming the same QR while processing
     if (qrText && qrText !== lastScanRef.current && status === 'ready' && connected) {
       lastScanRef.current = qrText;
       setStatus('processing');
@@ -113,6 +119,11 @@ export default function ContinuousMobileScanner() {
         scanMode
       });
     }
+  };
+
+  const handleError = (err) => {
+    console.error('QR Scanner Error:', err);
+    setDebugLog(`Cam Error: ${err?.message || err}`);
   };
 
   if (!roomId) {
@@ -174,7 +185,7 @@ export default function ContinuousMobileScanner() {
         </button>
       </div>
 
-      {/* Camera Viewfinder */}
+      {/* Camera Viewfinder with Explicit Constraints */}
       <div className="relative w-full max-w-sm mx-auto aspect-square rounded-2xl overflow-hidden border-4 transition-colors duration-300 shadow-2xl flex items-center justify-center bg-black"
         style={{
           borderColor: status === 'success' ? '#10B981' : status === 'error' ? '#EF4444' : scanMode === 'time-in' ? '#D32F2F' : '#F5F5F5'
@@ -182,8 +193,12 @@ export default function ContinuousMobileScanner() {
       >
         <Scanner
           onResult={handleScan}
-          onError={() => {}}
-          options={{ delayBetweenScanAttempts: 250 }}
+          onError={handleError}
+          constraints={{
+            facingMode: 'environment', // Forces rear camera on mobile
+          }}
+          formats={['qr_code']} // Explicitly targets standard QR codes
+          options={{ delayBetweenScanAttempts: 200 }}
         />
       </div>
 
@@ -207,8 +222,9 @@ export default function ContinuousMobileScanner() {
         </p>
       </div>
 
-      <div className="text-center py-2 text-[10px] text-neutral-500 font-bold uppercase tracking-widest">
-        Screen stays awake automatically
+      {/* Live Debug Text so you can see scanner output on phone screen */}
+      <div className="text-center py-1 text-[9px] text-neutral-400 font-mono truncate">
+        Status: {debugLog}
       </div>
     </div>
   );
