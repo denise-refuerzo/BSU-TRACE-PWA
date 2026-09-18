@@ -1,11 +1,16 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Look for .env in ml-engine, or in its parent directory (backend/)
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    load_dotenv()
 
 class Settings:
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://username:password@localhost:5432/bsutrace")
-    # Add this new line to read the ML database string from your .env file
-    ML_DATABASE_URL: str = os.getenv("ML_DATABASE_URL")
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
+    ML_DATABASE_URL: str = os.getenv("ML_DATABASE_URL") or os.getenv("DATABASE_URL")
 
 settings = Settings()

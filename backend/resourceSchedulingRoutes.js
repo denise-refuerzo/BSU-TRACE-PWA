@@ -49,19 +49,87 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
     if(!result.rows.length) throw new Error('Vehicle request not found.');
     res.json(await availability(pool,{...result.rows[0],...(req.query.start && req.query.end ? {start:req.query.start,end:req.query.end} : {}),type:'Vehicle',exclude:req.params.id,allowLegacy:true}));
   }));
-  app.put('/api/resources/assignments/:id',requireAuth,gso,handle(async(req,res)=>{
-    const client=await pool.connect();
-    try {await client.query('BEGIN');await lockSchedule(client);
-      const result=await client.query(`SELECT to_char(b.reservation_date,'YYYY-MM-DD') AS date,vr.pick_up_time::text AS start,vr.drop_off_time::text AS end
-        FROM public.bookings b JOIN public.vehicle_requirements vr USING(booking_id) WHERE b.booking_id=$1 FOR UPDATE OF b`,[req.params.id]);
-      if(!result.rows.length) throw new Error('Vehicle request not found.');
-      const window={...result.rows[0],...(req.body.start && req.body.end ? {start:req.body.start,end:req.body.end} : {})};
-      const free=await availability(client,{...window,type:'Vehicle',exclude:req.params.id,allowLegacy:true});
-      if(!free.vehicles.some(v=>v.vehicle_id===Number(req.body.vehicleId)) || !free.drivers.some(d=>d.driver_id===Number(req.body.driverId))) throw new Error('The selected vehicle or driver is no longer available.');
-      await client.query(`UPDATE public.vehicle_requirements vr SET assigned_vehicle_id=f.vehicle_id,assigned_driver_id=d.driver_id,pick_up_time=$4::time,drop_off_time=$5::time,
-        asd_id=f.asd_id,vehicle_to_be_used=f.vehicle_name,plate_number=f.plate_number,designated_driver=d.full_name,license_number=d.license_number
-        FROM public.fleet_vehicles f,public.resource_drivers d WHERE vr.booking_id=$1 AND f.vehicle_id=$2 AND d.driver_id=$3`,[req.params.id,req.body.vehicleId,req.body.driverId,window.start,window.end]);
-      await client.query('COMMIT');res.json({message:'Assignment saved. Pending requests still require document checklist confirmation.'});
-    } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
+  app.put('/api/resources/assignments/:id', requireAuth, gso, handle(async (req, res) => {
+    const bookingId = Number(req.params.id);
+    const vehicleId = Number(req.body.vehicleId);
+    const driverId = Number(req.body.driverId);
+
+    if (!bookingId || !vehicleId || !driverId) {
+      throw new Error('Valid vehicle and driver selections are required.');
+    }
+
+    let startTime = String(req.body.start || '').trim();
+    let endTime = String(req.body.end || '').trim();
+    if (startTime.length === 5) startTime += ':00';
+    if (endTime.length === 5) endTime += ':00';
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await lockSchedule(client);
+
+      const result = await client.query(
+        `SELECT b.status,
+                to_char(b.reservation_date,'YYYY-MM-DD') AS date,
+                vr.pick_up_time::text AS start,
+                vr.drop_off_time::text AS end
+         FROM public.bookings b 
+         JOIN public.vehicle_requirements vr USING (booking_id) 
+         WHERE b.booking_id = $1 FOR UPDATE OF b`,
+        [bookingId]
+      );
+
+      if (!result.rows.length) throw new Error('Vehicle request not found.');
+
+      // Enforce confirmation requirement before assignment
+      if (result.rows[0].status !== 'Confirmed') {
+        throw new Error('This request must be confirmed through document checklist verification before assigning a vehicle and driver.');
+      }
+
+      const window = {
+        date: result.rows[0].date,
+        start: startTime || result.rows[0].start,
+        end: endTime || result.rows[0].end
+      };
+
+      const free = await availability(client, { ...window, type: 'Vehicle', exclude: bookingId, allowLegacy: true });
+      if (!free.vehicles.some(v => Number(v.vehicle_id) === vehicleId) || 
+          !free.drivers.some(d => Number(d.driver_id) === driverId)) {
+        throw new Error('The selected vehicle or driver is not available for this time window.');
+      }
+
+      const vehicleRow = await client.query('SELECT asd_id, vehicle_name, plate_number FROM public.fleet_vehicles WHERE vehicle_id = $1', [vehicleId]);
+      const driverRow = await client.query('SELECT full_name, license_number FROM public.resource_drivers WHERE driver_id = $1', [driverId]);
+
+      if (!vehicleRow.rows.length || !driverRow.rows.length) {
+        throw new Error('Could not resolve vehicle or driver record.');
+      }
+
+      const v = vehicleRow.rows[0];
+      const d = driverRow.rows[0];
+
+      await client.query(
+        `UPDATE public.vehicle_requirements 
+         SET assigned_vehicle_id = $1,
+             assigned_driver_id = $2,
+             pick_up_time = $3::time,
+             drop_off_time = $4::time,
+             asd_id = $5,
+             vehicle_to_be_used = $6,
+             plate_number = $7,
+             designated_driver = $8,
+             license_number = $9
+         WHERE booking_id = $10`,
+        [vehicleId, driverId, window.start, window.end, v.asd_id, v.vehicle_name, v.plate_number, d.full_name, d.license_number, bookingId]
+      );
+
+      await client.query('COMMIT');
+      res.json({ message: 'Vehicle and driver assigned successfully.' });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   }));
 };

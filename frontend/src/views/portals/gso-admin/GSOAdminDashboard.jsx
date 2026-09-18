@@ -577,6 +577,52 @@ export default function GSOAdminDashboard() {
     setTimeout(() => printWindow.print(), 500);
   };
 
+  const handleInventorySubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedInventoryItem || isActionProcessing) return;
+    setIsActionProcessing(true);
+  
+    try {
+      const isLend = inventoryModalMode === 'LEND';
+      const endpoint = isLend ? '/api/procurement/logistics/borrow' : '/api/procurement/logistics/return';
+      
+      const payload = isLend ? {
+        asdId: selectedInventoryItem.asd_id,
+        requestorName: inventoryForm.requestorName,
+        department: inventoryForm.department,
+        purpose: inventoryForm.purpose,
+        durationHours: inventoryForm.duration,
+        quantityNeeded: Number(inventoryForm.quantityNeeded)
+      } : {
+        asdId: selectedInventoryItem.asd_id,
+        requestorName: inventoryForm.requestorName,
+        returnedQuantity: Number(inventoryForm.quantityNeeded),
+        returnDate: inventoryForm.returnDate,
+        returnTime: inventoryForm.returnTime,
+        isDamaged: inventoryForm.isDamaged,
+        damageNotes: inventoryForm.damageNotes
+      };
+  
+      const res = await fetchWithAuth(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+  
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Action failed.');
+  
+      setShowInventoryModal(false);
+      fetchInventoryMetrics();
+      fetchProcurementData();
+      await resourceSuccess(isLend ? 'Item lent successfully.' : 'Item returned successfully.');
+    } catch (err) {
+      await resourceError(err);
+    } finally {
+      setIsActionProcessing(false);
+    }
+  };
+
   return (
     <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
 
@@ -622,7 +668,7 @@ export default function GSOAdminDashboard() {
               <Archive size={18} /> School Resources
             </button>
             <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'procurement' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <ShoppingCart size={18} /> Procurement
+              <ShoppingCart size={18} /> List of Requests
             </button>
             <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <BarChart3 size={18} /> Operational Analytics
@@ -716,25 +762,19 @@ export default function GSOAdminDashboard() {
 
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} />}
           {activeTab === 'resources' && (
-            <ResourceManagementTab
-              onOpenRequest={(request) => {
-                setActiveTab('procurement');
-                setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
-                handleViewChecklist(request);
-              }}
-              assetsList={assetsList}
-              equipmentInventory={equipmentInventory}
-              assetBlackouts={assetBlackouts}
-              setShowAddAssetModal={setShowAddAssetModal}
-              handleOpenEditModal={() => {}}
-              handleDeleteAsset={() => {}}
-              setSelectedInventoryItem={setSelectedInventoryItem}
-              setShowInventoryModal={setShowInventoryModal}
-              setShowBlackoutModal={setShowBlackoutModal}
-              activeCalendarTab={activeCalendarTab} setActiveCalendarTab={setActiveCalendarTab}
-              currentCalendarDate={currentCalendarDate} setCurrentCalendarDate={setCurrentCalendarDate}
-            />
-          )}
+              <ResourceManagementTab
+                onOpenRequest={(request) => {
+                  setActiveTab('procurement');
+                  setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
+                  handleViewChecklist(request);
+                }}
+                onSelectInventoryItem={(item) => {
+                  setSelectedInventoryItem(item);
+                  setInventoryModalMode('LEND');
+                  setShowInventoryModal(true);
+                }}
+              />
+            )}
 
           {activeTab === 'procurement' && (
             <GSOProcurementTab

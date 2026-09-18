@@ -20,7 +20,7 @@ export default function MasterChecklistModal({
         
         <div className="p-4 border-b bg-[#FDFBF9] flex items-center justify-between">
           <h3 className="font-bold text-neutral-900 text-sm flex items-center gap-2">
-            <Edit size={16} className="text-red-800" /> Master Checklist Configuration
+          <Edit className="text-red-800" size={16} />Document Checklist Settings
           </h3>
           <button onClick={() => setShowChecklistMakerModal(false)} className="text-neutral-400 hover:text-neutral-600"><X size={16} /></button>
         </div>
@@ -44,7 +44,7 @@ export default function MasterChecklistModal({
           {/* Global List Editor */}
           <div className="flex-1 overflow-y-auto space-y-2 border border-neutral-200 bg-neutral-50 rounded-xl p-4">
             <p className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-3 block">
-              {activeChecklistTab} Required Documents
+              {activeChecklistTab} Required Attachments
             </p>
             
             {masterChecklistItems.length === 0 ? (
@@ -70,7 +70,7 @@ export default function MasterChecklistModal({
               type="text" 
               value={newChecklistName}
               onChange={(e) => setNewChecklistName(e.target.value)}
-              placeholder="Type new document requirement..." 
+              placeholder="Enter required document name..." 
               className="flex-1 px-3 py-2 text-xs border border-neutral-300 rounded-lg focus:ring-1 focus:ring-red-700 outline-none"
             />
             <button 
