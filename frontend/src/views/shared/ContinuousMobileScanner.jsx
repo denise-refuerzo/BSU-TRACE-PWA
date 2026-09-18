@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { CheckCircle2, AlertCircle, ArrowDownLeft, ArrowUpRight, Wifi, WifiOff, Smartphone } from 'lucide-react';
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export default function ContinuousMobileScanner() {
   const [searchParams] = useSearchParams();
@@ -51,7 +51,11 @@ export default function ContinuousMobileScanner() {
     if (!roomId) return;
 
     socketRef.current = io(SOCKET_URL, {
-      transports: ['websocket', 'polling']
+    transports: ['websocket'], // CRITICAL: Forces pure WebSocket, skips Vercel long-polling failure
+    secure: true,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000
     });
 
     socketRef.current.on('connect', () => {

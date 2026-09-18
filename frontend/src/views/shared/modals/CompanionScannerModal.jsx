@@ -4,7 +4,7 @@ import QRCode from 'react-qr-code';
 import { fetchWithAuth } from '../../../api.js';
 import { X, Smartphone, Wifi, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export default function CompanionScannerModal({ onClose, onScanSuccess }) {
   const [roomId] = useState(() => `bsu-room-${Math.random().toString(36).substring(2, 9)}`);
@@ -16,11 +16,8 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
 
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
-    transports: ['polling', 'websocket'], // Force pure websocket immediately, skip polling fallback loops
-    secure: true,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
+    transports: ['websocket'], // CRITICAL: Direct WebSocket connection
+    secure: true
     });
 
     socketRef.current.on('connect', () => {
