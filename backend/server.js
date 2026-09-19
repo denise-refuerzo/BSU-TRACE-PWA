@@ -34,6 +34,8 @@ app.use(cors({
   credentials: true
 }));
 
+app.use(express.json());
+
 const io = new Server(server, {
   cors: {
     origin: [
