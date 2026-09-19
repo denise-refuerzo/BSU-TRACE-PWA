@@ -52,29 +52,58 @@ const io = new Server(server, {
 // ==========================================
 // 0.1 COMPANION SCANNER WEBSOCKET RELAYS
 // ==========================================
+app.set('io', io);
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
-  // 1. Put both the PC and the Phone into the same private room
+  // Companion Scanner (existing)
   socket.on('join-companion-room', (roomId) => {
     socket.join(roomId);
-    // Tell the PC that the phone has successfully joined the room
     socket.to(roomId).emit('companion-device-joined');
   });
+  socket.on('forward-scan', (data) => socket.to(data.roomId).emit('forward-scan', data));
+  socket.on('scan-result', (data) => socket.to(data.roomId).emit('scan-result', data));
 
-  // 2. Receive the QR code from the phone and forward it to the PC
-  socket.on('forward-scan', (data) => {
-    // socket.to(roomId).emit(...) sends it to the PC in the room
-    socket.to(data.roomId).emit('forward-scan', data);
+  // --- NEW: Dynamic App Subscriptions ---
+  // 1. Office Staff Room (for pipeline, KPI, and office alerts)
+  socket.on('join-office-room', (officeId) => {
+    if (officeId) {
+      socket.join(`office_${officeId}`);
+    }
   });
 
-  // 3. Receive the API success/fail result from the PC and send it back to the phone
-  socket.on('scan-result', (data) => {
-    socket.to(data.roomId).emit('scan-result', data);
+  // 2. User Room (for personal document updates and notifications)
+  socket.on('join-user-room', (userId) => {
+    if (userId) {
+      socket.join(`user_${userId}`);
+    }
+  });
+
+  // 3. Document Chat Room
+  socket.on('join-chat-channel', (roomId) => {
+    if (roomId) {
+      socket.join(`chat_room_${roomId}`);
+    }
+  });
+
+  socket.on('leave-chat-channel', (roomId) => {
+    if (roomId) {
+      socket.leave(`chat_room_${roomId}`);
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+  });
+  
+  // 4. Global Admin Rooms
+  socket.on('join-ict-admin-room', () => {
+    socket.join('ict_admin_room');
+  });
+
+  socket.on('join-gso-admin-room', () => {
+    socket.join('gso_admin_room');
   });
 });
 
@@ -1192,7 +1221,8 @@ app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
 // ==========================================
 app.post('/api/chat/messages', requireAuth, async (req, res) => {
   const { roomId, messageText } = req.body;
-  const senderId = req.user.u_id; // Decoded cleanly from your JWT authentication layer middleware
+  const senderId = req.user.u_id;
+
   try {
     const result = await pool.query(
       `INSERT INTO public.chat_messages (room_id, sender_id, message_text, sent_at)
@@ -1201,7 +1231,30 @@ app.post('/api/chat/messages', requireAuth, async (req, res) => {
       [parseInt(roomId), senderId, messageText.trim()]
     );
     
-    res.status(201).json(result.rows[0]);
+    const savedMessage = result.rows[0];
+
+    // Query extra metadata required by the frontend feed
+    const metaRes = await pool.query(
+      `SELECT u.full_name as sender_name, a.account_type as role_name
+       FROM public."User" u
+       JOIN public.account a ON u.a_id = a.a_id
+       WHERE u.u_id = $1`,
+      [senderId]
+    );
+
+    const fullMessage = {
+      ...savedMessage,
+      sender_name: metaRes.rows[0]?.sender_name || 'User',
+      role_name: metaRes.rows[0]?.role_name || 'Staff'
+    };
+
+    // Broadcast instantly to anyone viewing this chat room
+    io.to(`chat_room_${roomId}`).emit('new-chat-message', fullMessage);
+
+    // Notify all participants to update unread badges
+    io.emit('chat-badge-updated');
+
+    res.status(201).json(fullMessage);
   } catch (err) {
     console.error("Failed submitting secure message tracking block node:", err);
     res.status(500).json({ error: 'Structural breakdown committing message log row.' });

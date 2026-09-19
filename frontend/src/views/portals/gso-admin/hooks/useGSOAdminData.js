@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth } from "../../../../api";
+import { io } from 'socket.io-client';
 
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export function useGSOAdminData() {
   const navigate = useNavigate();
   const userId = localStorage.getItem('userId');
   const userName = localStorage.getItem('user') || 'Admin User';
+
+  const socketRef = useRef(null);
 
   // --- 1. Notification & Chat States ---
   const [notifications, setNotifications] = useState([]);
@@ -49,7 +53,6 @@ export function useGSOAdminData() {
   });
 
   // --- FETCH FUNCTIONS ---
-
   const fetchGSOMeta = async () => {
     try {
       const res = await fetchWithAuth(`/api/profile/${userId}`);
@@ -87,10 +90,9 @@ export function useGSOAdminData() {
     try {
       const procRes = await fetchWithAuth(`/api/notifications/${userId}/2/${officeId}`);
       const procData = await procRes.json();
-  
       const signRes = await fetchWithAuth(`/api/notifications/${userId}/3/${officeId}`);
       const signData = await signRes.json();
-  
+      
       if (procRes.ok && signRes.ok) {
         const combined = [
           ...procData.map(n => ({ ...n, roleSource: 'Processor' })),
@@ -162,7 +164,6 @@ export function useGSOAdminData() {
         }));
         setPeakDemandData(formattedPeakData);
       }
-
       if (equipmentInventory.length === 0) fetchInventoryMetrics();
     } catch (err) { console.error("Error fetching analytics:", err); } 
     finally { setIsAnalyticsLoading(false); }
@@ -196,14 +197,12 @@ export function useGSOAdminData() {
     try {
       const routeRes = await fetchWithAuth('/api/analytics/route-performance');
       if (routeRes.ok) setRoutePerf(await routeRes.json());
-
       const healthRes = await fetchWithAuth('/api/analytics/system-health');
       if (healthRes.ok) setSystemHealth(await healthRes.json());
     } catch (err) { console.error("Error connecting to analytics engine:", err); }
   };
 
-  // --- USE EFFECTS ---
-
+  // --- INITIAL DATA LOAD EFFECT ---
   useEffect(() => {
     if (!userId || userId === 'undefined') {
       localStorage.clear();
@@ -215,12 +214,28 @@ export function useGSOAdminData() {
     fetchOfficesList();
     fetchProcurementData();
     fetchInventoryMetrics();
-    fetchSystemAnalyticsData(); // Merged from OperationalAnalytics.jsx
+    fetchSystemAnalyticsData(); 
   }, [userId, navigate]);
 
-  // Poll for unread chats
+  // --- REAL-TIME WEBSOCKET EFFECT ---
   useEffect(() => {
-    if (!userId || userId === 'undefined') return;
+    // Only connect once we have the necessary identifiers
+    if (!userId || userId === 'undefined' || !gsoOfficeId) return;
+
+    socketRef.current = io(SOCKET_URL, {
+      secure: true,
+      reconnection: true
+    });
+
+    socketRef.current.on('connect', () => {
+      // 1. Join global GSO room for system-wide updates
+      socketRef.current.emit('join-gso-admin-room');
+      // 2. Join specific office room for pipeline/document updates
+      socketRef.current.emit('join-office-room', gsoOfficeId);
+      // 3. Join user room for personal alerts
+      socketRef.current.emit('join-user-room', userId);
+    });
+
     const checkChatBadgeStatus = async () => {
       try {
         const res = await fetchWithAuth('/api/chat/active-documents-directory');
@@ -229,10 +244,33 @@ export function useGSOAdminData() {
       } catch (err) { console.error(err); }
     };
 
+    // Initial chat badge check
     checkChatBadgeStatus();
-    const chatInterval = setInterval(checkChatBadgeStatus, 15000);
-    return () => clearInterval(chatInterval);
-  }, [userId]);
+
+    // Setup real-time listeners
+    socketRef.current.on('chat-badge-updated', checkChatBadgeStatus);
+
+    socketRef.current.on('pipeline-updated', () => {
+      fetchExpectedIncomingCount(gsoOfficeId);
+      fetchPipelineDocs(gsoOfficeId);
+      fetchOfficeActionHistory(gsoOfficeId);
+      fetchProcurementData();
+      fetchInventoryMetrics();
+    });
+
+    socketRef.current.on('document-updated', () => {
+      fetchGSOCombinedNotificationFeeds(gsoOfficeId);
+    });
+
+    socketRef.current.on('system-metrics-updated', () => {
+      fetchOperationalAnalytics();
+      fetchSystemAnalyticsData();
+    });
+
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, [userId, gsoOfficeId]);
 
   return {
     userId, userName, gsoOfficeName, gsoOfficeId, profileName, setProfileName, profileEmail, setProfileEmail,

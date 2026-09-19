@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchWithAuth } from '../../../../api';
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export function useProcessorData(userId) {
   // --- USER & OFFICE STATE ---
@@ -27,7 +30,7 @@ export function useProcessorData(userId) {
   const [isIncomingLoading, setIsIncomingLoading] = useState(false);
   const [actionHistory, setActionHistory] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
-   
+
   // --- NOTIFICATIONS & CHAT ---
   const [notifications, setNotifications] = useState([]);
   const [hasUnreadChats, setHasUnreadChats] = useState(false);
@@ -39,7 +42,9 @@ export function useProcessorData(userId) {
   const [dashboardPage, setDashboardPage] = useState(1);
   const [pipelinePage, setPipelinePage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
-  const itemsPerPage = 7; // 7 rows per page
+  const itemsPerPage = 7; 
+
+  const socketRef = useRef(null);
 
   // --- API FETCHING FUNCTIONS ---
   const fetchLiveNotifications = async (officeId) => {
@@ -116,7 +121,6 @@ export function useProcessorData(userId) {
       if (res.ok) {
         setProcessorOfficeName(data.office_name || 'HRMO');
         setProcessorOfficeId(data.o_id);
-
         setProfileName(data.full_name || '');
         setProfileEmail(data.uni_email || '');
         setFacultyId(data.faculty_id || 'NOT ASSIGNED');
@@ -158,16 +162,26 @@ export function useProcessorData(userId) {
     fetchWorkflowTemplates();
   }, [userId]);
 
-  // Periodic alert and chat polling
+  // REAL-TIME: WebSockets implementation for office data and chat badges
   useEffect(() => {
     if (!userId || userId === 'undefined' || !processorOfficeId) return;
 
-    const notifInterval = setInterval(() => {
+    socketRef.current = io(SOCKET_URL, {
+      secure: true,
+      reconnection: true
+    });
+
+    socketRef.current.on('connect', () => {
+      socketRef.current.emit('join-office-room', processorOfficeId);
+    });
+
+    const refreshOfficeFeed = () => {
       fetchPipelineDocs(processorOfficeId);
       fetchOfficeActionHistory(processorOfficeId);
       fetchKpis(processorOfficeId);
       fetchLiveNotifications(processorOfficeId);
-    }, 10000);
+      fetchExpectedIncomingList(processorOfficeId);
+    };
 
     const checkChatBadgeStatus = async () => {
       try {
@@ -177,17 +191,19 @@ export function useProcessorData(userId) {
       } catch (err) { console.error(err); }
     };
 
+    // Initial check
     checkChatBadgeStatus();
-    const chatInterval = setInterval(checkChatBadgeStatus, 15000);
+
+    // Listeners
+    socketRef.current.on('pipeline-updated', refreshOfficeFeed);
+    socketRef.current.on('chat-badge-updated', checkChatBadgeStatus);
 
     return () => {
-      clearInterval(notifInterval);
-      clearInterval(chatInterval);
+      if (socketRef.current) socketRef.current.disconnect();
     };
   }, [userId, processorOfficeId]);
 
   // --- UNIFIED OFFICE STATUS FILTERING ---
-  // Evaluates status relative to THIS office (matching KPI definitions)
   const resolveOfficeStatus = (doc) => {
     const ownStatus = doc.office_status_id;
     if (ownStatus === 4) return 'Action Required';
@@ -196,6 +212,7 @@ export function useProcessorData(userId) {
     if (ownStatus === 3) return 'Signed';
     if (!doc.time_in && !doc.pdoc_office_time_in) return 'Awaiting Scan-In';
     if (ownStatus === 1) return 'Pending';
+
     if (doc.status?.toLowerCase() === 'action required') return 'Action Required';
     if (doc.status?.toLowerCase() === 'signed') return 'Signed';
     if (doc.status?.toLowerCase() === 'in verification' || (doc.current_step_is_adhoc && Number(doc.current_office_id) !== Number(processorOfficeId))) return 'In Verification';
@@ -208,39 +225,30 @@ export function useProcessorData(userId) {
     const matchesSearch = (doc.title && doc.title.toLowerCase().includes(q)) || 
                           (doc.qr_code && doc.qr_code.toLowerCase().includes(q));
     if (!matchesSearch) return false;
-
     if (filterStatus === 'All') return true;
-    if (['Signed','Action Required'].includes(filterStatus)) return resolveOfficeStatus(doc) === filterStatus;
 
+    if (['Signed','Action Required'].includes(filterStatus)) return resolveOfficeStatus(doc) === filterStatus;
+    
     const hasTimeIn = Boolean(doc.time_in || doc.pdoc_office_time_in);
     const hasTimeOut = Boolean(doc.time_out || doc.pdoc_office_time_out);
     const isVerification = resolveOfficeStatus(doc) === 'In Verification';
 
-    // 1. Awaiting Scan-In: At this office, but no Time-In yet
     if (filterStatus === 'Awaiting Scan-In') {
       return !hasTimeIn && !hasTimeOut;
     }
-
-    // 2. Pending: Has Time-In and NO Time-Out (INCLUDES In Verification items)
     if (filterStatus === 'Pending') {
       return hasTimeIn && !hasTimeOut;
     }
-
-    // 3. In Verification: Only the subset currently on ad-hoc detour without time-out
     if (filterStatus === 'In Verification') {
       return isVerification && !hasTimeOut;
     }
-
-    // 4. Completed: Has clocked out of this office
     if (filterStatus === 'Completed') {
       return hasTimeOut;
     }
-
     return true;
   });
 
   const filteredPipelineDocs = filterDocsList(pipelineDocs);
-
   const currentDashDocs = filteredPipelineDocs.slice((dashboardPage - 1) * itemsPerPage, dashboardPage * itemsPerPage);
   const totalDashPages = Math.ceil(filteredPipelineDocs.length / itemsPerPage) || 1;
 
@@ -252,6 +260,7 @@ export function useProcessorData(userId) {
     const matchesSearch = (log.title && log.title.toLowerCase().includes(q)) || 
                           (log.full_name && log.full_name.toLowerCase().includes(q)) || 
                           (log.qr_code && log.qr_code.toLowerCase().includes(q));
+    
     if (historyFilter !== 'All') return matchesSearch && log.action_type.startsWith(historyFilter);
     return matchesSearch;
   });

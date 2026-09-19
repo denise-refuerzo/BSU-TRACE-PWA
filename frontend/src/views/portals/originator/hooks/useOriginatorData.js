@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; 
+import { io } from 'socket.io-client';
+
 import { fetchWithAuth } from "../../../../api";
 import { formatPhilippineDate } from '../../../../utils/philippineTime';
+
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -14,29 +18,30 @@ const minimalSwal = Swal.mixin({
   },
   buttonsStyling: false
 });
- 
+
 export default function useOriginatorData() {
   const navigate = useNavigate();
-  
   const userId = localStorage.getItem('userId');
   const userName = localStorage.getItem('user') || 'Faculty User';
-  
+  const socketRef = useRef(null);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [edcPredictions, setEdcPredictions] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
+  
   const [workflowsLoading, setWorkflowsLoading] = useState(true);
   const [workflowError, setWorkflowError] = useState('');
   const [workflowRefresh, setWorkflowRefresh] = useState(0);
+
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
-  
   const [currentPage, setCurrentPage] = useState(1);
   const [hasUnreadChats, setHasUnreadChats] = useState(false);
   const itemsPerPage = 5;
 
   const [notifications, setNotifications] = useState([]);
-  
+
   const [profile, setProfile] = useState({
     fullName: userName,
     email: 'faculty@batstate-u.edu.ph',
@@ -46,19 +51,19 @@ export default function useOriginatorData() {
     twoFaEnabled: false,
     twoFaCode: ''
   });
-  
   const [initialProfile, setInitialProfile] = useState(null);
-  
+
   const [showModal, setShowModal] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
   const [generatedQr, setGeneratedQr] = useState('');
-  
+
   const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, placeholderSelections: {} });
   const [passForm, setPassForm] = useState({ currentPassword: '', newPassword: '', confirmNew: '' });
   const [selectedRoutePreview, setSelectedRoutePreview] = useState([]);
   const [estimatedDate, setEstimatedDate] = useState('');
   const [estimatedDatePayload, setEstimatedDatePayload] = useState('');
+  
   const [statusMsg, setStatusMsg] = useState('');
   const [recentDocStops, setRecentDocStops] = useState([]);
 
@@ -79,6 +84,7 @@ export default function useOriginatorData() {
     if (documents.length > 0 && processTypes.length > 0) {
       const activeDoc = documents[0];
       const match = processTypes.find(p => p.process_name === activeDoc.process_name);
+
       if (match) {
         const stops = [];
         const departmentToOfficeMap = {
@@ -121,7 +127,6 @@ export default function useOriginatorData() {
     let cancelled = false;
     const customRoute = form.customRoute;
     const stops = customRoute?.stops || [];
-
     if (!customRoute || stops.length < 2 || stops.some(stop => !stop)) {
       if (customRoute) {
         setEstimatedDate('');
@@ -129,7 +134,6 @@ export default function useOriginatorData() {
       }
       return () => { cancelled = true; };
     }
-
     fetchWithAuth(`/api/analytics/edc?route=${stops.join(',')}`)
       .then(async res => res.ok ? res.json() : [])
       .then(data => {
@@ -144,30 +148,45 @@ export default function useOriginatorData() {
           setEstimatedDatePayload('');
         }
       });
-
     return () => { cancelled = true; };
   }, [form.customRoute?.stops?.join(',')]);
 
+  // REAL-TIME: WebSockets implementation for originator data and chat badges
   useEffect(() => {
-    fetchLiveNotificationFeeds();
-    const alertInterval = setInterval(fetchLiveNotificationFeeds, 10000);
+    if (!userId || userId === 'undefined') return;
+
+    socketRef.current = io(SOCKET_URL, {
+      secure: true,
+      reconnection: true
+    });
+
+    socketRef.current.on('connect', () => {
+      socketRef.current.emit('join-user-room', userId);
+    });
 
     const checkChatBadgeStatus = async () => {
       try {
         const res = await fetchWithAuth('/api/chat/active-documents-directory');
         const data = await res.json();
         if (res.ok) {
-          const hasAnyActiveOngoingChat = data.some(d => d.hasAnyChat === true);
-          setHasUnreadChats(hasAnyActiveOngoingChat);
+          setHasUnreadChats(data.some(d => d.hasAnyChat === true));
         }
       } catch (err) { console.error(err); }
     };
+
+    // Initial load
+    fetchLiveNotificationFeeds();
     checkChatBadgeStatus();
-    const chatBadgeInterval = setInterval(checkChatBadgeStatus, 15000);
+
+    // Listeners
+    socketRef.current.on('document-updated', () => {
+      fetchDashboardLedger();
+      fetchLiveNotificationFeeds();
+    });
+    socketRef.current.on('chat-badge-updated', checkChatBadgeStatus);
 
     return () => {
-      clearInterval(alertInterval);
-      clearInterval(chatBadgeInterval);
+      if (socketRef.current) socketRef.current.disconnect();
     };
   }, [userId]);
 
@@ -215,7 +234,7 @@ export default function useOriginatorData() {
         setInitialProfile({ ...profile });
       }
     } catch (err) { 
-      console.error("Profile load err:", err); 
+      console.error("Profile load err:", err);
       setInitialProfile({ ...profile });
     }
   };
@@ -232,7 +251,6 @@ export default function useOriginatorData() {
       }
     } catch (err) { console.error(err); }
   };
-
 
   useEffect(() => {
     let cancelled = false;
@@ -254,7 +272,7 @@ export default function useOriginatorData() {
   const saveProfileChanges = async (e) => {
     if (e) e.preventDefault();
     setStatusMsg('');
-
+    
     if (!profile.fullName.trim() || !profile.email.trim()) {
       return alert("Validation Error: Personal Information fields cannot be left empty.");
     }
@@ -266,7 +284,7 @@ export default function useOriginatorData() {
         body: JSON.stringify(profile)
       });
       if (res.ok) {
-        setStatusMsg("✅ Profile modifications saved instantly!");
+        setStatusMsg("  Profile modifications saved instantly!");
         localStorage.setItem('user', profile.fullName);
         setInitialProfile(profile);
       }
@@ -284,7 +302,7 @@ export default function useOriginatorData() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      alert("✅ Password record securely altered!");
+      alert("  Password record securely altered!");
       setShowPassModal(false);
       setPassForm({ currentPassword: '', newPassword: '', confirmNew: '' });
     } catch (err) { alert(err.message); }
@@ -326,7 +344,7 @@ export default function useOriginatorData() {
       return;
     }
     const edcPayload = estimatedDatePayload || null;
-  
+    
     try {
       const res = await fetchWithAuth('/api/documents', {
         method: 'POST',
@@ -334,7 +352,7 @@ export default function useOriginatorData() {
         body: JSON.stringify({ 
           userId: parseInt(userId), 
           title: form.title, 
-          processTypeId: parseInt(form.processTypeId), 
+          processTypeId: parseInt(form.processTypeId),
           customRoute: form.customRoute,
           edc: edcPayload,
           placeholderSelections: form.placeholderSelections || {}
@@ -351,8 +369,9 @@ export default function useOriginatorData() {
       setSelectedRoutePreview([]);
       setEstimatedDate('');
       fetchDashboardLedger();
-    } catch (err) { 
-      console.error("Frontend Submit Error:", err); 
+
+    } catch (err) {
+      console.error("Frontend Submit Error:", err);
       alert("Submission failed: " + err.message);
     }
   };
@@ -390,8 +409,8 @@ export default function useOriginatorData() {
     try {
       const requestRes = await fetchWithAuth(`/api/users/${userId}/request-profile-otp`, { method: 'POST' });
       if (!requestRes.ok) throw new Error('Failed to dispatch email.');
-      minimalSwal.close();
 
+      minimalSwal.close();
       const { value: otpCode } = await minimalSwal.fire({
         title: 'Verify Your Email',
         text: `We sent a 6-digit code to ${profile.email}.`,
@@ -408,7 +427,6 @@ export default function useOriginatorData() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ otpCode })
         });
-
         if (verifyRes.ok) {
           setProfile({...profile, twoFaEnabled: true});
           minimalSwal.fire({ icon: 'success', title: 'Secured!', text: 'Email Two-Factor Authentication is now active.' });

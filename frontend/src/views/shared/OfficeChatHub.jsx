@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
 import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, ChevronRight, Hash, ChevronLeft, ArrowLeft } from 'lucide-react';
 import { fetchWithAuth } from "../../api";
+
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = null, onClearTargetDoc = null }) {
   const [directory, setDirectory] = useState([]);
@@ -12,18 +15,54 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
   const [textInput, setTextInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingDirectory, setLoadingDirectory] = useState(true);
+  
   const messageEndRef = useRef(null);
+  const socketRef = useRef(null);
+
+  // Initialize socket for real-time chat
+  useEffect(() => {
+    socketRef.current = io(SOCKET_URL, {
+      secure: true,
+      reconnection: true
+    });
+
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     fetchActiveDirectory();
   }, []);
 
+  // REAL-TIME: Listen for messages when a channel is activated
   useEffect(() => {
-    if (activeChannel) {
-      fetchMessageLogs(activeChannel.roomId);
-      const streamTimer = setInterval(() => fetchMessageLogs(activeChannel.roomId), 5000);
-      return () => clearInterval(streamTimer);
-    }
+    if (!activeChannel || !socketRef.current) return;
+
+    const roomId = activeChannel.roomId;
+    
+    // Initial fetch of historical logs
+    fetchMessageLogs(roomId);
+
+    // Join room and listen for real-time messages
+    socketRef.current.emit('join-chat-channel', roomId);
+
+    const handleNewMessage = (msg) => {
+      if (msg.room_id === parseInt(roomId)) {
+        setMessages((prev) => {
+          // Prevent duplicates if the message is already in state
+          if (prev.some((m) => m.message_id === msg.message_id)) return prev;
+          return [...prev, msg];
+        });
+      }
+    };
+
+    socketRef.current.on('new-chat-message', handleNewMessage);
+
+    return () => {
+      socketRef.current.emit('leave-chat-channel', roomId);
+      socketRef.current.off('new-chat-message', handleNewMessage);
+    };
   }, [activeChannel]);
 
   useEffect(() => {
@@ -128,7 +167,8 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
       });
       if (res.ok) {
         setTextInput('');
-        fetchMessageLogs(activeChannel.roomId);
+        // We do NOT need to manually re-fetch here anymore. 
+        // The server will instantly broadcast 'new-chat-message' back to us via the WebSocket.
       }
     } catch (err) { 
       console.error(err); 
