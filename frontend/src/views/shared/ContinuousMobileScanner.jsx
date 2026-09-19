@@ -49,14 +49,15 @@ export default function ContinuousMobileScanner() {
   }, []);
 
   // 2. WebSocket Connection
+// 2. WebSocket Connection
   useEffect(() => {
     if (!roomId) return;
 
+    // Removed the transports array to allow standard HTTP polling fallback
     socketRef.current = io(SOCKET_URL, {
-      transports: ['websocket'],
       secure: true,
       reconnection: true,
-      reconnectionAttempts: Infinity,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000
     });
 
@@ -66,9 +67,17 @@ export default function ContinuousMobileScanner() {
       setDebugLog('Connected to server room.');
     });
 
-    socketRef.current.on('disconnect', () => {
+    socketRef.current.on('connect_error', (err) => {
+      setDebugLog(`Connection error: ${err.message}`);
+    });
+
+    socketRef.current.on('disconnect', (reason) => {
       setConnected(false);
-      setDebugLog('Disconnected from server.');
+      setDebugLog(`Disconnected: ${reason}`);
+      // If the disconnect was intentional by the server, try to manually reconnect
+      if (reason === 'io server disconnect') {
+        socketRef.current.connect();
+      }
     });
 
     socketRef.current.on('scan-result', ({ success, message, title }) => {

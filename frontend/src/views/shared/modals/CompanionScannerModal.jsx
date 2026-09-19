@@ -14,10 +14,13 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
 
   const companionUrl = `${window.location.origin}/companion?room=${roomId}`;
 
-  useEffect(() => {
+useEffect(() => {
+    // Let Socket.IO default to ['polling', 'websocket'] for a stable handshake
     socketRef.current = io(SOCKET_URL, {
-    transports: ['websocket'], 
-    secure: true
+      secure: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
     });
 
     socketRef.current.on('connect', () => {
@@ -28,7 +31,7 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
       setIsPhoneConnected(true);
     });
 
-    // MATCHED EVENT: Listening for 'forward-scan' instead of 'companion-scanned-doc'
+    // MATCHED EVENT: Listening for 'forward-scan'
     socketRef.current.on('forward-scan', async ({ qrData, scanMode }) => {
       setIsPhoneConnected(true);
       const endpoint = scanMode === 'time-out' ? '/api/documents/scan-out' : '/api/documents/scan-in';
@@ -43,7 +46,7 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to process document');
 
-        // MATCHED EVENT: Emitting 'scan-result' instead of 'scan-result-relay'
+        // MATCHED EVENT: Emitting 'scan-result'
         socketRef.current.emit('scan-result', {
           roomId,
           success: true,
@@ -59,7 +62,7 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
         if (onScanSuccess) onScanSuccess();
 
       } catch (err) {
-        // MATCHED EVENT: Emitting 'scan-result' instead of 'scan-result-relay'
+        // MATCHED EVENT: Emitting 'scan-result'
         socketRef.current.emit('scan-result', {
           roomId,
           success: false,
