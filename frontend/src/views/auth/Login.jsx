@@ -51,47 +51,49 @@ export default function Login() {
 
   // --- STEP 1: INITIAL LOGIN CONTROLLER ---
   const handleSignIn = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsSubmitting(true);
+      e.preventDefault();
+      setError('');
+      setIsSubmitting(true);
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })  
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Invalid credentials');  
-      }
-
-      if (data.two_fa_enabled) {
-        setTempUserId(data.u_id);
-        setOtpExpiresAt(data.two_fa_expires_at ? Date.parse(data.two_fa_expires_at) : Date.now() + 10 * 60 * 1000);
-        setResendAvailableAt(Date.now() + 60 * 1000);
-        setRequire2FA(true);  
-        Swal.fire({
-          title: 'Verification Required',
-          text: 'A 6-digit verification code has been sent to your university email.',
-          icon: 'info',
-          confirmButtonColor: '#D32F2F'
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })  
         });
-        setIsSubmitting(false);
-        return; 
-      }
+        
+        // DEBUG CATCHER: Check if the response is actually JSON before parsing
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const htmlText = await response.text();
+          console.error("HTML ERROR RESPONSE:", htmlText);
+          throw new Error("The server returned an HTML error page. Please press F12 and check the Console tab to read it.");
+        }
 
-      setPendingLoginData(data);
-      setShowTerms(true);
-      
-    } catch (err) {
-      setError(err.message);  
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Invalid credentials');  
+        }
+
+        if (data.two_fa_enabled) {
+          setTempUserId(data.u_id);
+          setOtpExpiresAt(data.two_fa_expires_at ? Date.parse(data.two_fa_expires_at) : Date.now() + 10 * 60 * 1000);
+          setResendAvailableAt(Date.now() + 60 * 1000);
+          setRequire2FA(true);  
+          setIsSubmitting(false);
+          return; 
+        }
+
+        setPendingLoginData(data);
+        setShowTerms(true);
+        
+      } catch (err) {
+        setError(err.message);  
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
 
   // --- STEP 2: 2FA OTP VERIFICATION CONTROLLER ---
   const handleVerifyOTP = async (e) => {
