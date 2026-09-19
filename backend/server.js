@@ -53,25 +53,28 @@ const io = new Server(server, {
 // 0.1 COMPANION SCANNER WEBSOCKET RELAYS
 // ==========================================
 io.on('connection', (socket) => {
-  // Join temporary pairing room between PC and Phone
+  console.log('A user connected:', socket.id);
+
+  // 1. Put both the PC and the Phone into the same private room
   socket.on('join-companion-room', (roomId) => {
     socket.join(roomId);
-    // Notify room that another device has connected
+    // Tell the PC that the phone has successfully joined the room
     socket.to(roomId).emit('companion-device-joined');
   });
 
-  // Phone sends scanned QR code + Mode ('time-in' or 'time-out')
-  socket.on('forward-scan', ({ roomId, qrData, scanMode }) => {
-    socket.to(roomId).emit('companion-scanned-doc', { qrData, scanMode });
+  // 2. Receive the QR code from the phone and forward it to the PC
+  socket.on('forward-scan', (data) => {
+    // socket.to(roomId).emit(...) sends it to the PC in the room
+    socket.to(data.roomId).emit('forward-scan', data);
   });
 
-  // PC reports API processing status back to the Phone
-  socket.on('scan-result-relay', ({ roomId, success, message, title }) => {
-    socket.to(roomId).emit('scan-result', { success, message, title });
+  // 3. Receive the API success/fail result from the PC and send it back to the phone
+  socket.on('scan-result', (data) => {
+    socket.to(data.roomId).emit('scan-result', data);
   });
 
   socket.on('disconnect', () => {
-    // Clean socket disconnection
+    console.log('User disconnected:', socket.id);
   });
 });
 

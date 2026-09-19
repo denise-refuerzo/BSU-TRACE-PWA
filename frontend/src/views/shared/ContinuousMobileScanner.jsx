@@ -15,6 +15,9 @@ export default function ContinuousMobileScanner() {
   const [status, setStatus] = useState('ready'); 
   const [feedback, setFeedback] = useState({ title: '', message: 'Align document QR code inside the box' });
   const [debugLog, setDebugLog] = useState('Initializing camera engine...');
+  
+  // NEW: Dedicated state to break the camera out of the closure trap
+  const [latestScan, setLatestScan] = useState(null);
 
   const socketRef = useRef(null);
   const lastScanRef = useRef(null);
@@ -48,12 +51,10 @@ export default function ContinuousMobileScanner() {
     };
   }, []);
 
-  // 2. WebSocket Connection
-// 2. WebSocket Connection
+  // 2. WebSocket Connection (Allows HTTP Polling fallback)
   useEffect(() => {
     if (!roomId) return;
 
-    // Removed the transports array to allow standard HTTP polling fallback
     socketRef.current = io(SOCKET_URL, {
       secure: true,
       reconnection: true,
@@ -67,17 +68,9 @@ export default function ContinuousMobileScanner() {
       setDebugLog('Connected to server room.');
     });
 
-    socketRef.current.on('connect_error', (err) => {
-      setDebugLog(`Connection error: ${err.message}`);
-    });
-
-    socketRef.current.on('disconnect', (reason) => {
+    socketRef.current.on('disconnect', () => {
       setConnected(false);
-      setDebugLog(`Disconnected: ${reason}`);
-      // If the disconnect was intentional by the server, try to manually reconnect
-      if (reason === 'io server disconnect') {
-        socketRef.current.connect();
-      }
+      setDebugLog('Disconnected from server.');
     });
 
     socketRef.current.on('scan-result', ({ success, message, title }) => {
@@ -97,6 +90,7 @@ export default function ContinuousMobileScanner() {
         setStatus('ready');
         setFeedback({ title: '', message: 'Ready for next document' });
         lastScanRef.current = null;
+        setLatestScan(null); // Clear the scan state so the same doc can be scanned again later
       }, 2200);
     });
 
@@ -106,9 +100,26 @@ export default function ContinuousMobileScanner() {
     };
   }, [roomId]);
 
-  // 3. Start Html5Qrcode Scanner Engine
+  // 3. NEW: Relay Logic Effect (Always has fresh state, safely interacts with Socket)
   useEffect(() => {
-    let isMounted = true; // Prevents strict-mode double firing
+    if (!latestScan || !connected || status !== 'ready') return;
+    
+    if (latestScan !== lastScanRef.current) {
+      lastScanRef.current = latestScan;
+      setStatus('processing');
+      setFeedback({ title: 'Relaying to Desktop...', message: latestScan });
+
+      socketRef.current.emit('forward-scan', {
+        roomId,
+        qrData: latestScan,
+        scanMode
+      });
+    }
+  }, [latestScan, connected, status, roomId, scanMode]);
+
+  // 4. Start Html5Qrcode Scanner Engine (EMPTY DEPENDENCY ARRAY - Boot only ONCE)
+  useEffect(() => {
+    let isMounted = true;
     const qrRegionId = 'html5qr-code-full-region';
     
     const timer = setTimeout(() => {
@@ -126,28 +137,16 @@ export default function ContinuousMobileScanner() {
         (decodedText) => {
           const qrText = String(decodedText).trim();
           setDebugLog(`Scanned: ${qrText}`);
-
-          if (qrText && qrText !== lastScanRef.current && status === 'ready' && connected) {
-            lastScanRef.current = qrText;
-            setStatus('processing');
-            setFeedback({ title: 'Relaying to Desktop...', message: qrText });
-
-            socketRef.current.emit('forward-scan', {
-              roomId,
-              qrData: qrText,
-              scanMode
-            });
-          }
+          // We simply update state here. The relay effect above handles the rest.
+          setLatestScan(qrText);
         },
-        () => {
-          // Frame miss callback (ignored to keep performance smooth)
-        }
+        () => {} // Ignore frame miss
       ).catch((err) => {
         console.error('Camera initialization failed:', err);
         setDebugLog(`Cam Error: ${err?.message || err}`);
         setFeedback({ title: 'Camera Error', message: 'Could not access camera. Check browser permissions.' });
       });
-    }, 300);
+    }, 500);
 
     return () => {
       isMounted = false;
@@ -156,7 +155,7 @@ export default function ContinuousMobileScanner() {
         html5QrCodeRef.current.stop().catch(err => console.error('Failed to stop scanner:', err));
       }
     };
-  }, [connected, roomId, scanMode, status]);
+  }, []); // <-- CRITICAL: This array is now empty so the camera never restarts mid-session
 
   if (!roomId) {
     return (
