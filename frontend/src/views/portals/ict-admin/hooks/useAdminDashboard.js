@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
 import { fetchWithAuth } from "../../../../api";
+
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export function useAdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -8,14 +11,33 @@ export function useAdminDashboard() {
     liveAuditTrail: [],
     stalledBottlenecks: []
   });
+  
+  const socketRef = useRef(null);
 
   useEffect(() => {
     fetchDashboardMetrics();
-    // Establish a live pooling cycle to auto-refresh feeds every 30 seconds
-    const interval = setInterval(fetchDashboardMetrics, 30000);
-    return () => clearInterval(interval);
+
+    // REAL-TIME: Connect to WebSocket for live ICT metrics
+    socketRef.current = io(SOCKET_URL, {
+      secure: true,
+      reconnection: true
+    });
+
+    socketRef.current.on('connect', () => {
+      // Join the global ICT admin room
+      socketRef.current.emit('join-ict-admin-room');
+    });
+
+    // Listen for system-wide updates broadcasted by the backend
+    socketRef.current.on('system-metrics-updated', () => {
+      fetchDashboardMetrics();
+    });
+
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
   }, []);
- 
+
   const fetchDashboardMetrics = async () => {
     try {
       const res = await fetchWithAuth('/api/admin/dashboard-metrics');

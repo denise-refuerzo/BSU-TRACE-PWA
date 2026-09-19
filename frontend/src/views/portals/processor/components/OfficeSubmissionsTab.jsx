@@ -1,13 +1,16 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { fetchWithAuth } from '../../../../api';
+import { io } from 'socket.io-client';
 import DocumentSubmissionModal from '../../originator/modals/DocumentSubmissionModal';
 import OfficeDocumentModal from '../../../shared/modals/DocumentTrackingModal';
 import { formatPhilippineDateTime, formatPhilippineDate } from '../../../../utils/philippineTime';
-import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Building, Filter, MoreVertical } from 'lucide-react';
+import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Filter, MoreVertical } from 'lucide-react';
+
+const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} }) {
   const userId = localStorage.getItem('userId');
-  
+
   // --- STATE ---
   const [estimateBase, setEstimateBase] = useState(() => Date.now());
   const [documents, setDocuments] = useState([]);
@@ -20,12 +23,11 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const [selected, setSelected] = useState(null);
   const [revision, setRevision] = useState(null);
   const [busy, setBusy] = useState(false);
-  
+
   // Search & Filter State
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
-  
   const [predictions, setPredictions] = useState([]);
   const [customHours, setCustomHours] = useState(null);
   const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false });
@@ -47,11 +49,55 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
     const data = await res.json(); if (!res.ok) throw new Error(data.error); return data;
   }).then(data => { setProcessTypes(data); setWorkflowError(''); }).catch(err => setWorkflowError(err.message)).finally(() => setLoading(false)), []);
 
-  useEffect(() => { load(); workflows(); const timer = setInterval(load, 15000); return () => clearInterval(timer); }, [officeId, load, workflows]);
+  // --- REAL-TIME WEBSOCKET EFFECT (Replaces setInterval) ---
+  useEffect(() => { 
+    load(); 
+    workflows(); 
+    
+    if (!officeId) return;
 
-  useEffect(() => { let cancelled = false; fetchWithAuth('/api/analytics/edc').then(async res => { if (res.ok) { const data = await res.json(); if (!cancelled && Array.isArray(data)) setPredictions(data); } }).catch(() => {}); return () => { cancelled = true; }; }, []);
+    const socket = io(SOCKET_URL, { 
+      secure: true, 
+      reconnection: true 
+    });
+    
+    socket.on('connect', () => {
+      // Listen to this specific office's updates
+      socket.emit('join-office-room', officeId);
+    });
 
-  useEffect(() => { let cancelled = false; const ids = form.customRoute?.stops?.filter(Boolean); if (!ids?.length) { setCustomHours(null); return; } fetchWithAuth(`/api/analytics/edc?route=${ids.join(',')}`).then(async r => r.ok ? r.json() : []).then(d => { if (!cancelled) setCustomHours(d[0]?.estimated_hours_to_complete ?? null); }).catch(() => setCustomHours(null)); return () => { cancelled = true; }; }, [form.customRoute?.stops?.join(',')]);
+    socket.on('pipeline-updated', () => {
+      load(); // Instantly refresh table when a document changes
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [officeId, load, workflows]);
+
+  useEffect(() => { 
+    let cancelled = false; 
+    fetchWithAuth('/api/analytics/edc').then(async res => { 
+      if (res.ok) { 
+        const data = await res.json(); 
+        if (!cancelled && Array.isArray(data)) setPredictions(data); 
+      } 
+    }).catch(() => {}); 
+    return () => { cancelled = true; }; 
+  }, []);
+
+  useEffect(() => { 
+    let cancelled = false; 
+    const ids = form.customRoute?.stops?.filter(Boolean); 
+    if (!ids?.length) { 
+      setCustomHours(null); 
+      return; 
+    } 
+    fetchWithAuth(`/api/analytics/edc?route=${ids.join(',')}`).then(async r => r.ok ? r.json() : []).then(d => { 
+      if (!cancelled) setCustomHours(d[0]?.estimated_hours_to_complete ?? null); 
+    }).catch(() => setCustomHours(null)); 
+    return () => { cancelled = true; }; 
+  }, [form.customRoute?.stops?.join(',')]);
 
   // --- LOGIC ---
   const process = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
@@ -235,7 +281,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                     <td className="p-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm whitespace-nowrap ${getStatusStyles(d.status)}`}>
                         {d.status?.toLowerCase() === 'completed' ? 'Completed' : 
-                         d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
+                          d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
                       </span>
                     </td>
                     <td className="p-4 text-center">
@@ -254,7 +300,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                           </p>
                           {d.release_time ? (
                             <button 
-                              onClick={(e) => { e.stopPropagation(); setRevision({ ...d }); }}
+                              onClick={(e) => { e.stopPropagation(); setRevision({ ...d }); }} 
                               className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-red-700 hover:text-red-900 cursor-pointer mt-2 transform active:scale-95 transition-[transform,colors] duration-200"
                             >
                               <RefreshCw size={12} /> Correct & Resubmit

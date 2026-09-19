@@ -2,6 +2,20 @@ const {fail, isOffice, resolveRoute, resolveTemplateRoute, assertAction} = requi
 const crypto = require('node:crypto');
 const {routeProgress} = require('./routeProgress');
 
+// --- NEW: WEBSOCKET BROADCASTER HELPER ---
+const broadcastDocumentUpdate = (req, originUserId, currentOfficeId, nextOfficeId) => {
+  const io = req.app.get('io');
+  if (!io) return;
+
+  if (originUserId) io.to(`user_${originUserId}`).emit('document-updated');
+  if (currentOfficeId) io.to(`office_${currentOfficeId}`).emit('pipeline-updated');
+  if (nextOfficeId) io.to(`office_${nextOfficeId}`).emit('pipeline-updated');
+
+  // Trigger global metrics refresh for GSO & ICT Admins
+  io.to('gso_admin_room').emit('system-metrics-updated');
+  io.to('ict_admin_room').emit('system-metrics-updated');
+};
+
 module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
   app.get('/api/office/documents/:iniId', requireAuth, async (req,res) => {
     try {
@@ -27,6 +41,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
       res.json({...doc,steps,route_steps:routeProgress(doc.route_snapshot || [],steps).routeSteps,actions,route_names:route.map(o=>o.office_name)});
     } catch(err) {console.error(err);res.status(500).json({error:'Unable to load document details.'});}
   });
+
   const transaction = handler => async (req, res) => {
     let client;
     try {
@@ -43,20 +58,25 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
       res.status(err.status || 500).json({error: err.status ? err.message : 'Unable to save the document. Please try again.'});
     } finally { client?.release(); }
   };
+
   const audit = (db, doc, user, action, office = user.o_id) => db.query(
     `INSERT INTO public.office_action_history (ini_id,u_id,o_id,action_type,action_timestamp)
      VALUES ($1,$2,$3,$4,NOW())`, [doc, user.u_id, office, action]);
+
   const lockDoc = async (db, req) => {
     const result = await db.query(`SELECT * FROM public.initial_document
       WHERE ${req.body.qrCode ? 'qr_code' : 'ini_id'}=$1 FOR UPDATE`, [req.body.qrCode || req.body.iniId]);
     if (!result.rows[0]) throw fail(404, 'Document not found.');
     return result.rows[0];
   };
+
   const activeStep = async (db, id) => (await db.query(`SELECT * FROM public.processed_document
     WHERE ini_id=$1 AND time_out IS NULL ORDER BY pd_id DESC LIMIT 1 FOR UPDATE`, [id])).rows[0];
+
   const insertStep = (db, id, office, next) => db.query(`INSERT INTO public.processed_document
     (ini_id,s_id,current_office_id,next_office_id) VALUES ($1,1,$2,$3)`, [id, office, next || null]);
 
+  // NEW DOCUMENT SUBMISSION
   app.post('/api/documents', requireAuth, transaction(async (db, user, req) => {
     const {title, edc, customRoute, completeOriginProcessing = false, placeholderSelections = {}} = req.body;
     let {processTypeId} = req.body;
@@ -65,22 +85,28 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     if ((!customRoute && !Number.isInteger(processTypeId)) || typeof completeOriginProcessing !== 'boolean') throw fail(400, 'Select a valid pipeline and processing option.');
     if (typeof edc !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(edc) || Number.isNaN(Date.parse(`${edc}T00:00:00Z`)))
       throw fail(400, 'Estimated delivery must be calculated before submitting the document.');
+    
     const custom = customRoute ? await require('./customRoutes').createCustomRoute(db,user,customRoute) : null;
     if (custom) processTypeId = custom.processTypeId;
+    
     const route = custom ? custom.route : (await db.query(`SELECT r.* FROM public.process_type p JOIN public.route r ON p.r_id=r.r_id
       WHERE p.p_id=$1 AND p.is_active IS TRUE AND p.route_status='official' FOR SHARE OF p,r`, [processTypeId])).rows[0];
     if (!route) throw fail(400, 'Select an active pipeline.');
+    
     const sequence = custom ? resolveRoute(route, user) : await resolveTemplateRoute(db, route, user, placeholderSelections);
     if (!sequence.length) throw fail(400, 'This pipeline has no office stops.');
     if (completeOriginProcessing && (!isOffice(user) || Number(user.o_id) !== sequence[0]))
       throw fail(403, 'Only staff of the pipeline’s originating office may complete its processing upon submission.');
+    
     const qrCode = `TRK-${crypto.randomUUID()}`;
     const doc = (await db.query(`INSERT INTO public.initial_document
       (p_id,u_id,title,edc,qr_code,created_at,submission_office_id,route_snapshot)
       VALUES ($1,$2,$3,$4,$5,TIMEZONE('Asia/Manila',NOW()),$6,$7) RETURNING *`,
     [processTypeId,user.u_id,title.trim(),edc || null,qrCode,isOffice(user) ? user.o_id : null,sequence])).rows[0];
+    
     await insertStep(db, doc.ini_id, sequence[0], sequence[1]);
     await audit(db, doc.ini_id, user, 'Submitted', isOffice(user) ? user.o_id : sequence[0]);
+    
     if (completeOriginProcessing) {
       await db.query(`UPDATE public.processed_document SET time_in=TIMEZONE('Asia/Manila',NOW()),
         time_out=TIMEZONE('Asia/Manila',NOW()),s_id=$2 WHERE ini_id=$1`, [doc.ini_id,sequence.length > 1 ? 3 : 5]);
@@ -88,9 +114,14 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
         await audit(db, doc.ini_id, user, `${action} (upon submission)`);
       if (sequence[1]) await insertStep(db, doc.ini_id, sequence[1], sequence[2]);
     }
+
+    // TRIGGER WEBSOCKET BROADCAST
+    broadcastDocumentUpdate(req, user.u_id, sequence[0], sequence[1]);
+
     return {created:true, message:'Document submitted.',qrCode,iniId:doc.ini_id};
   }));
 
+  // PIPELINE ACTION ENDPOINTS (SCAN IN, OUT, SIGN, RETURN, ADHOC)
   for (const [action, paths] of Object.entries({
     'time-in':['/api/documents/scan-in'], 'time-out':['/api/documents/scan-out'],
     sign:['/api/office/sign','/api/signee/sign'], return:['/api/office/return','/api/signee/return'],
@@ -100,9 +131,11 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
       const doc = await lockDoc(db, req);
       const latest = (await db.query('SELECT s_id,time_out FROM public.processed_document WHERE ini_id=$1 ORDER BY pd_id DESC LIMIT 1', [doc.ini_id])).rows[0];
       if (latest?.s_id === 4 && latest.time_out) throw fail(409,'This document is awaiting correction and resubmission.');
+      
       const step = await activeStep(db, doc.ini_id);
       assertAction(step,user,action);
       let message;
+
       if (action === 'time-in') {
         await db.query(`UPDATE public.processed_document SET time_in=TIMEZONE('Asia/Manila',NOW()) WHERE pd_id=$1`, [step.pd_id]);
         await audit(db,doc.ini_id,user,'Scanned In');
@@ -123,6 +156,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
         if (!office || target === Number(user.o_id)) throw fail(400,'Select another office.');
         const pending = await db.query('SELECT pd_id FROM public.processed_document WHERE ini_id=$1 AND current_office_id=$2 AND time_out IS NULL', [doc.ini_id,target]);
         if (pending.rows.length) throw fail(409,'That office already has an unfinished step for this document.');
+        
         await db.query('UPDATE public.processed_document SET s_id=2 WHERE pd_id=$1', [step.pd_id]);
         await db.query(`INSERT INTO public.processed_document
           (ini_id,s_id,current_office_id,is_adhoc,adhoc_return_office_id,next_office_id)
@@ -138,6 +172,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
           await db.query(`UPDATE public.processed_document SET s_id=1 WHERE pd_id=(SELECT pd_id
             FROM public.processed_document WHERE ini_id=$1 AND current_office_id=$2 AND time_out IS NULL
             ORDER BY pd_id DESC LIMIT 1)`, [doc.ini_id,step.adhoc_return_office_id]);
+          
           if (doc.route_snapshot?.length) {
             const visits = (await db.query('SELECT * FROM public.processed_document WHERE ini_id=$1 ORDER BY pd_id', [doc.ini_id])).rows;
             const progress = routeProgress(doc.route_snapshot,visits);
@@ -158,20 +193,35 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
           const count = progress.nextIndex;
           let following = count + 1;
           while (progress.credits.has(following)) following++;
+          
           await db.query('UPDATE public.processed_document SET next_office_id=$2 WHERE pd_id=$1',
             [step.pd_id,sequence[count] || null]);
+          
           if (sequence[count]) await insertStep(db,doc.ini_id,sequence[count],sequence[following]);
           else await db.query(`UPDATE public.processed_document SET s_id=5,next_office_id=NULL
             WHERE pd_id=$1 OR pd_id=(SELECT MAX(pd_id) FROM public.processed_document WHERE ini_id=$2)`,
           [step.pd_id,doc.ini_id]);
+          
           await audit(db,doc.ini_id,user,'Scanned Out');
           message = sequence[count] ? 'Released. The next office can now record Time In.' : 'Document processing completed.';
         }
       }
+
+      // TRIGGER WEBSOCKET BROADCAST
+      // Grab the absolutely newest step configuration after the modifications to ensure accurate push targets
+      const updatedStep = (await db.query('SELECT current_office_id, next_office_id FROM public.processed_document WHERE ini_id=$1 ORDER BY pd_id DESC LIMIT 1', [doc.ini_id])).rows[0];
+      broadcastDocumentUpdate(req, doc.u_id, updatedStep?.current_office_id, updatedStep?.next_office_id);
+      
+      // Secondary check to clear the previous office's pipeline table immediately
+      if (user.o_id && Number(user.o_id) !== Number(updatedStep?.current_office_id)) {
+        broadcastDocumentUpdate(req, null, user.o_id, null);
+      }
+
       return {message};
     }));
   }
 
+  // RESUBMIT DOCUMENT
   app.post('/api/documents/:iniId/resubmit', requireAuth, transaction(async (db,user,req) => {
     req.body.iniId = Number(req.params.iniId);
     const doc = await lockDoc(db,req);
@@ -179,13 +229,20 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
       throw fail(403,'Only the submitter or submitting office can resubmit this document.');
     const step = (await db.query('SELECT * FROM public.processed_document WHERE ini_id=$1 ORDER BY pd_id DESC LIMIT 1 FOR UPDATE', [doc.ini_id])).rows[0];
     if (step?.s_id !== 4 || !step.time_out) throw fail(409,'Wait until the returning office has released the document for correction.');
+    
     const title = req.body.title?.trim();
     if (!title || title.length > 150) throw fail(400,'Enter a title of up to 150 characters.');
+    
     await db.query('UPDATE public.initial_document SET title=$2 WHERE ini_id=$1', [doc.ini_id,title]);
     await db.query(`INSERT INTO public.processed_document
       (ini_id,s_id,current_office_id,next_office_id,is_adhoc,adhoc_return_office_id)
       VALUES ($1,1,$2,$3,$4,$5)`, [doc.ini_id,step.current_office_id,step.next_office_id,step.is_adhoc,step.adhoc_return_office_id]);
+    
     await audit(db,doc.ini_id,user,'Resubmitted after correction',user.o_id || step.current_office_id);
+
+    // TRIGGER WEBSOCKET BROADCAST
+    broadcastDocumentUpdate(req, doc.u_id, step.current_office_id, step.next_office_id);
+
     return {message:'Resubmitted to the office that requested corrections.'};
   }));
 };

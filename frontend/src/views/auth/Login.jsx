@@ -5,6 +5,11 @@ import Swal from 'sweetalert2';
 const API_BASE_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export default function Login() {
+  // --- NEW: WIPE STALE SESSION DATA ON LOAD ---
+  useEffect(() => {
+    localStorage.clear();
+  }, []);
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,7 +67,6 @@ export default function Login() {
           body: JSON.stringify({ username, password })  
         });
         
-        // DEBUG CATCHER: Check if the response is actually JSON before parsing
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
           const htmlText = await response.text();
@@ -149,11 +153,13 @@ export default function Login() {
     localStorage.setItem('userId', cleanUserId);  
 
     const role = data.role || data.a_id;
+    
+    // --- NEW: EXPLICITLY SAVE ROLE TO LOCALSTORAGE SO GUARDS WORK ---
+    localStorage.setItem('role', role);
+
     if (role === 5) {
       navigate('/admin/dashboard');  
-    } else if (role === 2) {
-      navigate('/office/dashboard');   
-    } else if (role === 3) {
+    } else if (role === 2 || role === 3) {
       navigate('/office/dashboard');   
     } else if (role === 4) {
       navigate('/gso-dashboard'); 
