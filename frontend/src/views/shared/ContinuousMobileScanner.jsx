@@ -11,10 +11,13 @@ export default function ContinuousMobileScanner() {
   const roomId = searchParams.get('room');
 
   const [connected, setConnected] = useState(false);
-  const [scanMode, setScanMode] = useState('time-in'); // 'time-in' | 'time-out'
-  const [status, setStatus] = useState('ready'); // 'ready' | 'processing' | 'success' | 'error'
+  const [scanMode, setScanMode] = useState('time-in'); 
+  const [status, setStatus] = useState('ready'); 
   const [feedback, setFeedback] = useState({ title: '', message: 'Align document QR code inside the box' });
   const [debugLog, setDebugLog] = useState('Initializing camera engine...');
+  
+  // NEW: Dedicated state to break the camera out of the closure trap
+  const [latestScan, setLatestScan] = useState(null);
 
   const socketRef = useRef(null);
   const lastScanRef = useRef(null);
@@ -48,15 +51,14 @@ export default function ContinuousMobileScanner() {
     };
   }, []);
 
-  // 2. WebSocket Connection
+  // 2. WebSocket Connection (Allows HTTP Polling fallback)
   useEffect(() => {
     if (!roomId) return;
 
     socketRef.current = io(SOCKET_URL, {
-      transports: ['websocket'],
       secure: true,
       reconnection: true,
-      reconnectionAttempts: Infinity,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000
     });
 
@@ -88,6 +90,7 @@ export default function ContinuousMobileScanner() {
         setStatus('ready');
         setFeedback({ title: '', message: 'Ready for next document' });
         lastScanRef.current = null;
+        setLatestScan(null); // Clear the scan state so the same doc can be scanned again later
       }, 2200);
     });
 
@@ -97,12 +100,31 @@ export default function ContinuousMobileScanner() {
     };
   }, [roomId]);
 
-  // 3. Start Html5Qrcode Scanner Engine
+  // 3. NEW: Relay Logic Effect (Always has fresh state, safely interacts with Socket)
   useEffect(() => {
+    if (!latestScan || !connected || status !== 'ready') return;
+    
+    if (latestScan !== lastScanRef.current) {
+      lastScanRef.current = latestScan;
+      setStatus('processing');
+      setFeedback({ title: 'Relaying to Desktop...', message: latestScan });
+
+      socketRef.current.emit('forward-scan', {
+        roomId,
+        qrData: latestScan,
+        scanMode
+      });
+    }
+  }, [latestScan, connected, status, roomId, scanMode]);
+
+  // 4. Start Html5Qrcode Scanner Engine (EMPTY DEPENDENCY ARRAY - Boot only ONCE)
+  useEffect(() => {
+    let isMounted = true;
     const qrRegionId = 'html5qr-code-full-region';
     
-    // Small delay to ensure the DOM div element is mounted before starting scanner
     const timer = setTimeout(() => {
+      if (!isMounted) return;
+
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(qrRegionId);
       }
@@ -115,36 +137,25 @@ export default function ContinuousMobileScanner() {
         (decodedText) => {
           const qrText = String(decodedText).trim();
           setDebugLog(`Scanned: ${qrText}`);
-
-          if (qrText && qrText !== lastScanRef.current && status === 'ready' && connected) {
-            lastScanRef.current = qrText;
-            setStatus('processing');
-            setFeedback({ title: 'Relaying to Desktop...', message: qrText });
-
-            socketRef.current.emit('forward-scan', {
-              roomId,
-              qrData: qrText,
-              scanMode
-            });
-          }
+          // We simply update state here. The relay effect above handles the rest.
+          setLatestScan(qrText);
         },
-        () => {
-          // Frame miss callback (ignored to keep performance smooth)
-        }
+        () => {} // Ignore frame miss
       ).catch((err) => {
         console.error('Camera initialization failed:', err);
         setDebugLog(`Cam Error: ${err?.message || err}`);
         setFeedback({ title: 'Camera Error', message: 'Could not access camera. Check browser permissions.' });
       });
-    }, 300);
+    }, 500);
 
     return () => {
+      isMounted = false;
       clearTimeout(timer);
       if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
         html5QrCodeRef.current.stop().catch(err => console.error('Failed to stop scanner:', err));
       }
     };
-  }, [connected, roomId, scanMode, status]);
+  }, []); // <-- CRITICAL: This array is now empty so the camera never restarts mid-session
 
   if (!roomId) {
     return (

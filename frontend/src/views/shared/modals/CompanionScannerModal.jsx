@@ -14,10 +14,13 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
 
   const companionUrl = `${window.location.origin}/companion?room=${roomId}`;
 
-  useEffect(() => {
+useEffect(() => {
+    // Let Socket.IO default to ['polling', 'websocket'] for a stable handshake
     socketRef.current = io(SOCKET_URL, {
-    transports: ['websocket'], // CRITICAL: Direct WebSocket connection
-    secure: true
+      secure: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
     });
 
     socketRef.current.on('connect', () => {
@@ -28,13 +31,12 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
       setIsPhoneConnected(true);
     });
 
-    // Handle document scan received from phone
-    socketRef.current.on('companion-scanned-doc', async ({ qrData, scanMode }) => {
+    // MATCHED EVENT: Listening for 'forward-scan'
+    socketRef.current.on('forward-scan', async ({ qrData, scanMode }) => {
       setIsPhoneConnected(true);
       const endpoint = scanMode === 'time-out' ? '/api/documents/scan-out' : '/api/documents/scan-in';
 
       try {
-        // Authenticated desktop session makes the actual DB change
         const res = await fetchWithAuth(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -44,15 +46,14 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to process document');
 
-        // Relay success back to phone
-        socketRef.current.emit('scan-result-relay', {
+        // MATCHED EVENT: Emitting 'scan-result'
+        socketRef.current.emit('scan-result', {
           roomId,
           success: true,
           title: qrData,
           message: data.message || `Document ${scanMode === 'time-out' ? 'Released' : 'Timed In'}`
         });
 
-        // Add to desktop feed
         setActivityLogs(prev => [
           { id: Date.now(), success: true, text: `${scanMode.toUpperCase()}: ${qrData}`, time: new Date().toLocaleTimeString() },
           ...prev.slice(0, 9)
@@ -61,8 +62,8 @@ export default function CompanionScannerModal({ onClose, onScanSuccess }) {
         if (onScanSuccess) onScanSuccess();
 
       } catch (err) {
-        // Relay error back to phone
-        socketRef.current.emit('scan-result-relay', {
+        // MATCHED EVENT: Emitting 'scan-result'
+        socketRef.current.emit('scan-result', {
           roomId,
           success: false,
           title: qrData,
