@@ -11,8 +11,8 @@ export default function ContinuousMobileScanner() {
   const roomId = searchParams.get('room');
 
   const [connected, setConnected] = useState(false);
-  const [scanMode, setScanMode] = useState('time-in'); // 'time-in' | 'time-out'
-  const [status, setStatus] = useState('ready'); // 'ready' | 'processing' | 'success' | 'error'
+  const [scanMode, setScanMode] = useState('time-in'); 
+  const [status, setStatus] = useState('ready'); 
   const [feedback, setFeedback] = useState({ title: '', message: 'Align document QR code inside the box' });
   const [debugLog, setDebugLog] = useState('Initializing camera engine...');
 
@@ -99,10 +99,12 @@ export default function ContinuousMobileScanner() {
 
   // 3. Start Html5Qrcode Scanner Engine
   useEffect(() => {
+    let isMounted = true; // Prevents strict-mode double firing
     const qrRegionId = 'html5qr-code-full-region';
     
-    // Small delay to ensure the DOM div element is mounted before starting scanner
     const timer = setTimeout(() => {
+      if (!isMounted) return;
+
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(qrRegionId);
       }
@@ -139,6 +141,7 @@ export default function ContinuousMobileScanner() {
     }, 300);
 
     return () => {
+      isMounted = false;
       clearTimeout(timer);
       if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
         html5QrCodeRef.current.stop().catch(err => console.error('Failed to stop scanner:', err));
