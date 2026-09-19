@@ -1,7 +1,8 @@
 import Swal from 'sweetalert2';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// Replace line 4 in api.js:
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 const API = axios.create({
   baseURL: API_BASE_URL,
 });
