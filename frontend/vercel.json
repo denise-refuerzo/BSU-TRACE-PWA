@@ -1,7 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/((?!assets/|.*\\..*).*)",
+      "source": "/api/(.*)",
+      "destination": "https://bsu-trace-pwa.onrender.com/api/$1"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
