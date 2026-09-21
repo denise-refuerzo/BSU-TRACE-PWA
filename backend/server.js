@@ -2229,6 +2229,19 @@ app.get('/api/analytics/system-health', requireAuth, async (req, res) => {
 });
 
 // ==========================================
+// 15.5 ANALYTICS: ADMINISTRATIVE INSIGHTS MICROSERVICE PROXY
+// ==========================================
+app.get('/api/analytics/administrative-insights', requireAuth, async (req, res) => {
+  try {
+      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/administrative-insights`);
+      res.json(response.data);
+  } catch (error) {
+      console.error('Error fetching administrative insights:', error.message);
+      res.status(500).json({ message: 'Analytics service unavailable' });
+  }
+});
+
+// ==========================================
 // 16. SERVER EXECUTION & ENTRY POINT
 // ==========================================
 const PORT = process.env.PORT || 5000;

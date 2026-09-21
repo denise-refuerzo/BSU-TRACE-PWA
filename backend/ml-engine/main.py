@@ -10,6 +10,7 @@ from services.route_performance_service import (
     recommend_vehicle_allocation
 )
 from services.system_health_service import get_system_health_metrics
+from services.descriptive_insights_service import get_administrative_insights
 
 
 app = FastAPI(title="BSU-Trace Analytics Engine")
@@ -71,6 +72,14 @@ def get_system_health():
         return get_system_health_metrics()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Health monitoring error: {str(e)}")
+
+@app.get("/api/analytics/administrative-insights")
+def get_admin_insights():
+    """Administrative traffic, document-frequency, and asset-use summaries."""
+    try:
+        return get_administrative_insights()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Administrative analytics error: {str(e)}")
     
 @app.get("/api/analytics/decision-support/route-optimization")
 def get_route_recommendation(route: str):

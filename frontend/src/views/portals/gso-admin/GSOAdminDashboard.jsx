@@ -1,5 +1,5 @@
 import OfficeSubmissionsTab from '../processor/components/OfficeSubmissionsTab';
-import React, { useState, useRef, useEffect } from 'react';
+import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
@@ -17,7 +17,7 @@ import VehicleAssignmentModal from './modals/VehicleAssignmentModal';
 import {confirmResourceAction, resourceSuccess, resourceError} from './resourceActions';
 import GSOProcurementTab from './components/GSOProcurementTab';
 import GSOHistoryTab from './components/GSOHistoryTab';
-import OperationalAnalyticsTab from './components/OperationalAnalyticsTab';
+const OperationalAnalyticsTab = lazy(() => import('./components/OperationalAnalyticsTab'));
 
 // Shared Components
 import UserProfileTab from '../../shared/components/UserProfileTab';
@@ -95,7 +95,7 @@ export default function GSOAdminDashboard() {
     pipelineDocs, actionHistory, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
     reservationsList, logisticsList,
-    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth,
+    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
 
@@ -518,6 +518,10 @@ export default function GSOAdminDashboard() {
       const dDate = d.date;
       return (!auditStartDate || dDate >= auditStartDate) && (!auditEndDate || dDate <= auditEndDate);
     });
+    const filteredTraffic = (administrativeInsights?.peak_traffic || []).filter(item => {
+      const monthStart = `${item.month}-01`;
+      return (!auditStartDate || monthStart >= auditStartDate) && (!auditEndDate || monthStart <= auditEndDate);
+    });
 
     const htmlContent = `
       <html>
@@ -541,7 +545,7 @@ export default function GSOAdminDashboard() {
           </div>
 
           <div class="section">
-            <h2>1. Bottleneck Analytics</h2>
+            <h2>1. Office Bottlenecks</h2>
             <table>
               <thead><tr><th>Office Name</th><th>Dwell Time (Hours)</th></tr></thead>
               <tbody>
@@ -551,7 +555,38 @@ export default function GSOAdminDashboard() {
           </div>
 
           <div class="section">
-            <h2>2. Equipment Inventory Status</h2>
+            <h2>2. Process Turnaround</h2>
+            <table>
+              <thead><tr><th>Document Process</th><th>End-to-End Hours</th><th>Active Processing Hours</th><th>Average Stops</th><th>Documents</th></tr></thead>
+              <tbody>
+                ${(routePerf?.document_routes || []).map(route => `<tr><td>${route.route_name}</td><td>${route.avg_completion_hours}h</td><td>${route.avg_active_processing_hours}h</td><td>${route.avg_stops}</td><td>${route.total_documents}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>3. Peak Document Traffic</h2>
+            <table>
+              <thead><tr><th>Month</th><th>Requests</th></tr></thead>
+              <tbody>
+                ${filteredTraffic.map(item => `<tr><td>${item.month}</td><td>${item.request_count}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>4. Frequently Requested Documents & Resources</h2>
+            <table>
+              <thead><tr><th>Type</th><th>Name</th><th>Recorded Uses</th></tr></thead>
+              <tbody>
+                ${(administrativeInsights?.frequent_documents || []).map(item => `<tr><td>Document</td><td>${item.name}</td><td>${item.request_count}</td></tr>`).join('')}
+                ${(administrativeInsights?.utilized_assets || []).map(item => `<tr><td>Resource</td><td>${item.name}</td><td>${item.usage_count}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>5. Equipment Inventory Status</h2>
             <table>
               <thead><tr><th>Asset</th><th>Total</th><th>Available</th></tr></thead>
               <tbody>
@@ -561,7 +596,7 @@ export default function GSOAdminDashboard() {
           </div>
 
           <div class="section">
-            <h2>3. Demand Forecast Data</h2>
+            <h2>6. Demand Forecast Data</h2>
             <table>
               <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
               <tbody>
@@ -789,19 +824,22 @@ export default function GSOAdminDashboard() {
           )}
 
           {activeTab === 'analytics' && (
-            <OperationalAnalyticsTab
-              auditStartDate={auditStartDate} setAuditStartDate={setAuditStartDate}
-              auditEndDate={auditEndDate} setAuditEndDate={setAuditEndDate}
-              handleGenerateAuditReport={handleGenerateAuditReport}
-              isAnalyticsLoading={isAnalyticsLoading}
-              bottleneckSearch={bottleneckSearch} setBottleneckSearch={setBottleneckSearch}
-              bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
-              processedBottleneckData={processedBottleneckData}
-              equipmentInventory={equipmentInventory}
-              demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
-              chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
-              systemHealth={systemHealth} routePerf={routePerf}
-            />
+            <Suspense fallback={<div className="flex min-h-[420px] items-center justify-center text-sm font-bold text-neutral-500">Loading analytics workspace…</div>}>
+              <OperationalAnalyticsTab
+                auditStartDate={auditStartDate} setAuditStartDate={setAuditStartDate}
+                auditEndDate={auditEndDate} setAuditEndDate={setAuditEndDate}
+                handleGenerateAuditReport={handleGenerateAuditReport}
+                isAnalyticsLoading={isAnalyticsLoading}
+                bottleneckSearch={bottleneckSearch} setBottleneckSearch={setBottleneckSearch}
+                bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
+                processedBottleneckData={processedBottleneckData}
+                equipmentInventory={equipmentInventory}
+                demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
+                chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
+                systemHealth={systemHealth} routePerf={routePerf}
+                administrativeInsights={administrativeInsights}
+              />
+            </Suspense>
           )}
 
           {activeTab === 'history' && (
