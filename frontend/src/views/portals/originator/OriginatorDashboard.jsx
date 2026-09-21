@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { LayoutDashboard, FileText, School, User, MessageSquare, LogOut, Menu, X } from 'lucide-react';
+import { useState } from 'react';
+import { LayoutDashboard, FileText, School, User, MessageSquare, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
 
 // Custom Hook
 import useOriginatorData from './hooks/useOriginatorData';
@@ -24,6 +24,7 @@ export default function OriginatorDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [targetChatDoc, setTargetChatDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
+  const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   
   const {
     userId, userName, navigate,
@@ -48,6 +49,11 @@ export default function OriginatorDashboard() {
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false);
+  };
+
+  const openFacilitiesMenu = () => {
+    setFacilitiesExpanded(current => activeTab.startsWith('resource-') ? !current : true);
+    if (!activeTab.startsWith('resource-')) setActiveTab('resource-gym');
   };
 
   const handleSelectDocumentDetails = (doc) => {
@@ -110,9 +116,26 @@ export default function OriginatorDashboard() {
             <button onClick={() => handleTabSelect('documents')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'documents' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <FileText size={18} /> Documents
             </button>
-            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'resources' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-              <School size={18} /> School Resources
-            </button>
+            <div>
+              <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+                <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
+                <ChevronDown size={15} className={`transition-transform ${facilitiesExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              {facilitiesExpanded && (
+                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                  {[
+                    { id: 'resource-gym', label: 'Gymnasium', icon: School },
+                    { id: 'resource-room', label: 'Rooms', icon: MonitorPlay },
+                    { id: 'resource-vehicle', label: 'Vehicles', icon: Truck },
+                    { id: 'resource-requests', label: 'Submitted Requests', icon: ClipboardList }
+                  ].map(item => (
+                    <button key={item.id} onClick={() => handleTabSelect(item.id)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === item.id ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+                      <item.icon size={14} /> {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={() => { handleTabSelect('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'messages' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <div className="flex items-center gap-3">
                 <MessageSquare size={18} /> Chat with Offices
@@ -144,7 +167,9 @@ export default function OriginatorDashboard() {
             >
               <Menu size={22} />
             </button>
-            <h2 className="text-base md:text-lg font-bold text-neutral-800 capitalize truncate">{activeTab} Management Hub</h2>
+            <h2 className="text-base md:text-lg font-bold text-neutral-800 truncate">
+              {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Documents' : activeTab === 'messages' ? 'Chat with Offices' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
+            </h2>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 text-neutral-600">
@@ -212,9 +237,10 @@ export default function OriginatorDashboard() {
             />
           )}
 
-          {activeTab === 'resources' && (
-            <OriginatorResourcesTab userId={userId} />
-          )}
+          {activeTab === 'resource-gym' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} facility="Gymnasium" />}
+          {activeTab === 'resource-room' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} facility="Multimedia Room" />}
+          {activeTab === 'resource-vehicle' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} facility="Van" />}
+          {activeTab === 'resource-requests' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} view="requests" />}
         </div>
       </div>
 
