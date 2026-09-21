@@ -4,7 +4,7 @@ const {routeProgress} = require('./routeProgress');
 
 // --- NEW: WEBSOCKET BROADCASTER HELPER ---
 const broadcastDocumentUpdate = (req, originUserId, currentOfficeId, nextOfficeId) => {
-  const io = req.app.get('io');
+  const io = req.app?.get?.('io');
   if (!io) return;
 
   if (originUserId) io.to(`user_${originUserId}`).emit('document-updated');
@@ -51,6 +51,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
       if (!result.rows[0]) throw fail(403, 'An active account is required.');
       const payload = await handler(client, result.rows[0], req);
       await client.query('COMMIT');
+      if (payload.configurationChanged) req.app?.get?.('io')?.to('ict_admin_room').emit('admin-configuration-updated');
       res.status(payload.created ? 201 : 200).json(payload);
     } catch (err) {
       if (client) await client.query('ROLLBACK');
@@ -118,7 +119,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     // TRIGGER WEBSOCKET BROADCAST
     broadcastDocumentUpdate(req, user.u_id, sequence[0], sequence[1]);
 
-    return {created:true, message:'Document submitted.',qrCode,iniId:doc.ini_id};
+    return {created:true, configurationChanged:Boolean(custom), message:'Document submitted.',qrCode,iniId:doc.ini_id};
   }));
 
   // PIPELINE ACTION ENDPOINTS (SCAN IN, OUT, SIGN, RETURN, ADHOC)

@@ -2,6 +2,11 @@ const {lockSchedule, validateWindow} = require('./resourceScheduling');
 module.exports = (app, pool, requireAuth) => {
   const gso = (req,res,next) => Number(req.user.a_id) === 4 ? next() : res.status(403).json({error:'GSO access required.'});
   const handle = fn => async(req,res) => {try {await fn(req,res);} catch(e) {res.status(400).json({error:e.code === '23503' ? 'This record is linked to requests or blocks and cannot be deleted. Keep it for history and mark it unavailable instead.' : e.code === '23505' ? 'That plate or license number is already registered.' : e.message});}};
+  const broadcast = req => {
+    const io = req.app?.get?.('io');
+    io?.to('resource_updates_room').emit('resource-schedule-updated');
+    io?.to('gso_admin_room').emit('system-metrics-updated');
+  };
   app.get('/api/resources/schedule-blocks',requireAuth,handle(async(req,res)=>{
     const result = await pool.query(`SELECT ab.block_id,ab.asd_id,ab.vehicle_id,ab.whole_day,ab.reason,
       to_char(ab.start_time,'YYYY-MM-DD"T"HH24:MI:SS') AS start_time,
@@ -33,11 +38,11 @@ module.exports = (app, pool, requireAuth) => {
         AND (b.reservation_date + CASE WHEN vr.pick_up_time>=vr.drop_off_time THEN '23:59:59'::time ELSE COALESCE(gm.end_time,vr.drop_off_time) END) > $2::timestamp LIMIT 1`,[assetId,from,until,vehicleId||null]);
       if(conflicts.rows.length) throw new Error('This block overlaps a confirmed request. Reassign the vehicle or resolve the request before blocking this period.');
       await client.query('INSERT INTO public.asset_blackouts(asd_id,vehicle_id,start_time,end_time,reason,blocked_by,whole_day) VALUES($1,$2,$3,$4,$5,$6,$7)',[assetId,vehicleId||null,from,until,reason.trim(),req.user.u_id,wholeDay]);
-      await client.query('COMMIT');res.status(201).json({message:'Blocked period saved.'});
+      await client.query('COMMIT');broadcast(req);res.status(201).json({message:'Blocked period saved.'});
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
   app.delete('/api/resources/schedule-blocks/:id',requireAuth,gso,handle(async(req,res)=>{
-    await pool.query('DELETE FROM public.asset_blackouts WHERE block_id=$1',[req.params.id]);res.json({message:'Block removed.'});
+    await pool.query('DELETE FROM public.asset_blackouts WHERE block_id=$1',[req.params.id]);broadcast(req);res.json({message:'Block removed.'});
   }));
   app.put('/api/resources/registry/:kind/:id',requireAuth,gso,handle(async(req,res)=>{
     const {name,number,quantity,active,assetTypeId}=req.body;
@@ -63,7 +68,7 @@ module.exports = (app, pool, requireAuth) => {
         const vehicle=req.params.kind==='vehicles';
         await client.query(vehicle ? 'UPDATE public.fleet_vehicles SET vehicle_name=$1,plate_number=$2,is_active=$3 WHERE vehicle_id=$4' : 'UPDATE public.resource_drivers SET full_name=$1,license_number=$2,is_active=$3 WHERE driver_id=$4',[name.trim(),number.trim().toUpperCase(),active,req.params.id]);
       } else throw new Error('Unknown registry.');
-      await client.query('COMMIT');res.json({message:'Details updated.'});
+      await client.query('COMMIT');broadcast(req);res.json({message:'Details updated.'});
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
   app.delete('/api/resources/registry/:kind/:id',requireAuth,gso,handle(async(req,res)=>{
@@ -83,7 +88,7 @@ module.exports = (app, pool, requireAuth) => {
           AND NOT EXISTS(SELECT 1 FROM public.asset_blackouts WHERE asd_id=$1)
           AND NOT EXISTS(SELECT 1 FROM public.gm_requirements WHERE asd_id=$1)`,[assetId]);
       }
-      await client.query('COMMIT');res.json({message:'Record deleted.'});
+      await client.query('COMMIT');broadcast(req);res.json({message:'Record deleted.'});
     } catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
   }));
 };

@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
-  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, MessageSquare, Menu, X 
+  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X
 } from 'lucide-react';
 import { fetchWithAuth } from '../../../api';
 
@@ -21,7 +21,7 @@ import OperationalAnalyticsTab from './components/OperationalAnalyticsTab';
 
 // Shared Components
 import UserProfileTab from '../../shared/components/UserProfileTab';
-import OfficeChatHub from '../../shared/OfficeChatHub';
+import FloatingChat from '../../shared/components/FloatingChat';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 
@@ -58,11 +58,12 @@ export default function GSOAdminDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [procurementTargetSection, setProcurementTargetSection] = useState(null);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const handleNavigateToChat = (doc) => {
     setShowDetailsModal(false);
     setChatTargetDoc(doc);
-    setActiveTab('messages');
+    setIsChatOpen(true);
     setIsSidebarOpen(false);
   };
 
@@ -350,7 +351,7 @@ export default function GSOAdminDashboard() {
           item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
         ));
         const result = await res.json();
-        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Reserved'}));
+        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Pending'}));
         fetchProcurementData();
         await resourceSuccess(result.allChecked ? 'Request confirmed.' : 'Requirement updated. Request is pending.');
       } else {
@@ -676,10 +677,6 @@ export default function GSOAdminDashboard() {
             <button onClick={() => handleTabSelect('history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'history' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <History size={18} /> History
             </button>
-            <button onClick={() => { handleTabSelect('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'messages' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <div className="flex items-center gap-3"><MessageSquare size={18} /> Chat Inbox</div>
-              {hasUnreadChats && <span className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></span>}
-            </button>
           </nav>
         </div>
         <div className="border-t border-neutral-700 pt-4">
@@ -817,15 +814,6 @@ export default function GSOAdminDashboard() {
             />
           )}
 
-          {activeTab === 'messages' && (
-            <OfficeChatHub 
-              userId={userId} 
-              roleId={2} 
-              officeId={gsoOfficeId} 
-              targetDoc={chatTargetDoc}
-              onClearTargetDoc={() => setChatTargetDoc(null)}
-            />
-          )}
 
           {activeTab === 'profile' && (
             <UserProfileTab
@@ -842,13 +830,18 @@ export default function GSOAdminDashboard() {
         {/* FLOATING QR SCANNER BUTTON */}
         <button 
           onClick={() => { setScanMode('time-in'); setShowScannerModal(true); }}
-          className="absolute bottom-6 right-6 md:bottom-8 md:right-8 w-12 h-12 md:w-14 md:h-14 bg-red-800 hover:bg-red-900 text-white rounded-2xl shadow-xl flex items-center justify-center transition-transform hover:scale-105 z-40"
+          aria-label="Open QR scanner"
+          className="absolute bottom-24 right-4 md:bottom-28 md:right-7 w-12 h-12 md:w-14 md:h-14 bg-red-800 hover:bg-red-900 text-white rounded-2xl shadow-xl flex items-center justify-center transition-transform hover:scale-105 z-40"
         >
           <QrCode size={22} />
         </button>
       </div>
 
       {/* RENDER MODALS */}
+      <FloatingChat isOpen={isChatOpen} onOpenChange={setIsChatOpen}
+        hasUnread={hasUnreadChats} onUnreadCleared={() => setHasUnreadChats(false)}
+        userId={userId} roleId={2} officeId={gsoOfficeId}
+        targetDoc={chatTargetDoc} onClearTargetDoc={() => setChatTargetDoc(null)} label="Chat Inbox" />
       {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={fetchProcurementData} />}
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}

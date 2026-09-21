@@ -2,6 +2,11 @@ const {availability, lockSchedule} = require('./resourceScheduling');
 module.exports = function registerScheduling(app, pool, requireAuth) {
   const gso = (req,res,next) => Number(req.user.a_id) === 4 ? next() : res.status(403).json({error:'GSO administrator access required.'});
   const handle = fn => async (req,res) => {try {await fn(req,res);} catch(error) {res.status(error.status || 400).json({error:error.message});}};
+  const broadcast = req => {
+    const io = req.app?.get?.('io');
+    io?.to('resource_updates_room').emit('resource-schedule-updated');
+    io?.to('gso_admin_room').emit('system-metrics-updated');
+  };
   app.get('/api/resources/availability', requireAuth, handle(async(req,res)=>{
     const free = await availability(pool, req.query);
     res.json({available:free.available, reason:free.reason, vehicleCount:free.vehicles?.length, driverCount:free.drivers?.length});
@@ -31,7 +36,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       if(typeof name !== 'string' || !name.trim() || typeof number !== 'string' || !number.trim()) throw new Error('Enter a driver name and license number.');
       await pool.query('INSERT INTO public.resource_drivers(full_name,license_number) VALUES($1,$2)',[name.trim(),number.trim().toUpperCase()]);
     } else throw new Error('Unknown registry.');
-    res.status(201).json({message:'Registered successfully.'});
+    broadcast(req);res.status(201).json({message:'Registered successfully.'});
   }));
   app.put('/api/resources/fleet/:kind/:id/active',requireAuth,gso,handle(async(req,res)=>{
     const tables={vehicles:['fleet_vehicles','vehicle_id'],drivers:['resource_drivers','driver_id']};
@@ -40,7 +45,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
     const client=await pool.connect();
     try {await client.query('BEGIN');await lockSchedule(client);
       await client.query(`UPDATE public.${table[0]} SET is_active=$1 WHERE ${table[1]}=$2`,[req.body.active,req.params.id]);
-      await client.query('COMMIT');res.json({message:'Availability updated. Existing confirmed assignments still need to be honored or reassigned.'});
+      await client.query('COMMIT');broadcast(req);res.json({message:'Availability updated. Existing confirmed assignments still need to be honored or reassigned.'});
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
   app.get('/api/resources/assignments/:id/options',requireAuth,gso,handle(async(req,res)=>{
@@ -124,6 +129,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       );
 
       await client.query('COMMIT');
+      broadcast(req);
       res.json({ message: 'Vehicle and driver assigned successfully.' });
     } catch (e) {
       await client.query('ROLLBACK');

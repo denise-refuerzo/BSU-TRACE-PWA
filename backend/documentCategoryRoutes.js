@@ -15,6 +15,7 @@ function validatePipeline(body) {
   if (body.isActive !== undefined && typeof body.isActive !== 'boolean') throw fail(400, 'Invalid active status.');
 }
 module.exports = function registerDocumentCategories(app, pool, requireAuth) {
+  const broadcastIctConfiguration = req => req.app?.get?.('io')?.to('ict_admin_room').emit('admin-configuration-updated');
   const handle = fn => async (req, res) => {
     try { await fn(req, res); } catch (err) {
       const status = err.status || (err.code === '23505' ? 409 : err.code === '23503' ? 409 : 500);
@@ -74,6 +75,7 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
         await db.query("UPDATE public.process_type SET process_name=$2,category_id=$3,route_status='official',is_active=true,reviewed_by=$4,reviewed_at=NOW() WHERE p_id=$1",[p.p_id,name.trim(),category,req.user.u_id]);
       } else await db.query("UPDATE public.process_type SET route_status='declined',reviewed_by=$2,reviewed_at=NOW() WHERE p_id=$1",[p.p_id,req.user.u_id]);
       await db.query('COMMIT');
+      broadcastIctConfiguration(req);
       res.json({message:req.body.decision === 'approve' ? 'Route is now official.' : 'Route remains private. Existing documents continue processing.'});
     } catch(err) {await db.query('ROLLBACK');throw err;} finally {db.release();}
   }));
@@ -88,6 +90,7 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
         : 'UPDATE public.document_category SET category_name=$1,description=$2 WHERE category_id=$3 RETURNING *',
       [categoryName.trim(), description.trim(), ...(method === 'put' ? [req.params.categoryId] : [])]);
       if (!result.rows.length) throw fail(404, 'Category not found.');
+      broadcastIctConfiguration(req);
       res.status(method === 'post' ? 201 : 200).json(result.rows[0]);
     }));
   }
@@ -100,6 +103,7 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
       if (err.code === '23503') throw fail(409, 'Reassign all pipelines, including archived pipelines, before deleting this category.');
       throw err;
     }
+    broadcastIctConfiguration(req);
     res.json({message: 'Category deleted.'});
   }));
   app.get('/api/process-types', requireAuth, handle(async (req, res) => {
@@ -170,6 +174,7 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
         }
         await client.query('COMMIT');
       } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
+      broadcastIctConfiguration(req);
       res.status(editing ? 200 : 201).json({message: editing ? 'Workflow updated.' : 'Workflow created.'});
     }));
   }
@@ -185,7 +190,8 @@ module.exports = function registerDocumentCategories(app, pool, requireAuth) {
       await client.query('COMMIT');
     } catch (err) { await client.query('ROLLBACK'); if (err.code === '23503') throw fail(409, 'This pipeline has transaction records and cannot be deleted. Archive it instead.'); throw err; }
     finally { client.release(); }
-    res.json({message:'Pipeline deleted.'});
+    broadcastIctConfiguration(req);
+    res.json({message:'Workflow deleted.'});
   }));
 };
 module.exports.validatePipeline = validatePipeline;
