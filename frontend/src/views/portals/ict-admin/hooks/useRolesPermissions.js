@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { io } from 'socket.io-client';
 import Swal from 'sweetalert2';
 import { fetchWithAuth } from "../../../../api";
 
 export function useRolesPermissions() {
-  const [activeTab, setActiveTab] = useState('routes'); // 'routes' | 'rbac' | 'infrastructure'
-
   // --- CATALOG INDICES STATES ---
   const [offices, setOffices] = useState([]);
   const [routeGroups, setRouteGroups] = useState([]);
@@ -27,12 +26,10 @@ export function useRolesPermissions() {
   const [newOfficeCategory, setNewOfficeCategory] = useState('');
   const [officeCategoryEnabled, setOfficeCategoryEnabled] = useState(false);
   const [editingOffice, setEditingOffice] = useState(null);
+  const [workflowEditorOpen, setWorkflowEditorOpen] = useState(false);
+  const socketRef = useRef(null);
 
-  useEffect(() => {
-    fetchBaselineCatalogs();
-  }, [activeTab]);
-
-  const fetchBaselineCatalogs = async () => {
+  const fetchBaselineCatalogs = useCallback(async () => {
     try {
       setCatalogError('');
       const categoryRes = await fetchWithAuth('/api/document-categories');
@@ -56,12 +53,12 @@ export function useRolesPermissions() {
     } catch (err) {
       setCatalogError(err.message || 'Unable to load workflow configuration.');
     }
-  };
+  }, []);
 
   // --- DYNAMIC VISUALIZER STOP HANDLING ---
   const handleAddStopSlot = () => {
     if (selectedStops.length >= 7) {
-      Swal.fire('Limit Reached', 'System routing columns limit workflows to a maximum constraint layer of 7 stops.', 'warning');
+      Swal.fire('Step limit reached', 'A document workflow can have up to seven office steps.', 'warning');
       return;
     }
     setSelectedStops([...selectedStops, null]);
@@ -69,7 +66,7 @@ export function useRolesPermissions() {
 
   const handleRemoveTrailingStopSlot = () => {
     if (selectedStops.length <= 2) {
-      Swal.fire('Constraint Conflict', 'Relational database definitions dictate that process templates require a minimum of 2 stops.', 'warning');
+      Swal.fire('At least two steps are required', 'A document workflow needs a starting and receiving office.', 'warning');
       return;
     }
     const filtered = [...selectedStops];
@@ -92,6 +89,19 @@ export function useRolesPermissions() {
     setSelectedStops(updated);
   };
 
+  useEffect(() => {
+    const refreshTimer = window.setTimeout(fetchBaselineCatalogs, 0);
+    return () => window.clearTimeout(refreshTimer);
+  }, [fetchBaselineCatalogs]);
+
+  useEffect(() => {
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
+    socketRef.current = io(socketUrl, { secure: true, reconnection: true });
+    socketRef.current.on('connect', () => socketRef.current.emit('join-ict-admin-room'));
+    socketRef.current.on('admin-configuration-updated', fetchBaselineCatalogs);
+    return () => socketRef.current?.disconnect();
+  }, [fetchBaselineCatalogs]);
+
   const handleStopKindChange = (index, kind) => {
     const updated = [...selectedStops];
     updated[index] = kind === 'group' ? {type: 'group', groupId: null} : null;
@@ -107,13 +117,37 @@ export function useRolesPermissions() {
     setFormMeta({ currentProcessId: null, currentRouteId: null, is_active: true });
   };
 
+  const openWorkflowEditor = (workflow = null) => {
+    if (!workflow) {
+      resetWorkflowForm();
+      setWorkflowEditorOpen(true);
+      return;
+    }
+    const stops = Array.from({ length: 7 }, (_, index) => {
+      const step = index + 1;
+      return workflow[`stop_${step}_kind`] === 'group'
+        ? { type: 'group', groupId: workflow[`stop_${step}_group_id`] }
+        : workflow[`stop_${step}`];
+    }).filter(Boolean);
+    setNewProcessName(workflow.process_name);
+    setCategoryId(String(workflow.category_id));
+    setSelectedStops(stops.length >= 2 ? stops : [null, null]);
+    setFormMeta({ currentProcessId: workflow.p_id, currentRouteId: workflow.r_id, is_active: workflow.is_active ?? true });
+    setWorkflowEditorOpen(true);
+  };
+
+  const closeWorkflowEditor = () => {
+    setWorkflowEditorOpen(false);
+    resetWorkflowForm();
+  };
+
   // --- PROCESS TEMPLATE ROUTING TRANSACTION SUBMISSION ---
   const handleProcessFormSubmit = async (e) => {
     e.preventDefault();
     const processedStopsPayload = selectedStops.filter(s => s !== null && (Number.isInteger(s) || (s?.type === 'group' && Number.isInteger(s.groupId))));
 
     if (processedStopsPayload.length < 2) {
-      Swal.fire('Configuration Rejection', 'Invalid configuration path: A minimum sequence of 2 office locations must be assigned.', 'error');
+      Swal.fire('Complete the workflow', 'Choose at least two office locations.', 'error');
       return;
     }
 
@@ -124,15 +158,15 @@ export function useRolesPermissions() {
     const targetMethod = isEditing ? 'PUT' : 'POST';
 
     Swal.fire({
-      title: isEditing ? 'Save Workflow Changes?' : 'Compile Workflow Template?',
+      title: isEditing ? 'Save workflow changes?' : 'Create document workflow?',
       text: isEditing 
-        ? `Are you sure you want to update the sequence layers for "${newProcessName}"? This adjusts downstream workflow processing queues immediately.`
-        : `Are you sure you want to index the "${newProcessName}" document routing sequence? Active tracking modules will begin evaluating this layout immediately.`,
+        ? `This will update the office sequence for "${newProcessName}".`
+        : `This will make "${newProcessName}" available as a document workflow.`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#800000',
       cancelButtonColor: '#4b5563',
-      confirmButtonText: isEditing ? 'Yes, Save Overrides' : 'Yes, Deploy Template'
+      confirmButtonText: isEditing ? 'Save changes' : 'Create workflow'
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
@@ -149,16 +183,66 @@ export function useRolesPermissions() {
           });
           const data = await response.json();
 
-          if (!response.ok) throw new Error(data.error || 'Pipeline operation sequence crashed.');
+          if (!response.ok) throw new Error(data.error || 'Unable to save the workflow.');
 
           Swal.fire('Success!', data.message, 'success');
-          resetWorkflowForm();
-          fetchBaselineCatalogs();
+          closeWorkflowEditor();
+          await fetchBaselineCatalogs();
         } catch (err) {
           Swal.fire('Operation Refused', err.message, 'error');
         }
       }
     });
+  };
+
+  const saveDepartment = async ({ id, name }) => {
+    const response = await fetchWithAuth(id ? `/api/departments/${id}` : '/api/departments', {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ departmentName: name })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to save the department.');
+    await fetchBaselineCatalogs();
+    return data;
+  };
+
+  const saveOffice = async ({ id, name, category }) => {
+    const response = await fetchWithAuth(id ? `/api/offices/${id}` : '/api/offices', {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ officeName: name, officeCategory: category || '' })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to save the office.');
+    await fetchBaselineCatalogs();
+    return data;
+  };
+
+  const saveCategory = async ({ id, name, description }) => {
+    const response = await fetchWithAuth(`/api/document-categories${id ? `/${id}` : ''}`, {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoryName: name, description })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to save the document type.');
+    await fetchBaselineCatalogs();
+    return data;
+  };
+
+  const deleteCategory = async category => {
+    const result = await Swal.fire({ title: `Delete ${category.category_name}?`, text: 'This is only available when no document workflow uses this type.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#8c1023' });
+    if (!result.isConfirmed) return false;
+    const response = await fetchWithAuth(`/api/document-categories/${category.category_id}`, { method: 'DELETE' });
+    const data = await response.json();
+    if (!response.ok) {
+      await Swal.fire('Unable to delete', data.error, 'error');
+      return false;
+    }
+    await fetchBaselineCatalogs();
+    await Swal.fire('Deleted', data.message, 'success');
+    return true;
   };
 
   // --- LOCATION INFRASTRUCTURE SUBMISSIONS ---
@@ -223,20 +307,19 @@ export function useRolesPermissions() {
     setEditingOffice(null); Swal.fire('Updated', data.message, 'success'); fetchBaselineCatalogs();
   };
   const deleteInfrastructure = async (type, id, current) => {
-    const result = await Swal.fire({title:`Delete ${current}?`, text:'Accounts, blueprints, and documents that reference this item are protected. The deletion will be blocked while dependencies remain; related records will not be silently deleted.', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#8c1023'});
+    const result = await Swal.fire({title:`Delete ${current}?`, text:'Accounts, document workflows, and documents that use this item are protected. Deletion will be unavailable while it is still in use.', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#8c1023'});
     if (!result.isConfirmed) return;
     const response = await fetchWithAuth(`/api/${type === 'department' ? 'departments' : 'offices'}/${id}`, {method:'DELETE'}); const data=await response.json();
     if (!response.ok) return Swal.fire('Operation blocked', data.error, 'error'); Swal.fire('Deleted', data.message, 'success'); fetchBaselineCatalogs();
   };
   const deletePipeline = async p => {
-    const result = await Swal.fire({title:`Delete ${p.process_name}?`, text:'Transaction records may prevent deletion; archive it when it is already in use.', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#8c1023'});
+    const result = await Swal.fire({title:`Delete ${p.process_name}?`, text:'Existing documents may prevent deletion. Hide this workflow instead if it is already in use.', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#8c1023'});
     if (!result.isConfirmed) return;
     const response=await fetchWithAuth(`/api/process-types/${p.p_id}`,{method:'DELETE'}); const data=await response.json();
     if (!response.ok) return Swal.fire('Operation blocked',data.error,'error'); Swal.fire('Deleted',data.message,'success'); resetWorkflowForm(); fetchBaselineCatalogs();
   };
 
   return {
-    activeTab, setActiveTab,
     offices, routeGroups, processTypes, infraSummary,
     categories, categoryId, setCategoryId, catalogError, refreshCatalogs: fetchBaselineCatalogs,
     newProcessName, setNewProcessName,
@@ -246,6 +329,8 @@ export function useRolesPermissions() {
     newOfficeName, setNewOfficeName,
     newOfficeCategory, setNewOfficeCategory, officeCategoryEnabled, setOfficeCategoryEnabled,
     editingOffice, setEditingOffice, saveOfficeEdit,
+    workflowEditorOpen, openWorkflowEditor, closeWorkflowEditor,
+    saveDepartment, saveOffice, saveCategory, deleteCategory,
     handleAddStopSlot, handleRemoveTrailingStopSlot, handleStopSelectorChange, handleStopKindChange,
     resetWorkflowForm, handleProcessFormSubmit, handleCreateDepartment, handleCreateOffice, editInfrastructure, deleteInfrastructure, deletePipeline
   };

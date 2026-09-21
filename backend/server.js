@@ -54,6 +54,11 @@ const io = new Server(server, {
 // ==========================================
 app.set('io', io);
 
+const broadcastIctConfiguration = req => {
+  const socketServer = req.app.get('io');
+  socketServer?.to('ict_admin_room').emit('admin-configuration-updated');
+};
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
@@ -608,6 +613,7 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
       [parseInt(accountType), assignedDepartmentId, username, hashedPassword, fullName, email, assignedOfficeId]
     );
 
+    broadcastIctConfiguration(req);
     res.status(201).json({ message: 'Success: Account architecture generated and synchronized successfully!' });
   } catch (err) {
     console.error("Account registration script processing breakdown:", err);
@@ -660,6 +666,7 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
       username, fullName, email, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, parseInt(userId)
     ]);
 
+    broadcastIctConfiguration(req);
     res.json({ message: 'Personnel access profile parameters re-indexed and synchronized cleanly!' });
   } catch (err) {
     console.error("Account update failure:", err);
@@ -721,6 +728,7 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
       [fullName.trim(), email.trim(), twoFaEnabled, twoFaCode || null, req.params.userId]
     );
     
+    broadcastIctConfiguration(req);
     res.json({ message: 'Profile variables synchronized successfully!' });
   } catch (err) {
     console.error("Profile Synchronization Error:", err);
@@ -807,7 +815,8 @@ app.post('/api/departments', requireAuth, async (req, res) => {
     }
 
     await pool.query('INSERT INTO public.department (department_name) VALUES ($1)', [departmentName.trim()]);
-    res.status(201).json({ message: 'Success: Global department structure synchronized successfully!' });
+    broadcastIctConfiguration(req);
+    res.status(201).json({ message: 'Department added.' });
   } catch (err) {
     console.error("Department registration exception:", err);
     res.status(500).json({ error: 'Failed execution query write department sequence context.' });
@@ -852,7 +861,8 @@ app.post('/api/offices', requireAuth, async (req, res) => {
       await client.query('ROLLBACK');
       throw error;
     } finally { client.release(); }
-    res.status(201).json({ message: 'Success: Physical campus office station indexed into global catalogs!' });
+    broadcastIctConfiguration(req);
+    res.status(201).json({ message: 'Office location added.' });
   } catch (err) {
     console.error("Office drop node registration exception:", err);
     res.status(500).json({ error: 'Failed execution query write offices sequence context.' });
@@ -883,12 +893,12 @@ app.put('/api/departments/:id', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
   const name = String(req.body.departmentName || '').trim();
   if (!name) return res.status(400).json({error: 'Department name is required.'});
-  try { const r = await pool.query('UPDATE public.department SET department_name=$1 WHERE d_id=$2 RETURNING d_id', [name, req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); res.json({message:'Department updated.'}); }
+  try { const r = await pool.query('UPDATE public.department SET department_name=$1 WHERE d_id=$2 RETURNING d_id', [name, req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); broadcastIctConfiguration(req); res.json({message:'Department updated.'}); }
   catch (e) { res.status(e.code === '23505' ? 409 : 500).json({error: e.code === '23505' ? 'That department already exists.' : 'Unable to update department.'}); }
 });
 app.delete('/api/departments/:id', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
-  try { const r = await pool.query('DELETE FROM public.department WHERE d_id=$1 RETURNING d_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); res.json({message:'Department deleted.'}); }
+  try { const r = await pool.query('DELETE FROM public.department WHERE d_id=$1 RETURNING d_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); broadcastIctConfiguration(req); res.json({message:'Department deleted.'}); }
   catch (e) { res.status(e.code === '23503' ? 409 : 500).json({error: e.code === '23503' ? 'This department is still assigned to an account.' : 'Unable to delete department.'}); }
 });
 app.put('/api/offices/:id', requireAuth, async (req, res) => {
@@ -912,13 +922,14 @@ app.put('/api/offices/:id', requireAuth, async (req, res) => {
       throw error;
     } finally { client.release(); }
     if (!r.rowCount) return res.status(404).json({error:'Office not found.'});
+    broadcastIctConfiguration(req);
     res.json({message:'Office and category updated.'});
   }
   catch (e) { res.status(e.code === '23505' ? 409 : 500).json({error: e.code === '23505' ? 'That office already exists.' : 'Unable to update office.'}); }
 });
 app.delete('/api/offices/:id', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
-  try { const r = await pool.query('DELETE FROM public.offices WHERE o_id=$1 RETURNING o_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Office not found.'}); res.json({message:'Office deleted.'}); }
+  try { const r = await pool.query('DELETE FROM public.offices WHERE o_id=$1 RETURNING o_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Office not found.'}); broadcastIctConfiguration(req); res.json({message:'Office deleted.'}); }
   catch (e) { res.status(e.code === '23503' ? 409 : 500).json({error: e.code === '23503' ? 'This office is still referenced by an account, route, or document.' : 'Unable to delete office.'}); }
 });
 

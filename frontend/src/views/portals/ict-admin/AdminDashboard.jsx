@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LogOut, Menu, X, LayoutDashboard, Users, Network, BarChart3 } from 'lucide-react';
+import { BarChart3, Building2, ChevronDown, FileText, GitBranch, Landmark, LayoutDashboard, LogOut, Menu, Network, Users, X } from 'lucide-react';
 
 // --- CUSTOM HOOKS ---
 import { useAdminDashboard } from './hooks/useAdminDashboard';
@@ -11,8 +11,7 @@ import { useRolesPermissions } from './hooks/useRolesPermissions';
 // --- MODULAR TAB COMPONENTS ---
 import DashboardOverviewTab from './components/DashboardOverviewTab';
 import AccountManagementTab from './components/AccountManagementTab';
-import InteractiveVisualizerTab from './components/InteractiveVisualizerTab';
-import CampusInfrastructureTab from './components/CampusInfrastructureTab';
+import SystemManagementTab from './components/SystemManagementTab';
 import OperationalAnalytics from './components/OperationalAnalyticsTab';
 
 // --- MODALS ---
@@ -39,6 +38,8 @@ export default function AdminDashboard() {
   
   const [activeSidebar, setActiveSidebar] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSystemManagementOpen, setIsSystemManagementOpen] = useState(false);
+  const [systemManagementSection, setSystemManagementSection] = useState('offices');
 
   const { data: dashboardData } = useAdminDashboard();
   const accountProps = useAccountManagement();
@@ -55,6 +56,22 @@ export default function AdminDashboard() {
 
   const handleTabSelect = (tab) => {
     setActiveSidebar(tab);
+    setIsSidebarOpen(false);
+  };
+
+  const handleSystemManagementSelect = () => {
+    if (activeSidebar === 'matrix') {
+      setIsSystemManagementOpen(open => !open);
+    } else {
+      setActiveSidebar('matrix');
+      setIsSystemManagementOpen(true);
+    }
+  };
+
+  const handleSystemManagementSectionSelect = section => {
+    setSystemManagementSection(section);
+    setActiveSidebar('matrix');
+    setIsSystemManagementOpen(true);
     setIsSidebarOpen(false);
   };
 
@@ -125,13 +142,29 @@ export default function AdminDashboard() {
             >
               <Users size={18} /> Accounts
             </button>
-            <button 
-              type="button" 
-              onClick={() => handleTabSelect('matrix')} 
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'matrix' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
-            >
-              <Network size={18} /> Roles & Matrix
-            </button>
+            <div>
+              <button 
+                type="button" 
+                onClick={handleSystemManagementSelect}
+                aria-expanded={isSystemManagementOpen}
+                aria-controls="system-management-navigation"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'matrix' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+              >
+                <Network size={18} /> <span className="flex-1">System Management</span><ChevronDown size={16} className={`transition-transform ${isSystemManagementOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isSystemManagementOpen && <div id="system-management-navigation" className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                {[
+                  { id: 'offices', label: 'Office Locations', icon: Building2 },
+                  { id: 'departments', label: 'Departments', icon: Landmark },
+                  { id: 'categories', label: 'Document Types', icon: FileText },
+                  { id: 'workflows', label: 'Document Workflows', icon: GitBranch },
+                  { id: 'requests', label: 'Additional Routing', icon: GitBranch }
+                ].map(item => {
+                  const Icon = item.icon;
+                  return <button key={item.id} type="button" onClick={() => handleSystemManagementSectionSelect(item.id)} className={`w-full flex items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-semibold transition-colors ${activeSidebar === 'matrix' && systemManagementSection === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={14} /> {item.label}</button>;
+                })}
+              </div>}
+            </div>
             <button 
               type="button" 
               onClick={() => handleTabSelect('analytics')} 
@@ -175,22 +208,7 @@ export default function AdminDashboard() {
           {activeSidebar === 'dashboard' && <DashboardOverviewTab data={dashboardData} />}
           {activeSidebar === 'accounts' && <AccountManagementTab {...accountProps} />}
           
-          {activeSidebar === 'matrix' && (
-            <div className="trace-matrix space-y-6">
-              <div className="trace-section-banner rounded-2xl border border-rose-100 p-5 text-left">
-                <h2 className="text-xl md:text-2xl font-black tracking-tight text-neutral-900">System Permissions & Workflow Engineering</h2>
-                <p className="text-xs text-gray-500">Configure dynamic tracking routes, security matrix parameters, and registration building locations.</p>
-              </div>
-
-              <div className="trace-matrix-tabs flex border border-rose-100 rounded-xl bg-white p-1.5 gap-2 overflow-x-auto">
-                <button type="button" onClick={() => matrixProps.setActiveTab('routes')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 whitespace-nowrap transition-all ${matrixProps.activeTab === 'routes' ? 'border-red-800 text-red-800' : 'border-transparent text-gray-400 hover:text-neutral-700'}`}>🗺️ Interactive Visualizer</button>
-                <button type="button" onClick={() => matrixProps.setActiveTab('infrastructure')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 whitespace-nowrap transition-all ${matrixProps.activeTab === 'infrastructure' ? 'border-red-800 text-red-800' : 'border-transparent text-gray-400 hover:text-neutral-700'}`}>🏢 Campus Infrastructure</button>
-              </div>
-
-              {matrixProps.activeTab === 'routes' && <InteractiveVisualizerTab {...matrixProps} />}
-              {matrixProps.activeTab === 'infrastructure' && <CampusInfrastructureTab {...matrixProps} />}
-            </div>
-          )}
+          {activeSidebar === 'matrix' && <SystemManagementTab key={systemManagementSection} matrixProps={matrixProps} section={systemManagementSection} />}
 
           {activeSidebar === 'analytics' && <OperationalAnalytics />}
         </main>
