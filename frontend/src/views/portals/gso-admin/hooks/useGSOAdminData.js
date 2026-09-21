@@ -47,6 +47,9 @@ export function useGSOAdminData() {
   const [peakDemandData, setPeakDemandData] = useState([]);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   const [routePerf, setRoutePerf] = useState({ document_routes: [], vehicle_scheduling: [] });
+  const [administrativeInsights, setAdministrativeInsights] = useState({
+    peak_traffic: [], frequent_documents: [], utilized_assets: []
+  });
   const [systemHealth, setSystemHealth] = useState({
     database_connection: 'CHECKING',
     data_quality_audit: { status: 'PASS', integrity_score_percentage: 100, audit_details: {} }
@@ -195,10 +198,14 @@ export function useGSOAdminData() {
 
   const fetchSystemAnalyticsData = async () => {
     try {
-      const routeRes = await fetchWithAuth('/api/analytics/route-performance');
+      const [routeRes, healthRes, insightsRes] = await Promise.all([
+        fetchWithAuth('/api/analytics/route-performance'),
+        fetchWithAuth('/api/analytics/system-health'),
+        fetchWithAuth('/api/analytics/administrative-insights')
+      ]);
       if (routeRes.ok) setRoutePerf(await routeRes.json());
-      const healthRes = await fetchWithAuth('/api/analytics/system-health');
       if (healthRes.ok) setSystemHealth(await healthRes.json());
+      if (insightsRes.ok) setAdministrativeInsights(await insightsRes.json());
     } catch (err) { console.error("Error connecting to analytics engine:", err); }
   };
 
@@ -280,7 +287,7 @@ export function useGSOAdminData() {
     pipelineDocs, actionHistory, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
     reservationsList, logisticsList,
-    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth,
+    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   };
 }
