@@ -45,7 +45,7 @@ export default function OriginatorDocumentsTab({
   // Handle direct target document passed from notification clicks on the same tab
   useEffect(() => {
     if (targetDocId && documents.length > 0) {
-      const matched = documents.find(d => d.ini_id === parseInt(targetDocId));
+      const matched = documents.find(d => String(d.ini_id) === String(targetDocId));
       if (matched) {
         handleSelectDocument(matched);
         setActiveDetailsDoc(matched);
@@ -144,7 +144,7 @@ export default function OriginatorDocumentsTab({
   useEffect(() => {
     const pendingRedirectId = localStorage.getItem('redirect_target_doc_id');
     if (pendingRedirectId && documents.length > 0) {
-      const targetDoc = documents.find(d => d.ini_id === parseInt(pendingRedirectId));
+      const targetDoc = documents.find(d => String(d.ini_id) === String(pendingRedirectId));
       if (targetDoc) {
         handleSelectDocument(targetDoc);
         setActiveDetailsDoc(targetDoc);

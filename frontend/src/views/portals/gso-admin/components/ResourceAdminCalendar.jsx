@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { resourceApi, confirmResourceAction, resourceSuccess, resourceError } from '../resourceActions';
 import { dateKey, blockOnDay } from '../../../../utils/resourceSchedule';
+import { publicReference } from '../../../../utils/publicReference';
 
 const control = 'border border-gray-300 rounded-xl px-3 py-2 text-xs font-medium bg-white focus:outline-none focus:ring-1 focus:ring-red-700';
 
@@ -150,7 +151,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
 
           <select aria-label="Filter status" className={control} value={status} onChange={e => setStatus(e.target.value)}>
             <option value="All">All Requests & Blocks</option>
-            <option value="Reserved">Pending</option>
+            <option value="Pending">Pending</option>
             <option value="Confirmed">Confirmed</option>
             <option value="Blocked">Blocked</option>
           </select>
@@ -358,7 +359,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
                   {item.kind === 'request' ? (
                     <div className="space-y-2">
                       <div className="flex justify-between gap-2 font-bold text-xs">
-                        <span>Request #{item.record.booking_id} · {item.record.requestor}</span>
+                        <span>{publicReference('REQ', item.record.booking_id)} · {item.record.requestor}</span>
                         <span className="uppercase">{item.label}</span>
                       </div>
                       <p className="text-xs">{item.record.start_time?.slice(0, 5)} - {item.record.end_time?.slice(0, 5)} · {item.record.asset_name}</p>

@@ -2,6 +2,11 @@ const {availability, lockSchedule} = require('./resourceScheduling');
 module.exports = function registerScheduling(app, pool, requireAuth) {
   const gso = (req,res,next) => Number(req.user.a_id) === 4 ? next() : res.status(403).json({error:'GSO administrator access required.'});
   const handle = fn => async (req,res) => {try {await fn(req,res);} catch(error) {res.status(error.status || 400).json({error:error.message});}};
+  const broadcast = req => {
+    const io = req.app?.get?.('io');
+    io?.to('resource_updates_room').emit('resource-schedule-updated');
+    io?.to('gso_admin_room').emit('system-metrics-updated');
+  };
   app.get('/api/resources/availability', requireAuth, handle(async(req,res)=>{
     const free = await availability(pool, req.query);
     res.json({available:free.available, reason:free.reason, vehicleCount:free.vehicles?.length, driverCount:free.drivers?.length});
@@ -9,7 +14,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
   app.get('/api/resources/fleet', requireAuth, gso, handle(async(req,res)=>{
     const vehicles=await pool.query('SELECT * FROM public.fleet_vehicles ORDER BY vehicle_name');
     const drivers=await pool.query('SELECT * FROM public.resource_drivers ORDER BY full_name');
-    const requests=await pool.query(`SELECT b.booking_id,b.status,to_char(b.reservation_date,'YYYY-MM-DD') AS date,b.purpose,
+    const requests=await pool.query(`SELECT b.public_id AS booking_id,b.status,to_char(b.reservation_date,'YYYY-MM-DD') AS date,b.purpose,
       vr.pick_up_time::text AS start,vr.drop_off_time::text AS end,vr.assigned_vehicle_id,vr.assigned_driver_id,u.full_name
       FROM public.bookings b JOIN public.vehicle_requirements vr USING (booking_id) JOIN public."User" u ON u.u_id=b.u_id
       WHERE b.reservation_date >= CURRENT_DATE ORDER BY b.reservation_date,vr.pick_up_time`);
@@ -31,7 +36,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       if(typeof name !== 'string' || !name.trim() || typeof number !== 'string' || !number.trim()) throw new Error('Enter a driver name and license number.');
       await pool.query('INSERT INTO public.resource_drivers(full_name,license_number) VALUES($1,$2)',[name.trim(),number.trim().toUpperCase()]);
     } else throw new Error('Unknown registry.');
-    res.status(201).json({message:'Registered successfully.'});
+    broadcast(req);res.status(201).json({message:'Registered successfully.'});
   }));
   app.put('/api/resources/fleet/:kind/:id/active',requireAuth,gso,handle(async(req,res)=>{
     const tables={vehicles:['fleet_vehicles','vehicle_id'],drivers:['resource_drivers','driver_id']};
@@ -40,21 +45,21 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
     const client=await pool.connect();
     try {await client.query('BEGIN');await lockSchedule(client);
       await client.query(`UPDATE public.${table[0]} SET is_active=$1 WHERE ${table[1]}=$2`,[req.body.active,req.params.id]);
-      await client.query('COMMIT');res.json({message:'Availability updated. Existing confirmed assignments still need to be honored or reassigned.'});
+      await client.query('COMMIT');broadcast(req);res.json({message:'Availability updated. Existing confirmed assignments still need to be honored or reassigned.'});
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
   app.get('/api/resources/assignments/:id/options',requireAuth,gso,handle(async(req,res)=>{
-    const result=await pool.query(`SELECT to_char(b.reservation_date,'YYYY-MM-DD') AS date,vr.pick_up_time::text AS start,vr.drop_off_time::text AS end
-      FROM public.bookings b JOIN public.vehicle_requirements vr USING(booking_id) WHERE b.booking_id=$1`,[req.params.id]);
+    const result=await pool.query(`SELECT b.booking_id,to_char(b.reservation_date,'YYYY-MM-DD') AS date,vr.pick_up_time::text AS start,vr.drop_off_time::text AS end
+      FROM public.bookings b JOIN public.vehicle_requirements vr USING(booking_id) WHERE b.public_id=$1`,[req.params.id]);
     if(!result.rows.length) throw new Error('Vehicle request not found.');
-    res.json(await availability(pool,{...result.rows[0],...(req.query.start && req.query.end ? {start:req.query.start,end:req.query.end} : {}),type:'Vehicle',exclude:req.params.id,allowLegacy:true}));
+    res.json(await availability(pool,{...result.rows[0],...(req.query.start && req.query.end ? {start:req.query.start,end:req.query.end} : {}),type:'Vehicle',exclude:result.rows[0].booking_id,allowLegacy:true}));
   }));
   app.put('/api/resources/assignments/:id', requireAuth, gso, handle(async (req, res) => {
-    const bookingId = Number(req.params.id);
+    const bookingPublicId = String(req.params.id || '');
     const vehicleId = Number(req.body.vehicleId);
     const driverId = Number(req.body.driverId);
 
-    if (!bookingId || !vehicleId || !driverId) {
+    if (!bookingPublicId || !vehicleId || !driverId) {
       throw new Error('Valid vehicle and driver selections are required.');
     }
 
@@ -69,17 +74,18 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       await lockSchedule(client);
 
       const result = await client.query(
-        `SELECT b.status,
+        `SELECT b.booking_id,b.status,
                 to_char(b.reservation_date,'YYYY-MM-DD') AS date,
                 vr.pick_up_time::text AS start,
                 vr.drop_off_time::text AS end
          FROM public.bookings b 
          JOIN public.vehicle_requirements vr USING (booking_id) 
-         WHERE b.booking_id = $1 FOR UPDATE OF b`,
-        [bookingId]
+         WHERE b.public_id = $1 FOR UPDATE OF b`,
+        [bookingPublicId]
       );
 
       if (!result.rows.length) throw new Error('Vehicle request not found.');
+      const bookingId = result.rows[0].booking_id;
 
       // Enforce confirmation requirement before assignment
       if (result.rows[0].status !== 'Confirmed') {
@@ -124,6 +130,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       );
 
       await client.query('COMMIT');
+      broadcast(req);
       res.json({ message: 'Vehicle and driver assigned successfully.' });
     } catch (e) {
       await client.query('ROLLBACK');

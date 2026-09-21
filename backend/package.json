@@ -5,6 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test *.test.js",
+    "test:security": "node --test security/*.test.js",
+    "migrate:security": "node migrateSecurity.js",
+    "migrate:encrypted-files": "node migrateEncryptedFiles.js",
     "verify:office-migration": "node verifyOfficeMigration.js"
   },
   "keywords": [],

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth } from "../../../../api";
-import { io } from 'socket.io-client';
+import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 
-const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 export function useGSOAdminData() {
   const navigate = useNavigate();
@@ -234,6 +234,7 @@ export function useGSOAdminData() {
       socketRef.current.emit('join-office-room', gsoOfficeId);
       // 3. Join user room for personal alerts
       socketRef.current.emit('join-user-room', userId);
+      checkChatBadgeStatus();
     });
 
     const checkChatBadgeStatus = async () => {

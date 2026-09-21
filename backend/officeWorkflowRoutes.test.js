@@ -7,14 +7,14 @@ test('ad hoc routing integrates with receipt, signing, release, corrections and 
   const db = new PGlite();
   t.after(() => db.close());
   await db.exec(`
-    CREATE TABLE public."User" (u_id integer PRIMARY KEY,a_id integer,o_id integer,d_id integer,is_active boolean);
+    CREATE TABLE public."User" (u_id integer PRIMARY KEY,public_id text,a_id integer,o_id integer,d_id integer,is_active boolean);
     CREATE TABLE public.offices (o_id integer PRIMARY KEY);
-    CREATE TABLE public.initial_document (ini_id integer PRIMARY KEY,u_id integer,submission_office_id integer,title text,qr_code text,route_snapshot integer[]);
-    CREATE TABLE public.processed_document (pd_id serial PRIMARY KEY,ini_id integer,s_id integer,current_office_id integer,
+    CREATE TABLE public.initial_document (ini_id integer PRIMARY KEY,public_id text,u_id integer,submission_office_id integer,title text,qr_code text,route_snapshot integer[]);
+    CREATE TABLE public.processed_document (pd_id serial PRIMARY KEY,public_id text,ini_id integer,s_id integer,current_office_id integer,
       next_office_id integer,time_in timestamp,time_out timestamp,is_adhoc boolean DEFAULT false,adhoc_return_office_id integer);
-    CREATE TABLE public.office_action_history (history_id serial PRIMARY KEY,ini_id integer,u_id integer,o_id integer,action_type varchar(100),action_timestamp timestamp);
+    CREATE TABLE public.office_action_history (history_id serial PRIMARY KEY,public_id text,ini_id integer,u_id integer,o_id integer,action_type varchar(100),action_timestamp timestamp);
     INSERT INTO public.offices VALUES (1),(2),(3),(4),(8);
-    INSERT INTO public."User" SELECT o_id,2,o_id,1,true FROM public.offices;
+    INSERT INTO public."User" SELECT o_id,o_id::text,2,o_id,1,true FROM public.offices;
   `);
   const routes = new Map();
   register({get(){},post(path,...handlers){routes.set(path,handlers.at(-1));}},
@@ -33,7 +33,7 @@ test('ad hoc routing integrates with receipt, signing, release, corrections and 
   const active=async()=> (await db.query('SELECT * FROM public.processed_document WHERE time_out IS NULL ORDER BY pd_id DESC LIMIT 1')).rows[0];
   async function reset(sequence) {
     await db.exec('TRUNCATE public.processed_document,public.initial_document,public.office_action_history RESTART IDENTITY');
-    await db.query("INSERT INTO public.initial_document VALUES (1,1,1,'Test','QR-1',$1)",[sequence]);
+    await db.query("INSERT INTO public.initial_document (ini_id,public_id,u_id,submission_office_id,title,qr_code,route_snapshot) VALUES (1,'1',1,1,'Test','QR-1',$1)",[sequence]);
     await db.query('INSERT INTO public.processed_document (ini_id,s_id,current_office_id,next_office_id) VALUES (1,1,$1,$2)',[sequence[0],sequence[1]]);
     await receive(1);
   }

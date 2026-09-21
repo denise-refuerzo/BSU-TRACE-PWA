@@ -196,7 +196,7 @@ export default function GSOProcurementTab({
                   </>
                 ) : (
                   <>
-                    <option value="Reserved">Pending</option>
+                    <option value="Pending">Pending</option>
                     <option value="Confirmed">Confirmed</option>
                   </>
                 )}

@@ -3,11 +3,15 @@ const crypto = require('node:crypto');
 const {routeProgress} = require('./routeProgress');
 
 // --- NEW: WEBSOCKET BROADCASTER HELPER ---
-const broadcastDocumentUpdate = (req, originUserId, currentOfficeId, nextOfficeId) => {
-  const io = req.app.get('io');
+const broadcastDocumentUpdate = async (req, db, originUserId, currentOfficeId, nextOfficeId) => {
+  const io = req.app?.get?.('io');
   if (!io) return;
 
-  if (originUserId) io.to(`user_${originUserId}`).emit('document-updated');
+  if (originUserId) {
+    const result = await db.query('SELECT public_id FROM public."User" WHERE u_id=$1', [originUserId]);
+    const publicUserId = result.rows[0]?.public_id;
+    if (publicUserId) io.to(`user_${publicUserId}`).emit('document-updated');
+  }
   if (currentOfficeId) io.to(`office_${currentOfficeId}`).emit('pipeline-updated');
   if (nextOfficeId) io.to(`office_${nextOfficeId}`).emit('pipeline-updated');
 
@@ -24,21 +28,28 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
         FROM public.initial_document i JOIN public.process_type p USING(p_id)
         JOIN public."User" u ON i.u_id=u.u_id
         LEFT JOIN public.offices requestor_office ON u.o_id=requestor_office.o_id
-        WHERE ini_id=$1`,[req.params.iniId])).rows[0];
+        WHERE i.public_id=$1`,[req.params.iniId])).rows[0];
       if (!doc) return res.status(404).json({error:'Document not found.'});
-      const steps=(await pool.query(`SELECT pd.*,o.office_name,s.current_status,n.office_name AS next_office_name FROM public.processed_document pd
+      const steps=(await pool.query(`SELECT pd.*,pd.public_id AS external_id,o.office_name,s.current_status,n.office_name AS next_office_name FROM public.processed_document pd
         JOIN public.offices o ON pd.current_office_id=o.o_id JOIN public.status s USING(s_id)
         LEFT JOIN public.offices n ON pd.next_office_id=n.o_id WHERE ini_id=$1 ORDER BY pd_id`,[doc.ini_id])).rows;
       if (!(Number(doc.u_id)===Number(req.user.u_id) || (isOffice(req.user) &&
         (Number(doc.submission_office_id)===Number(req.user.o_id) || steps.some(s=>Number(s.current_office_id)===Number(req.user.o_id))))))
         return res.status(403).json({error:'This document is not assigned to your office.'});
-      const actions=(await pool.query(`SELECT h.history_id,h.action_type,u.full_name,o.office_name,
+      const actions=(await pool.query(`SELECT h.public_id AS history_id,h.action_type,u.full_name,o.office_name,
         CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS action_timestamp
         FROM public.office_action_history h JOIN public."User" u USING(u_id) JOIN public.offices o ON h.o_id=o.o_id
         WHERE h.ini_id=$1 ORDER BY h.history_id`,[doc.ini_id])).rows;
       const route=(await pool.query(`SELECT o.office_name FROM unnest($1::integer[]) WITH ORDINALITY AS r(o_id,position)
         JOIN public.offices o ON r.o_id=o.o_id ORDER BY r.position`,[doc.route_snapshot])).rows;
-      res.json({...doc,steps,route_steps:routeProgress(doc.route_snapshot || [],steps).routeSteps,actions,route_names:route.map(o=>o.office_name)});
+      const {public_id, u_id, ...publicDocument} = doc;
+      const publicSteps = steps.map(step => {
+        const sanitized = {...step,pd_id:step.external_id};
+        delete sanitized.public_id;
+        delete sanitized.external_id;
+        return sanitized;
+      });
+      res.json({...publicDocument,ini_id:public_id,steps:publicSteps,route_steps:routeProgress(doc.route_snapshot || [],steps).routeSteps,actions,route_names:route.map(o=>o.office_name)});
     } catch(err) {console.error(err);res.status(500).json({error:'Unable to load document details.'});}
   });
 
@@ -47,10 +58,11 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     try {
       client = await pool.connect();
       await client.query('BEGIN');
-      const result = await client.query('SELECT u_id,a_id,o_id,d_id FROM public."User" WHERE u_id=$1 AND is_active IS TRUE', [req.user.u_id]);
+      const result = await client.query('SELECT u_id,public_id,a_id,o_id,d_id FROM public."User" WHERE u_id=$1 AND is_active IS TRUE', [req.user.u_id]);
       if (!result.rows[0]) throw fail(403, 'An active account is required.');
       const payload = await handler(client, result.rows[0], req);
       await client.query('COMMIT');
+      if (payload.configurationChanged) req.app?.get?.('io')?.to('ict_admin_room').emit('admin-configuration-updated');
       res.status(payload.created ? 201 : 200).json(payload);
     } catch (err) {
       if (client) await client.query('ROLLBACK');
@@ -65,7 +77,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
 
   const lockDoc = async (db, req) => {
     const result = await db.query(`SELECT * FROM public.initial_document
-      WHERE ${req.body.qrCode ? 'qr_code' : 'ini_id'}=$1 FOR UPDATE`, [req.body.qrCode || req.body.iniId]);
+      WHERE ${req.body.qrCode ? 'qr_code' : 'public_id'}=$1 FOR UPDATE`, [req.body.qrCode || req.body.iniId]);
     if (!result.rows[0]) throw fail(404, 'Document not found.');
     return result.rows[0];
   };
@@ -116,9 +128,9 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     }
 
     // TRIGGER WEBSOCKET BROADCAST
-    broadcastDocumentUpdate(req, user.u_id, sequence[0], sequence[1]);
+    await broadcastDocumentUpdate(req, db, user.u_id, sequence[0], sequence[1]);
 
-    return {created:true, message:'Document submitted.',qrCode,iniId:doc.ini_id};
+    return {created:true, configurationChanged:Boolean(custom), message:'Document submitted.',qrCode,iniId:doc.public_id};
   }));
 
   // PIPELINE ACTION ENDPOINTS (SCAN IN, OUT, SIGN, RETURN, ADHOC)
@@ -210,11 +222,11 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
       // TRIGGER WEBSOCKET BROADCAST
       // Grab the absolutely newest step configuration after the modifications to ensure accurate push targets
       const updatedStep = (await db.query('SELECT current_office_id, next_office_id FROM public.processed_document WHERE ini_id=$1 ORDER BY pd_id DESC LIMIT 1', [doc.ini_id])).rows[0];
-      broadcastDocumentUpdate(req, doc.u_id, updatedStep?.current_office_id, updatedStep?.next_office_id);
+      await broadcastDocumentUpdate(req, db, doc.u_id, updatedStep?.current_office_id, updatedStep?.next_office_id);
       
       // Secondary check to clear the previous office's pipeline table immediately
       if (user.o_id && Number(user.o_id) !== Number(updatedStep?.current_office_id)) {
-        broadcastDocumentUpdate(req, null, user.o_id, null);
+        await broadcastDocumentUpdate(req, db, null, user.o_id, null);
       }
 
       return {message};
@@ -223,7 +235,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
 
   // RESUBMIT DOCUMENT
   app.post('/api/documents/:iniId/resubmit', requireAuth, transaction(async (db,user,req) => {
-    req.body.iniId = Number(req.params.iniId);
+    req.body.iniId = req.params.iniId;
     const doc = await lockDoc(db,req);
     if (!(Number(doc.u_id) === Number(user.u_id) || (isOffice(user) && Number(doc.submission_office_id) === Number(user.o_id))))
       throw fail(403,'Only the submitter or submitting office can resubmit this document.');
@@ -241,7 +253,7 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     await audit(db,doc.ini_id,user,'Resubmitted after correction',user.o_id || step.current_office_id);
 
     // TRIGGER WEBSOCKET BROADCAST
-    broadcastDocumentUpdate(req, doc.u_id, step.current_office_id, step.next_office_id);
+    await broadcastDocumentUpdate(req, db, doc.u_id, step.current_office_id, step.next_office_id);
 
     return {message:'Resubmitted to the office that requested corrections.'};
   }));

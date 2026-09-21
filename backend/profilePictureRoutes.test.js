@@ -2,7 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const sharp = require('sharp');
+const crypto = require('node:crypto');
 const register = require('./profilePictureRoutes');
+const {isEncrypted} = require('./security/fieldEncryption');
 
 test('normalizes uploaded images to a compact 256px JPEG', async () => {
   const png = await sharp({create: {width: 400, height: 200, channels: 4, background: '#123456'}}).png().toBuffer();
@@ -21,6 +23,7 @@ test('rejects invalid, oversized and unsupported image payloads', async () => {
 });
 
 test('authenticated upload, reload and removal only affect the signed-in account', async t => {
+  const encryptionKey = crypto.randomBytes(32).toString('base64');
   let stored = null;
   const writes = [];
   const pool = {async query(sql, args) {
@@ -34,7 +37,7 @@ test('authenticated upload, reload and removal only affect the signed-in account
   register(app, pool, (req, res, next) => {
     if (req.headers.authorization !== 'test-session') return res.status(401).json({error: 'Unauthorized'});
     req.user = {u_id: 18}; next();
-  });
+  }, {encryptionKey});
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
@@ -46,6 +49,8 @@ test('authenticated upload, reload and removal only affect the signed-in account
   const saved = await fetch(`${url}?userId=99`, {method: 'PUT', headers, body: bytes});
   assert.equal(saved.status, 200);
   const data = await saved.json(); assert.ok(data.profilePic);
+  assert.equal(isEncrypted(stored), true);
+  assert.notEqual(stored, data.profilePic);
   const reload = await fetch(url, {headers});
   assert.equal(reload.headers.get('cache-control'), 'no-store');
   assert.equal((await reload.json()).profilePic, data.profilePic);
