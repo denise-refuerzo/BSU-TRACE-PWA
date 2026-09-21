@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-
-const API_BASE_URL = 'https://bsu-trace-pwa.onrender.com';
+import { API_BASE_URL } from '../../api';
 
 export default function Login() {
   // --- NEW: WIPE STALE SESSION DATA ON LOAD ---
@@ -24,7 +23,7 @@ export default function Login() {
   const [tempUserId, setTempUserId] = useState(null);
   const [otpExpiresAt, setOtpExpiresAt] = useState(null);
   const [resendAvailableAt, setResendAvailableAt] = useState(null);
-  const [otpClock, setOtpClock] = useState(Date.now());
+  const [otpClock, setOtpClock] = useState(() => Date.now());
   useEffect(() => {
     if (!require2FA) return;
     const timer = setInterval(() => setOtpClock(Date.now()), 1000);

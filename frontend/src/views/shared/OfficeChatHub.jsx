@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useEffectEvent } from 'react';
 import { createRealtimeClient as io } from '../../utils/realtimeClient';
+import { publicReference } from '../../utils/publicReference';
 import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, Hash, ArrowLeft } from 'lucide-react';
 import { fetchWithAuth } from "../../api";
 
@@ -8,7 +9,7 @@ const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrend
 function mergeMessages(previous, incoming) {
   const messages = new Map(previous.map(message => [String(message.message_id), message]));
   incoming.forEach(message => messages.set(String(message.message_id), message));
-  return [...messages.values()].sort((a, b) => Number(a.message_id) - Number(b.message_id));
+  return [...messages.values()].sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at));
 }
 
 export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = null, onClearTargetDoc = null, compact = false }) {
@@ -46,7 +47,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
 
   const handleSelectDocument = async (doc, autoSelectFirstChannel = false) => {
     const version = ++selectionVersion.current;
-    const directoryContext = directory.find(item => Number(item.ini_id) === Number(doc.ini_id));
+    const directoryContext = directory.find(item => String(item.ini_id) === String(doc.ini_id));
     const selectedDocument = { ...doc, ...directoryContext };
     activeRoomRef.current = null;
     setDirectory(prev => prev.map(d => d.ini_id === doc.ini_id ? { ...d, hasAnyChat: false } : d));
@@ -64,7 +65,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
       if (!res.ok) throw new Error(data.error || 'Unable to load offices.');
       if (Array.isArray(data)) {
         const isOfficeSubmission = Boolean(selectedDocument.isOfficeSubmission || data.some(channel => channel.isOfficeSubmission));
-        setSelectedDoc(previous => Number(previous?.ini_id) === Number(doc.ini_id) ? { ...previous, isOfficeSubmission } : previous);
+        setSelectedDoc(previous => String(previous?.ini_id) === String(doc.ini_id) ? { ...previous, isOfficeSubmission } : previous);
         setChannels(data);
 
         // Auto-select workspace channel for processors
@@ -139,7 +140,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
       });
       if (res.ok) {
         const message = await res.json();
-        if (Number(activeRoomRef.current) === Number(roomId)) {
+        if (String(activeRoomRef.current) === String(roomId)) {
           setMessages(previous => mergeMessages(previous, [message]));
           setTextInput(current => current === draft ? '' : current);
         }
@@ -191,7 +192,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         const res = await fetchWithAuth(`/api/chat/rooms/${roomId}/messages`);
         if (!res.ok) throw new Error('Unable to load messages.');
         const data = await res.json();
-        if (!cancelled && Number(activeRoomRef.current) === Number(roomId)) setMessages(previous => mergeMessages(previous, data));
+        if (!cancelled && String(activeRoomRef.current) === String(roomId)) setMessages(previous => mergeMessages(previous, data));
       } catch (err) { if (!cancelled) setError(err.message); }
     };
     const join = () => {
@@ -199,7 +200,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
       loadMessages();
     };
     const receive = message => {
-      if (Number(activeRoomRef.current) === Number(roomId) && Number(message.room_id) === Number(roomId)) setMessages(previous => mergeMessages(previous, [message]));
+      if (String(activeRoomRef.current) === String(roomId) && String(message.room_id) === String(roomId)) setMessages(previous => mergeMessages(previous, [message]));
     };
     socket.on('new-chat-message', receive);
     socket.on('connect', join);
@@ -279,7 +280,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                 {doc.hasAnyChat && <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shrink-0 animate-pulse"></span>}
               </div>
               <div className="flex items-center justify-between text-[10px] text-gray-400 font-medium">
-                <span className="font-mono">ID: {doc.ini_id}</span>
+                <span className="font-mono">{publicReference('DOC', doc.ini_id)}</span>
                 <span>{doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
               </div>
             </button>
@@ -439,7 +440,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
             {/* Messages Feed */}
             <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 bg-gray-50/70">
               {messages.map(msg => {
-                const isMe = msg.sender_id === parseInt(userId);
+                const isMe = String(msg.sender_id) === String(userId);
                 return (
                   <div 
                     key={msg.message_id} 

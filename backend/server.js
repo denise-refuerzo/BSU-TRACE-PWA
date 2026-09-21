@@ -10,6 +10,8 @@ const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require(
 const crypto = require('crypto');
 const axios = require('axios');
 require('dotenv').config();
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET is required.');
 
 // ==========================================
 // 0. SERVER INITIALIZATION & SETUP
@@ -49,6 +51,21 @@ const io = new Server(server, {
   }
 });
 
+// The companion scanner can connect without an account. Privileged room
+// subscriptions below are enabled only when this optional token is valid.
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next();
+  try {
+    const decoded = jwt.decode(token, JWT_SECRET);
+    const result = await pool.query(`SELECT u_id,public_id,a_id,o_id,session_token,is_active
+      FROM public."User" WHERE public_id=$1`, [decoded.sub]);
+    const user = result.rows[0];
+    if (user?.is_active && user.session_token === decoded.session_token) socket.user = user;
+  } catch { /* Invalid optional tokens remain unauthenticated. */ }
+  next();
+});
+
 // ==========================================
 // 0.1 COMPANION SCANNER WEBSOCKET RELAYS
 // ==========================================
@@ -79,28 +96,28 @@ io.on('connection', (socket) => {
   // --- NEW: Dynamic App Subscriptions ---
   // 1. Office Staff Room (for pipeline, KPI, and office alerts)
   socket.on('join-office-room', (officeId) => {
-    if (officeId) {
-      socket.join(`office_${officeId}`);
+    if (socket.user?.o_id && Number(officeId) === Number(socket.user.o_id)) {
+      socket.join(`office_${socket.user.o_id}`);
     }
   });
 
   // 2. User Room (for personal document updates and notifications)
   socket.on('join-user-room', (userId) => {
-    if (userId) {
-      socket.join(`user_${userId}`);
+    if (socket.user?.public_id && String(userId) === String(socket.user.public_id)) {
+      socket.join(`user_${socket.user.public_id}`);
     }
   });
 
   // Resource calendars, current equipment counts, and request status updates.
   socket.on('join-resource-room', () => {
-    socket.join('resource_updates_room');
+    if (socket.user) socket.join('resource_updates_room');
   });
 
   // 3. Document Chat Room
-  socket.on('join-chat-channel', (roomId) => {
-    if (roomId) {
-      socket.join(`chat_room_${roomId}`);
-    }
+  socket.on('join-chat-channel', async (roomId) => {
+    if (!socket.user || !roomId) return;
+    const room = await resolveChatRoom(roomId, socket.user).catch(() => null);
+    if (room) socket.join(`chat_room_${room.public_id}`);
   });
 
   socket.on('leave-chat-channel', (roomId) => {
@@ -115,15 +132,13 @@ io.on('connection', (socket) => {
   
   // 4. Global Admin Rooms
   socket.on('join-ict-admin-room', () => {
-    socket.join('ict_admin_room');
+    if (Number(socket.user?.a_id) === 5) socket.join('ict_admin_room');
   });
 
   socket.on('join-gso-admin-room', () => {
-    socket.join('gso_admin_room');
+    if (Number(socket.user?.a_id) === 4) socket.join('gso_admin_room');
   });
 });
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
 
 const failed2faAttemptsTracker = {};
 const TWO_FA_WINDOW_MS = 10 * 60 * 1000;
@@ -144,7 +159,7 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT u.u_id, u.password, u.a_id, u.two_fa_enabled, u.is_active, u.uni_email, 
+      `SELECT u.u_id, u.public_id, u.password, u.a_id, u.two_fa_enabled, u.is_active, u.uni_email,
               a.account_type, d.department_name, u.full_name
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
@@ -187,7 +202,7 @@ app.post('/api/login', async (req, res) => {
       );
 
       return res.status(200).json({
-        u_id: user.u_id,
+        u_id: user.public_id,
         a_id: user.a_id,
         two_fa_enabled: true
         ,two_fa_expires_at: expiresAt.toISOString(), resend_after_seconds: 60
@@ -202,7 +217,7 @@ app.post('/api/login', async (req, res) => {
     
     // Maintain the JWT payload structure required by your middleware
     const token = jwt.encode({ 
-      u_id: user.u_id, 
+      sub: user.public_id,
       username: username, 
       a_id: user.a_id,
       session_token: sessionToken 
@@ -214,7 +229,7 @@ app.post('/api/login', async (req, res) => {
       role: user.a_id,
       roleName: user.account_type,
       fullName: user.full_name,
-      userId: user.u_id,
+      userId: user.public_id,
       two_fa_enabled: false,
       session_token: sessionToken 
     });
@@ -241,12 +256,21 @@ const requireAuth = async (req, res, next) => {
 
   try {
     const decoded = jwt.decode(token, JWT_SECRET);
+
+    // Tokens issued before the public-UUID migration contain only a numeric
+    // u_id. They represent an outdated session, not a deleted account.
+    if (typeof decoded.sub !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded.sub)) {
+      return res.status(401).json({
+        error: 'Your session was created before the security update. Please sign in again.',
+        forceLogout: true
+      });
+    }
     
     // Check the database to see if the session token matches the current one
-    const result = await pool.query('SELECT session_token,a_id,o_id,d_id,is_active FROM public."User" WHERE u_id = $1', [decoded.u_id]);
+    const result = await pool.query('SELECT u_id,session_token,a_id,o_id,d_id,is_active,public_id FROM public."User" WHERE public_id = $1', [decoded.sub]);
     
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'User account no longer exists.' });
+      return res.status(401).json({ error: 'User account no longer exists.', forceLogout: true });
     }
 
     const currentDbToken = result.rows[0].session_token;
@@ -264,7 +288,7 @@ const requireAuth = async (req, res, next) => {
     req.user = {...decoded, ...result.rows[0]};
     next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token.' });
+    return res.status(401).json({ error: 'Invalid or expired token.', forceLogout: true });
   }
 };
 
@@ -277,10 +301,10 @@ app.post('/api/login/verify-2fa', async (req, res) => {
   try {
     // 1. Fetch the user, their OTP, and the extra profile details needed for the frontend JWT
     const result = await pool.query(
-      `SELECT u.u_id, u.username, u.a_id, u.two_fa_enabled, u.two_fa_code, u.two_fa_code_expires, u.two_fa_attempts, u.is_active, u.full_name, a.account_type
+      `SELECT u.u_id, u.public_id, u.username, u.a_id, u.two_fa_enabled, u.two_fa_code, u.two_fa_code_expires, u.two_fa_attempts, u.is_active, u.full_name, a.account_type
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
-       WHERE u.u_id = $1`,
+       WHERE u.public_id = $1`,
       [userId]
     );
 
@@ -297,7 +321,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
     if (Number(user.two_fa_attempts || 0) >= TWO_FA_MAX_ATTEMPTS)
       return res.status(429).json({ error: 'Too many attempts. Request a new verification code.' });
     if (user.two_fa_code !== String(otpCode)) {
-      await pool.query('UPDATE public."User" SET two_fa_attempts = COALESCE(two_fa_attempts,0) + 1 WHERE u_id = $1', [userId]);
+      await pool.query('UPDATE public."User" SET two_fa_attempts = COALESCE(two_fa_attempts,0) + 1 WHERE u_id = $1', [user.u_id]);
       return res.status(401).json({ error: 'Invalid or expired verification code' });
     }
 
@@ -313,7 +337,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
 
     // 5. Generate the JWT with the full payload
     const token = jwt.encode({ 
-      u_id: user.u_id, 
+      sub: user.public_id,
       username: user.username, 
       a_id: user.a_id,
       session_token: sessionToken 
@@ -326,7 +350,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
       role: user.a_id,
       roleName: user.account_type,
       fullName: user.full_name,
-      userId: user.u_id,
+      userId: user.public_id,
       session_token: sessionToken 
     });
 
@@ -340,7 +364,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
 // 1.3 VERIFY & ENABLE 2FA ENDPOINT
 // ==========================================
 app.post('/api/profile/:id/verify-enable-2fa', requireAuth, async (req, res) => {
-  const userId = req.params.id;
+  const userId = req.user.u_id;
   const { otpCode } = req.body;
 
   try {
@@ -381,7 +405,7 @@ app.post('/api/profile/:id/verify-enable-2fa', requireAuth, async (req, res) => 
 // 1.3.1 VERIFY & DISABLE 2FA ENDPOINT
 // ==========================================
 app.post('/api/profile/:id/verify-disable-2fa', requireAuth, async (req, res) => {
-  const userId = req.params.id;
+  const userId = req.user.u_id;
   const { otpCode } = req.body;
 
   try {
@@ -543,9 +567,10 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
 // 2. FETCH ALL ACCOUNTS ENDPOINT (ICT Admin)
 // ==========================================
 app.get('/api/accounts', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});
   try {
     const query = `
-                  SELECT u.u_id, u.username, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.a_id, u.d_id, u.o_id, u.is_active,
+                  SELECT u.public_id AS u_id, u.username, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.a_id, u.d_id, u.o_id, u.is_active,
                         a.account_type as role_name,
                         d.department_name,
                         off.office_name
@@ -642,8 +667,8 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});  
   try {
     const duplicateCheck = await pool.query(
-      `SELECT * FROM public."User" WHERE username = $1 AND u_id != $2`,
-      [username, parseInt(userId)]
+      `SELECT * FROM public."User" WHERE username = $1 AND public_id != $2`,
+      [username, userId]
     );
 
     if (duplicateCheck.rows.length > 0) {
@@ -655,7 +680,7 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
     if (accountType === 4) {
       const gsoOfficeId = await findGsoOfficeId(pool);
       if (!gsoOfficeId) return res.status(409).json({ error: 'The General Services office must be registered before assigning the GSO Admin role.' });
-      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 AND u_id <> $1 LIMIT 1', [parseInt(userId)]);
+      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 AND public_id <> $1 LIMIT 1', [userId]);
       if (existingGso.rowCount) return res.status(409).json({ error: 'A GSO Admin account already exists. Only one GSO Admin account is allowed.' });
       assignedOfficeId = gsoOfficeId;
     } else if (assignedOfficeId) {
@@ -670,11 +695,11 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
     const query = `
       UPDATE public."User"
       SET username = $1, full_name = $2, uni_email = $3, a_id = $4, d_id = $5, o_id = $6, is_active = $7
-      WHERE u_id = $8
+      WHERE public_id = $8
     `;
     
     await pool.query(query, [
-      username, fullName, email, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, parseInt(userId)
+      username, fullName, email, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, userId
     ]);
 
     broadcastIctConfiguration(req);
@@ -693,14 +718,14 @@ require('./profilePictureRoutes')(app, pool, requireAuth);
 app.get('/api/profile/:userId', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT u.u_id, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.two_fa_code, u.o_id,
+      `SELECT u.public_id AS u_id, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.o_id,
               a.account_type, d.department_name, off.office_name
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
        JOIN public.department d ON u.d_id = d.d_id
        LEFT JOIN public.offices off ON u.o_id = off.o_id
        WHERE u.u_id = $1`,
-      [req.params.userId]
+      [req.user.u_id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User profiles entry missing' });
     res.json(result.rows[0]);
@@ -726,7 +751,7 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
     if (twoFaEnabled && (!twoFaCode || twoFaCode.toString().length < 4)) {
       return res.status(400).json({ error: 'A valid numeric PIN (at least 4 digits) is required to enable Two-Factor Authentication.' });
     }
-    const current = await pool.query('SELECT two_fa_enabled FROM public."User" WHERE u_id=$1',[req.params.userId]);
+    const current = await pool.query('SELECT two_fa_enabled FROM public."User" WHERE u_id=$1',[req.user.u_id]);
     if (!current.rows[0]) return res.status(404).json({error:'User not found.'});
     if (twoFaEnabled && !current.rows[0].two_fa_enabled)
       return res.status(409).json({error:'Verify the emailed 2FA code before enabling 2FA.'});
@@ -736,7 +761,7 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
       `UPDATE public."User" 
        SET full_name = $1, uni_email = $2, two_fa_enabled = $3, two_fa_code = $4
        WHERE u_id = $5`,
-      [fullName.trim(), email.trim(), twoFaEnabled, twoFaCode || null, req.params.userId]
+      [fullName.trim(), email.trim(), twoFaEnabled, twoFaCode || null, req.user.u_id]
     );
     
     broadcastIctConfiguration(req);
@@ -753,14 +778,14 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
 app.put('/api/profile/:userId/password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   try {
-    const userRes = await pool.query('SELECT password FROM public."User" WHERE u_id = $1', [req.params.userId]);
+    const userRes = await pool.query('SELECT password FROM public."User" WHERE u_id = $1', [req.user.u_id]);
     const user = userRes.rows[0];
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) return res.status(400).json({ error: 'Current password credentials record mismatch' });
 
     const newHashed = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE public."User" SET password = $1 WHERE u_id = $2', [newHashed, req.params.userId]);
+    await pool.query('UPDATE public."User" SET password = $1 WHERE u_id = $2', [newHashed, req.user.u_id]);
     res.json({ message: 'Credentials records changed cleanly' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to rewrite target security credentials record' });
@@ -771,7 +796,7 @@ app.put('/api/profile/:userId/password', requireAuth, async (req, res) => {
 // 2.6 REQUEST OTP FOR PROFILE SECURITY CHANGES
 // ==========================================
 app.post('/api/users/:id/request-profile-otp', requireAuth, async (req, res) => {
-  const userId = req.params.id;
+  const userId = req.user.u_id;
 
   try {
     const userRes = await pool.query('SELECT uni_email FROM public."User" WHERE u_id = $1', [userId]);
@@ -881,17 +906,17 @@ app.post('/api/offices', requireAuth, async (req, res) => {
 });
 
 app.post('/api/login/resend-2fa', async (req, res) => {
-  const userId = Number(req.body.userId);
-  if (!Number.isInteger(userId) || userId < 1) return res.status(400).json({error:'A valid user is required.'});
+  const userId = String(req.body.userId || '').trim();
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) return res.status(400).json({error:'A valid user is required.'});
   const last = twoFaResendTracker.get(userId) || 0;
   if (Date.now() - last < TWO_FA_RESEND_MS) return res.status(429).json({error:'Please wait before requesting another code.'});
   try {
-    const result = await pool.query('SELECT uni_email,full_name,two_fa_enabled,is_active FROM public."User" WHERE u_id=$1',[userId]);
+    const result = await pool.query('SELECT u_id,uni_email,full_name,two_fa_enabled,is_active FROM public."User" WHERE public_id=$1',[userId]);
     const user = result.rows[0];
     if (!user || !user.is_active || !user.two_fa_enabled) return res.status(400).json({error:'A 2FA challenge is not available.'});
     const code = newTwoFaCode();
     const expiresAt = twoFaExpiry();
-    await pool.query('UPDATE public."User" SET two_fa_code=$1,two_fa_code_expires=$2,two_fa_attempts=0 WHERE u_id=$3',[code,expiresAt,userId]);
+    await pool.query('UPDATE public."User" SET two_fa_code=$1,two_fa_code_expires=$2,two_fa_attempts=0 WHERE u_id=$3',[code,expiresAt,user.u_id]);
     await sendSystemEmail(user.uni_email,'BSU-Trace Login Verification',`Your new 2FA verification code is: ${code}. Do not share it.`);
     twoFaResendTracker.set(userId,Date.now());
     res.json({message:'A new verification code was sent.',two_fa_expires_at:expiresAt.toISOString(),resend_after_seconds:60});
@@ -1043,8 +1068,8 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
       // 1. ORIGINATOR: Alerts every time any action occurs on their document
       const query = `
         SELECT 
-          h.history_id as id,
-          idoc.ini_id,  /* CRITICAL ADDITION: Pulls the document reference key */
+          h.public_id as id,
+          idoc.public_id AS ini_id,
           idoc.title,
           h.action_type as title_alert,
           ('Action performed at ' || COALESCE(off.office_name, 'Origin Station')) as message,
@@ -1065,7 +1090,7 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
       }));
 
     } else if ([2,3,4].includes(roleId)) {
-      const result=await pool.query(`SELECT h.history_id AS id,i.ini_id,i.title AS doc_title,h.action_type AS title,
+      const result=await pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,h.action_type AS title,
         u.full_name || ' · ' || o.office_name AS message,
         CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
         FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
@@ -1086,19 +1111,34 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
 // ==========================================
 // 10. CHAT: FETCH DOCUMENT CHANNELS ENDPOINT
 // ==========================================
+const resolveChatDocument = async (publicId, user) => {
+  const officeId = [2,3,4].includes(Number(user.a_id)) ? user.o_id : null;
+  const result = await pool.query(`SELECT idoc.ini_id,idoc.submission_office_id
+    FROM public.initial_document idoc
+    WHERE idoc.public_id=$1 AND (idoc.u_id=$2 OR ($3::integer IS NOT NULL AND
+      (idoc.submission_office_id=$3 OR EXISTS (SELECT 1 FROM public.processed_document pd
+        WHERE pd.ini_id=idoc.ini_id AND pd.current_office_id=$3))))`, [publicId,user.u_id,officeId]);
+  return result.rows[0] || null;
+};
+
+const resolveChatRoom = async (publicId, user) => {
+  const officeId = [2,3,4].includes(Number(user.a_id)) ? user.o_id : null;
+  const result = await pool.query(`SELECT cr.room_id,cr.public_id,cr.ini_id,cr.o_id,idoc.submission_office_id
+    FROM public.chat_rooms cr JOIN public.initial_document idoc ON idoc.ini_id=cr.ini_id
+    WHERE cr.public_id=$1 AND (idoc.u_id=$2 OR ($3::integer IS NOT NULL AND
+      ((idoc.submission_office_id=$3 AND EXISTS (SELECT 1 FROM public.processed_document pd
+        WHERE pd.ini_id=idoc.ini_id AND pd.current_office_id=cr.o_id)) OR cr.o_id=$3)))`,
+    [publicId,user.u_id,officeId]);
+  return result.rows[0] || null;
+};
+
 app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
   const { iniId } = req.params;
   try {
-    const contextResult = await pool.query(
-      `SELECT idoc.submission_office_id, u.o_id AS user_office_id
-       FROM public.initial_document idoc
-       JOIN public."User" u ON u.u_id = $2
-       WHERE idoc.ini_id = $1`,
-      [parseInt(iniId), req.user.u_id]
-    );
-    const context = contextResult.rows[0];
+    const context = await resolveChatDocument(iniId, req.user);
+    if (!context) return res.status(404).json({error:'Document conversation not found.'});
     const isOfficeSubmission = Boolean(
-      context?.submission_office_id && Number(context.submission_office_id) === Number(context.user_office_id)
+      context.submission_office_id && Number(context.submission_office_id) === Number(req.user.o_id)
     );
 
     const docStepsQuery = `
@@ -1107,7 +1147,7 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
       WHERE ini_id = $1 
       ORDER BY pd_id ASC;
     `;
-    const stepsResult = await pool.query(docStepsQuery, [parseInt(iniId)]);
+    const stepsResult = await pool.query(docStepsQuery, [context.ini_id]);
     const steps = stepsResult.rows;
 
     if (steps.length === 0) {
@@ -1173,7 +1213,7 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
       // CHECK IF A CHAT ROOM ACTUALLY EXISTS AND HAS MESSAGES IN IT
       const checkRoom = await pool.query(
         `SELECT room_id FROM public.chat_rooms WHERE ini_id = $1 AND o_id = $2`,
-        [parseInt(iniId), parseInt(oId)]
+        [context.ini_id, parseInt(oId)]
       );
       
       let hasChat = false;
@@ -1208,21 +1248,28 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
 app.post('/api/chat/get-or-create-room', requireAuth, async (req, res) => {
   const { iniId, officeId } = req.body;
   try {
+    const document = await resolveChatDocument(iniId, req.user);
+    if (!document) return res.status(404).json({error:'Document conversation not found.'});
+    const requestedOfficeId = Number(officeId);
+    const mayChooseStation = Number(req.user.a_id) === 1 || Number(document.submission_office_id) === Number(req.user.o_id);
+    if (!mayChooseStation && requestedOfficeId !== Number(req.user.o_id)) return res.status(403).json({error:'This office conversation is not available to your account.'});
+    const station = await pool.query('SELECT 1 FROM public.processed_document WHERE ini_id=$1 AND current_office_id=$2 LIMIT 1',[document.ini_id,requestedOfficeId]);
+    if (!station.rows.length) return res.status(404).json({error:'Office station not found in this document route.'});
     // Check if channel already exists to prevent duplicate tables instantiation
     let roomRes = await pool.query(
-      'SELECT room_id FROM public.chat_rooms WHERE ini_id = $1 AND o_id = $2',
-      [parseInt(iniId), parseInt(officeId)]
+      'SELECT public_id FROM public.chat_rooms WHERE ini_id = $1 AND o_id = $2',
+      [document.ini_id, requestedOfficeId]
     );
 
     if (roomRes.rows.length === 0) {
       roomRes = await pool.query(
         `INSERT INTO public.chat_rooms (ini_id, o_id, created_at) 
-         VALUES ($1, $2, TIMEZONE('Asia/Manila', NOW())) RETURNING room_id`,
-        [parseInt(iniId), parseInt(officeId)]
+         VALUES ($1, $2, TIMEZONE('Asia/Manila', NOW())) RETURNING public_id`,
+        [document.ini_id, requestedOfficeId]
       );
     }
 
-    res.json({ roomId: roomRes.rows[0].room_id });
+    res.json({ roomId: roomRes.rows[0].public_id });
   } catch (err) {
     console.error("Error instantiating or resolving chat room nodes:", err);
     res.status(500).json({ error: 'Failed chat room assignment initialization query structural loops.' });
@@ -1235,15 +1282,19 @@ app.post('/api/chat/get-or-create-room', requireAuth, async (req, res) => {
 app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
   const { roomId } = req.params;
   try {
+    const room = await resolveChatRoom(roomId, req.user);
+    if (!room) return res.status(404).json({error:'Conversation not found.'});
     const messagesQuery = `
-      SELECT m.message_id, m.room_id, m.sender_id, m.message_text, m.sent_at, u.full_name as sender_name, a.account_type as role_name
+      SELECT m.public_id AS message_id, cr.public_id AS room_id, u.public_id AS sender_id,
+        m.message_text, m.sent_at, u.full_name as sender_name, a.account_type as role_name
       FROM public.chat_messages m
+      JOIN public.chat_rooms cr ON m.room_id=cr.room_id
       JOIN public."User" u ON m.sender_id = u.u_id
       JOIN public.account a ON u.a_id = a.a_id
       WHERE m.room_id = $1
       ORDER BY m.sent_at ASC;
     `;
-    const result = await pool.query(messagesQuery, [parseInt(roomId)]);
+    const result = await pool.query(messagesQuery, [room.room_id]);
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching historical stream messages loop:", err);
@@ -1259,11 +1310,15 @@ app.post('/api/chat/messages', requireAuth, async (req, res) => {
   const senderId = req.user.u_id;
 
   try {
+    const text = String(messageText || '').trim();
+    if (!text || text.length > 2000) return res.status(400).json({error:'Enter a message of up to 2,000 characters.'});
+    const room = await resolveChatRoom(roomId, req.user);
+    if (!room) return res.status(404).json({error:'Conversation not found.'});
     const result = await pool.query(
       `INSERT INTO public.chat_messages (room_id, sender_id, message_text, sent_at)
        VALUES ($1, $2, $3, TIMEZONE('Asia/Manila', NOW()))
-       RETURNING *`,
-      [parseInt(roomId), senderId, messageText.trim()]
+       RETURNING public_id,message_text,sent_at`,
+      [room.room_id, senderId, text]
     );
     
     const savedMessage = result.rows[0];
@@ -1278,7 +1333,11 @@ app.post('/api/chat/messages', requireAuth, async (req, res) => {
     );
 
     const fullMessage = {
-      ...savedMessage,
+      message_id: savedMessage.public_id,
+      room_id: room.public_id,
+      sender_id: req.user.public_id,
+      message_text: savedMessage.message_text,
+      sent_at: savedMessage.sent_at,
       sender_name: metaRes.rows[0]?.sender_name || 'User',
       role_name: metaRes.rows[0]?.role_name || 'Staff'
     };
@@ -1309,7 +1368,7 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
 
     if (roleId === 1) {
       query = `
-        SELECT idoc.ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
+        SELECT idoc.public_id AS ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
           false AS "isOfficeSubmission",
           EXISTS (
             SELECT 1 FROM public.chat_rooms cr
@@ -1329,7 +1388,7 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
 
       query = `
         SELECT DISTINCT ON (idoc.ini_id) 
-          idoc.ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
+          idoc.public_id AS ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
           (idoc.submission_office_id = $1) AS "isOfficeSubmission",
           EXISTS (
             SELECT 1 FROM public.chat_rooms cr
@@ -1608,7 +1667,7 @@ require('./resourceAdminRoutes')(app, pool, requireAuth);
 app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date,
+      SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date,
              b.purpose, CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status,
              b.department, b.created_at, b.updated_at, u.full_name AS requestor,
              COALESCE(gm.start_time, vr.pick_up_time)::text AS start_time,
@@ -1634,10 +1693,10 @@ app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/resources/bookings', async (req, res) => {
+app.get('/api/resources/bookings', requireAuth, async (req, res) => {
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
+      SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
              CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status, u.full_name,
              gm.start_time as gm_start, gm.end_time as gm_end,
              vr.pick_up_time as vr_start, vr.drop_off_time as vr_end, vr.destination,
@@ -1661,7 +1720,7 @@ app.get('/api/resources/bookings', async (req, res) => {
 // ==========================================
 app.post('/api/resources/book', requireAuth, async (req, res) => {
   const { 
-    userId, bookingType, assetName, reservationDate, purpose, department,
+    bookingType, assetName, reservationDate, purpose, department,
     startTime, endTime, expectedAttendees, intendedDates, facilityDetails,
     destination, officialPassengers, serviceTypeId, pickUpTime, dropOffTime,
     preparedByName, preparedByPosition, recommendingApprovalName, recommendingApprovalPosition
@@ -1789,9 +1848,10 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
 // 13. PROCUREMENT: FETCH ALL RESERVATIONS ENDPOINT
 // ==========================================
 app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
+      SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
              CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status,
              b.department,
              b.created_at, 
@@ -1839,10 +1899,11 @@ app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
 // 13.1 PROCUREMENT: FETCH LOGISTICS HISTORY ENDPOINT
 // ==========================================
 app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
     const query = `
       SELECT 
-        el.log_id,
+        el.public_id AS log_id,
         ad.asset_name, 
         el.requestor_name, 
         el.qty_borrowed, 
@@ -1866,13 +1927,17 @@ app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
 // 13.2 PROCUREMENT: GET & SYNC BOOKING CHECKLIST ENDPOINT
 // ==========================================
 app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   const { bookingId, type } = req.params;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1', [bookingId]);
+    if (!booking.rows.length) throw Object.assign(new Error('Request not found.'), {status:404});
+    const internalBookingId = booking.rows[0].booking_id;
     
     // 1. Check if this booking already has checklist items
-    const existingChecklist = await client.query('SELECT * FROM public.booking_checklists WHERE booking_id = $1', [bookingId]);
+    const existingChecklist = await client.query('SELECT public_id AS check_id,item_name,is_checked FROM public.booking_checklists WHERE booking_id = $1', [internalBookingId]);
     
     if (existingChecklist.rows.length === 0) {
       // 2. If empty, generate them from the global template
@@ -1881,19 +1946,19 @@ app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req,
         for (let t of templates.rows) {
           await client.query(
             'INSERT INTO public.booking_checklists (booking_id, item_name, is_checked) VALUES ($1, $2, false)',
-            [bookingId, t.item_name]
+            [internalBookingId, t.item_name]
           );
         }
       }
     }
     
     // 3. Return the checklist state
-    const currentChecklist = await client.query('SELECT * FROM public.booking_checklists WHERE booking_id = $1 ORDER BY check_id ASC', [bookingId]);
+    const currentChecklist = await client.query('SELECT public_id AS check_id,item_name,is_checked FROM public.booking_checklists WHERE booking_id = $1 ORDER BY check_id ASC', [internalBookingId]);
     await client.query('COMMIT');
     res.json(currentChecklist.rows);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: "Failed to fetch checklist." });
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to fetch checklist." });
   } finally {
     client.release();
   }
@@ -1911,22 +1976,25 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     await client.query('BEGIN');
     await lockSchedule(client);
     if (typeof isChecked !== 'boolean') throw new Error('Invalid checklist value.');
+    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1 FOR UPDATE', [bookingId]);
+    if (!booking.rows.length) throw new Error('Request not found.');
+    const internalBookingId = booking.rows[0].booking_id;
     
     // Update specific item
-    const updated = await client.query('UPDATE public.booking_checklists SET is_checked = $1 WHERE check_id = $2 AND booking_id = $3 RETURNING check_id', [isChecked, checkId, bookingId]);
+    const updated = await client.query('UPDATE public.booking_checklists SET is_checked = $1 WHERE public_id = $2 AND booking_id = $3 RETURNING check_id', [isChecked, checkId, internalBookingId]);
     if (!updated.rows.length) throw new Error('Checklist item does not belong to this request.');
     
     // Check if ALL items for this booking are now ticked off
-    const allItems = await client.query('SELECT is_checked FROM public.booking_checklists WHERE booking_id = $1', [bookingId]);
+    const allItems = await client.query('SELECT is_checked FROM public.booking_checklists WHERE booking_id = $1', [internalBookingId]);
     const allChecked = allItems.rows.every(item => item.is_checked === true);
     
     // Auto-update booking status if requirements are met
 // Auto-update booking status if requirements are met
   if (allChecked && allItems.rows.length > 0) {
-    await assertConfirmable(client, bookingId);
-    await client.query("UPDATE public.bookings SET status = 'Confirmed', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [bookingId]);
+    await assertConfirmable(client, internalBookingId);
+    await client.query("UPDATE public.bookings SET status = 'Confirmed', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [internalBookingId]);
   } else {
-    await client.query("UPDATE public.bookings SET status = 'Pending' WHERE booking_id = $1", [bookingId]);
+    await client.query("UPDATE public.bookings SET status = 'Pending' WHERE booking_id = $1", [internalBookingId]);
   }
 
     await client.query('COMMIT');
@@ -2006,7 +2074,7 @@ app.get('/api/admin/infrastructure-summary', async (req, res) => {
         COUNT(u.u_id)::int AS staff_count,
         COALESCE(
           json_agg(
-            json_build_object('user_id', u.u_id, 'full_name', u.full_name, 'username', u.username)
+            json_build_object('user_id', u.public_id, 'full_name', u.full_name, 'username', u.username)
             ORDER BY lower(u.full_name)
           ) FILTER (WHERE u.u_id IS NOT NULL),
           '[]'::json

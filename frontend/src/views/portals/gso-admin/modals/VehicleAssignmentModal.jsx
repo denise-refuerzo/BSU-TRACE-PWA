@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Car, User, Clock, AlertCircle } from 'lucide-react';
 import { resourceApi, confirmResourceAction, resourceSuccess, resourceError } from '../resourceActions';
+import { publicReference } from '../../../../utils/publicReference';
 
 export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
   // Read-only times defined by the requestor
@@ -107,7 +108,7 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
               <Car size={18} className="text-red-800" /> Assign Vehicle & Driver
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              Request #{request.booking_id} · {request.requestor || request.requestor_name}
+              {publicReference('REQ', request.booking_id)} · {request.requestor || request.requestor_name}
             </p>
           </div>
           <button 

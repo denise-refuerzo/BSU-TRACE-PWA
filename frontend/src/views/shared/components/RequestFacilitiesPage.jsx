@@ -124,7 +124,6 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
     }
 
     const payload = {
-      userId: parseInt(userId),
       bookingType: typeMapping[activeFacility],
       assetName: activeFacility,
       ...form,

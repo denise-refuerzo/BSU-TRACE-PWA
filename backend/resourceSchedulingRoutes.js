@@ -14,7 +14,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
   app.get('/api/resources/fleet', requireAuth, gso, handle(async(req,res)=>{
     const vehicles=await pool.query('SELECT * FROM public.fleet_vehicles ORDER BY vehicle_name');
     const drivers=await pool.query('SELECT * FROM public.resource_drivers ORDER BY full_name');
-    const requests=await pool.query(`SELECT b.booking_id,b.status,to_char(b.reservation_date,'YYYY-MM-DD') AS date,b.purpose,
+    const requests=await pool.query(`SELECT b.public_id AS booking_id,b.status,to_char(b.reservation_date,'YYYY-MM-DD') AS date,b.purpose,
       vr.pick_up_time::text AS start,vr.drop_off_time::text AS end,vr.assigned_vehicle_id,vr.assigned_driver_id,u.full_name
       FROM public.bookings b JOIN public.vehicle_requirements vr USING (booking_id) JOIN public."User" u ON u.u_id=b.u_id
       WHERE b.reservation_date >= CURRENT_DATE ORDER BY b.reservation_date,vr.pick_up_time`);
@@ -49,17 +49,17 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
   app.get('/api/resources/assignments/:id/options',requireAuth,gso,handle(async(req,res)=>{
-    const result=await pool.query(`SELECT to_char(b.reservation_date,'YYYY-MM-DD') AS date,vr.pick_up_time::text AS start,vr.drop_off_time::text AS end
-      FROM public.bookings b JOIN public.vehicle_requirements vr USING(booking_id) WHERE b.booking_id=$1`,[req.params.id]);
+    const result=await pool.query(`SELECT b.booking_id,to_char(b.reservation_date,'YYYY-MM-DD') AS date,vr.pick_up_time::text AS start,vr.drop_off_time::text AS end
+      FROM public.bookings b JOIN public.vehicle_requirements vr USING(booking_id) WHERE b.public_id=$1`,[req.params.id]);
     if(!result.rows.length) throw new Error('Vehicle request not found.');
-    res.json(await availability(pool,{...result.rows[0],...(req.query.start && req.query.end ? {start:req.query.start,end:req.query.end} : {}),type:'Vehicle',exclude:req.params.id,allowLegacy:true}));
+    res.json(await availability(pool,{...result.rows[0],...(req.query.start && req.query.end ? {start:req.query.start,end:req.query.end} : {}),type:'Vehicle',exclude:result.rows[0].booking_id,allowLegacy:true}));
   }));
   app.put('/api/resources/assignments/:id', requireAuth, gso, handle(async (req, res) => {
-    const bookingId = Number(req.params.id);
+    const bookingPublicId = String(req.params.id || '');
     const vehicleId = Number(req.body.vehicleId);
     const driverId = Number(req.body.driverId);
 
-    if (!bookingId || !vehicleId || !driverId) {
+    if (!bookingPublicId || !vehicleId || !driverId) {
       throw new Error('Valid vehicle and driver selections are required.');
     }
 
@@ -74,17 +74,18 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       await lockSchedule(client);
 
       const result = await client.query(
-        `SELECT b.status,
+        `SELECT b.booking_id,b.status,
                 to_char(b.reservation_date,'YYYY-MM-DD') AS date,
                 vr.pick_up_time::text AS start,
                 vr.drop_off_time::text AS end
          FROM public.bookings b 
          JOIN public.vehicle_requirements vr USING (booking_id) 
-         WHERE b.booking_id = $1 FOR UPDATE OF b`,
-        [bookingId]
+         WHERE b.public_id = $1 FOR UPDATE OF b`,
+        [bookingPublicId]
       );
 
       if (!result.rows.length) throw new Error('Vehicle request not found.');
+      const bookingId = result.rows[0].booking_id;
 
       // Enforce confirmation requirement before assignment
       if (result.rows[0].status !== 'Confirmed') {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { publicReference } from '../../../../utils/publicReference';
 
 export default function ManageAccountModal({ 
   selectedUser, setSelectedUser, handleUpdateAccount, offices 
@@ -12,7 +13,7 @@ export default function ManageAccountModal({
         <div className="flex justify-between items-center border-b border-neutral-100 pb-3 mb-4">
           <div>
             <h3 className="text-base font-black text-neutral-900">Manage Operational Profile</h3>
-            <p className="text-[11px] text-gray-400">System Parameter Re-indexing Node (u_id: {selectedUser.u_id})</p>
+            <p className="text-[11px] text-gray-400">Account reference: {publicReference('USR', selectedUser.u_id)}</p>
           </div>
           <button type="button" onClick={() => setSelectedUser(null)} className="text-gray-400 hover:text-neutral-800 text-lg p-1 cursor-pointer">✕</button>
         </div>

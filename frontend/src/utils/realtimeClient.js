@@ -7,7 +7,10 @@ export function createRealtimeClient(url, options = {}) {
   const key = `${url}:${localStorage.getItem('userId') || ''}`;
   let connection = connections.get(key);
   if (!connection) {
-    connection = { socket: io(url, options), users: 0 };
+    connection = { socket: io(url, {
+      ...options,
+      auth: {...options.auth, token: localStorage.getItem('token') || undefined}
+    }), users: 0 };
     connections.set(key, connection);
   }
   connection.users += 1;

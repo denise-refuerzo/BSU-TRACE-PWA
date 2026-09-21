@@ -2,10 +2,11 @@ import Swal from 'sweetalert2';
 import axios from 'axios';
 
 // Replace line 4 in api.js:
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 const API = axios.create({
   baseURL: API_BASE_URL,
 });
+let logoutPromptActive = false;
 
 export default API;
 
@@ -35,19 +36,24 @@ export const fetchWithAuth = async (url, options = {}) => {
 
     // 🚨 THE KICK-OUT INTERCEPTOR: Checks if another device logged in
     if (response.status === 401 && data.forceLogout) {
-      Swal.fire({
-        title: '⚠️ Session Expired',
-        text: 'You have been logged out because your account was accessed from another device or location.',
-        icon: 'warning',
-        confirmButtonColor: '#800000',
-        allowOutsideClick: false
-      }).then(() => {
-        localStorage.clear(); // Wipe saved credentials
-        window.location.href = '/login'; // Boot them back to the login screen
-      });
+      if (!logoutPromptActive) {
+        logoutPromptActive = true;
+        // Remove the unusable credentials immediately. Waiting for the user to
+        // dismiss the dialog would let mounted views keep retrying the same token.
+        localStorage.clear();
+        Swal.fire({
+          title: 'Session Expired',
+          text: data.error || 'Your session is no longer valid. Please sign in again.',
+          icon: 'warning',
+          confirmButtonColor: '#800000',
+          allowOutsideClick: false
+        }).then(() => {
+          window.location.href = '/login'; // Boot them back to the login screen
+        });
+      }
       throw new Error('Session terminated by concurrent login.');
     }
-  } catch (err) {
+  } catch {
     // Fails silently if the response body is empty or not JSON
   }
 
