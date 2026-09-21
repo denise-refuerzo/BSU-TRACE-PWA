@@ -59,6 +59,12 @@ const broadcastIctConfiguration = req => {
   socketServer?.to('ict_admin_room').emit('admin-configuration-updated');
 };
 
+const broadcastResourceUpdate = req => {
+  const socketServer = req.app.get('io');
+  socketServer?.to('resource_updates_room').emit('resource-schedule-updated');
+  socketServer?.to('gso_admin_room').emit('system-metrics-updated');
+};
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
@@ -83,6 +89,11 @@ io.on('connection', (socket) => {
     if (userId) {
       socket.join(`user_${userId}`);
     }
+  });
+
+  // Resource calendars, current equipment counts, and request status updates.
+  socket.on('join-resource-room', () => {
+    socket.join('resource_updates_room');
   });
 
   // 3. Document Chat Room
@@ -1373,7 +1384,7 @@ app.post('/api/resources/inventory/lend', requireAuth, async (req, res) => {
       INSERT INTO public.equipment_ledgers (asd_id, requestor_name, department, purpose, qty_borrowed, expected_return, status, processed_by)
       VALUES ($1, $2, $3, $4, $5, TIMEZONE('Asia/Manila', NOW()) + interval '1 hour' * $6, 'Borrowed', $7)
     `, [asd_id, requestorName, department, purpose, quantityNeeded, parseInt(duration) || 24, req.user.u_id]);
-    
+    broadcastResourceUpdate(req);
     res.json({ message: "Equipment successfully logged as borrowed." });
   } catch (err) {
     console.error(err);
@@ -1407,7 +1418,7 @@ app.post('/api/resources/inventory/return', requireAuth, async (req, res) => {
           condition_on_return = $3, damage_notes = $4
       WHERE log_id = $2
     `, [req.user.u_id, activeLog.rows[0].log_id, condition, notes]);
-
+    broadcastResourceUpdate(req);
     res.json({ message: "Equipment return successfully logged. Stock replenished." });
   } catch (err) {
     console.error(err);
@@ -1528,6 +1539,7 @@ app.post('/api/resources/assets', requireAuth, async (req, res) => {
       `INSERT INTO public.asset_details (ast_id, asset_name, quantity) VALUES ($1, $2, $3)`,
       [parseInt(assetTypeId), assetName.trim(), parseInt(quantity) || 1]
     );
+    broadcastResourceUpdate(req);
     res.status(201).json({ message: 'Institutional Asset successfully registered!' });
   } catch (err) {
     console.error("Error adding asset:", err);
@@ -1578,10 +1590,40 @@ app.post('/api/resources/blackouts', requireAuth, async (req, res) => {
 require('./resourceSchedulingRoutes')(app, pool, requireAuth);
 require('./resourceAdminRoutes')(app, pool, requireAuth);
 
+app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date,
+             b.purpose, CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status,
+             b.department, b.created_at, b.updated_at, u.full_name AS requestor,
+             COALESCE(gm.start_time, vr.pick_up_time)::text AS start_time,
+             COALESCE(gm.end_time, vr.drop_off_time)::text AS end_time,
+             ad.asset_name, vr.destination, vr.passenger_count, vr.official_passengers,
+             vr.vehicle_to_be_used, vr.designated_driver, vr.plate_number, vr.license_number,
+             vr.prepared_by_name, vr.prepared_by_position,
+             vr.recommending_approval_name, vr.recommending_approval_position,
+             st.service_type AS trip_type, gm.expected_attendees, gm.request_details
+      FROM public.bookings b
+      JOIN public."User" u ON b.u_id = u.u_id
+      LEFT JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id
+      LEFT JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id
+      LEFT JOIN public.service_type st ON vr.sv_id = st.sv_id
+      LEFT JOIN public.asset_details ad ON (gm.asd_id = ad.asd_id OR vr.asd_id = ad.asd_id)
+      WHERE b.u_id = $1
+      ORDER BY b.created_at DESC, b.booking_id DESC
+    `, [req.user.u_id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error loading personal facility requests:', err);
+    res.status(500).json({ error: 'Failed to load submitted facility requests.' });
+  }
+});
+
 app.get('/api/resources/bookings', async (req, res) => {
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose, b.status, u.full_name,
+      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
+             CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status, u.full_name,
              gm.start_time as gm_start, gm.end_time as gm_end,
              vr.pick_up_time as vr_start, vr.drop_off_time as vr_end, vr.destination,
              ad.asset_name
@@ -1691,7 +1733,7 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
     // Insert the booking
     const bookingRes = await client.query(
       `INSERT INTO public.bookings (u_id, booking_type, department, reservation_date, purpose, status)
-       VALUES ($1, $2, $3, $4, $5, 'Reserved') RETURNING booking_id`,
+       VALUES ($1, $2, $3, $4, $5, 'Pending') RETURNING booking_id`,
       [req.user.u_id, bookingType, department, requestedDate, isFacility ? details.purposes.map(value => value === 'Others' ? details.purposesOther : value).join(', ') : purpose]
     );
     const bookingId = bookingRes.rows[0].booking_id;
@@ -1718,6 +1760,7 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
     }
 
     await client.query('COMMIT');
+    broadcastResourceUpdate(req);
     res.status(201).json({ message: "Request submitted. Confirmation requires the necessary documents to be submitted in person at the GSO office and review by the responsible officers." });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1733,7 +1776,8 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
 app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose, b.status,
+      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
+             CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status,
              b.department,
              b.created_at, 
              CASE 
@@ -1867,10 +1911,11 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     await assertConfirmable(client, bookingId);
     await client.query("UPDATE public.bookings SET status = 'Confirmed', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [bookingId]);
   } else {
-    await client.query("UPDATE public.bookings SET status = 'Reserved' WHERE booking_id = $1", [bookingId]);
+    await client.query("UPDATE public.bookings SET status = 'Pending' WHERE booking_id = $1", [bookingId]);
   }
 
     await client.query('COMMIT');
+    broadcastResourceUpdate(req);
     res.json({ message: "Checklist updated", allChecked });
   } catch (err) {
     await client.query('ROLLBACK');

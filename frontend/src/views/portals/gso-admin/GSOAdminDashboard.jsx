@@ -350,7 +350,7 @@ export default function GSOAdminDashboard() {
           item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
         ));
         const result = await res.json();
-        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Reserved'}));
+        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Pending'}));
         fetchProcurementData();
         await resourceSuccess(result.allChecked ? 'Request confirmed.' : 'Requirement updated. Request is pending.');
       } else {

@@ -150,7 +150,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
 
           <select aria-label="Filter status" className={control} value={status} onChange={e => setStatus(e.target.value)}>
             <option value="All">All Requests & Blocks</option>
-            <option value="Reserved">Pending</option>
+            <option value="Pending">Pending</option>
             <option value="Confirmed">Confirmed</option>
             <option value="Blocked">Blocked</option>
           </select>

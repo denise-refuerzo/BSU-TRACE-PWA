@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X, School, Smartphone } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
 import { fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -45,6 +45,8 @@ export default function ProcessorDashboard() {
   // --- CORE UI STATE ---
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [documentsExpanded, setDocumentsExpanded] = useState(false);
+  const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   
   // --- MODAL & ACTION STATE ---
@@ -75,6 +77,16 @@ export default function ProcessorDashboard() {
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false);
+  };
+
+  const openDocumentsMenu = () => {
+    setDocumentsExpanded(current => activeTab === 'documents' || activeTab === 'submissions' ? !current : true);
+    if (activeTab !== 'documents' && activeTab !== 'submissions') setActiveTab('documents');
+  };
+
+  const openFacilitiesMenu = () => {
+    setFacilitiesExpanded(current => activeTab.startsWith('resource-') ? !current : true);
+    if (!activeTab.startsWith('resource-')) setActiveTab('resource-gym');
   };
 
   const handleLogout = () => {
@@ -323,13 +335,38 @@ export default function ProcessorDashboard() {
             <button onClick={() => { handleTabSelect('dashboard'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'dashboard' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <LayoutDashboard size={18} /> Dashboard
             </button>
-            <button onClick={() => { handleTabSelect('documents'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setPipelinePage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'documents' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-              <FileText size={18} /> Documents
-            </button>
-            <button onClick={() => handleTabSelect('submissions')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold ${activeTab === 'submissions' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><FileText size={18}/> Office Submissions</button>
-            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'resources' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-              <School size={18} /> School Resources
-            </button>
+            <div>
+              <button onClick={openDocumentsMenu} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'documents' || activeTab === 'submissions' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+                <span className="flex items-center gap-3"><FileText size={18} /> Documents</span>
+                <ChevronDown size={15} className={`transition-transform ${documentsExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              {documentsExpanded && (
+                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                  <button onClick={() => { handleTabSelect('documents'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setPipelinePage(1); }} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'documents' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Active Documents</button>
+                  <button onClick={() => handleTabSelect('submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Office Submissions</button>
+                </div>
+              )}
+            </div>
+            <div>
+              <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+                <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
+                <ChevronDown size={15} className={`transition-transform ${facilitiesExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              {facilitiesExpanded && (
+                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                  {[
+                    { id: 'resource-gym', label: 'Gymnasium', icon: School },
+                    { id: 'resource-room', label: 'Rooms', icon: MonitorPlay },
+                    { id: 'resource-vehicle', label: 'Vehicles', icon: Truck },
+                    { id: 'resource-requests', label: 'Submitted Requests', icon: ClipboardList }
+                  ].map(item => (
+                    <button key={item.id} onClick={() => handleTabSelect(item.id)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === item.id ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+                      <item.icon size={14} /> {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <History size={18} /> History
             </button>
@@ -383,7 +420,7 @@ export default function ProcessorDashboard() {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resources' ? 'School Resources' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Office Processing System' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
+                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
               </h2>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
             </div>
@@ -426,7 +463,10 @@ export default function ProcessorDashboard() {
             />
           )}
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} onProcessed={processorData.fetchProcessorMeta} />}
-          {activeTab === 'resources' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} />}
+          {activeTab === 'resource-gym' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} facility="Gymnasium" />}
+          {activeTab === 'resource-room' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} facility="Multimedia Room" />}
+          {activeTab === 'resource-vehicle' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} facility="Van" />}
+          {activeTab === 'resource-requests' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
           {activeTab === 'history' && (
             <ProcessorHistoryTab 
               {...processorData} 
