@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, LogOut, MessageSquare, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
 import { fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -16,12 +16,12 @@ import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
 import ScannerModal from "./modals/ScannerModal";
 import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
-import OriginatorResourcesTab from '../originator/components/OriginatorResourcesTab';
+import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
 
 // --- SHARED COMPONENTS ---
 import UserProfileTab from "../../shared/components/UserProfileTab";
 import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
-import OfficeChatHub from "../../shared/OfficeChatHub";
+import FloatingChat from '../../shared/components/FloatingChat';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
@@ -47,6 +47,8 @@ export default function ProcessorDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   
   // --- MODAL & ACTION STATE ---
@@ -370,14 +372,6 @@ export default function ProcessorDashboard() {
             <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <History size={18} /> History
             </button>
-            <button onClick={() => { handleTabSelect('messages'); processorData.setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'messages' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-              <div className="flex items-center gap-3">
-                <MessageSquare size={18} /> Chat Inbox
-              </div>
-              {processorData.hasUnreadChats && (
-                <span className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></span>
-              )}
-            </button>
           </nav>
         </div>
 
@@ -463,18 +457,15 @@ export default function ProcessorDashboard() {
             />
           )}
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} onProcessed={processorData.fetchProcessorMeta} />}
-          {activeTab === 'resource-gym' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} facility="Gymnasium" />}
-          {activeTab === 'resource-room' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} facility="Multimedia Room" />}
-          {activeTab === 'resource-vehicle' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} facility="Van" />}
-          {activeTab === 'resource-requests' && <OriginatorResourcesTab userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
+          {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Gymnasium" />}
+          {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Multimedia Room" />}
+          {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Van" />}
+          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
           {activeTab === 'history' && (
             <ProcessorHistoryTab 
               {...processorData} 
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
-          )}
-          {activeTab === 'messages' && (
-            <OfficeChatHub userId={userId} roleId={2} officeId={processorData.processorOfficeId} />
           )}
           {activeTab === 'profile' && (
             <UserProfileTab 
@@ -488,6 +479,19 @@ export default function ProcessorDashboard() {
           )}
         </div>
       </div>
+
+      <FloatingChat
+        isOpen={isChatOpen}
+        onOpenChange={setIsChatOpen}
+        hasUnread={processorData.hasUnreadChats}
+        onUnreadCleared={() => processorData.setHasUnreadChats(false)}
+        userId={userId}
+        roleId={2}
+        officeId={processorData.processorOfficeId}
+        targetDoc={chatTargetDoc}
+        onClearTargetDoc={() => setChatTargetDoc(null)}
+        label="Chat Inbox"
+      />
 
       {/* MODALS RENDERING */}
       {showScannerModal && (
@@ -514,6 +518,7 @@ export default function ProcessorDashboard() {
           processorOfficeId={processorData.processorOfficeId}
           onClose={() => setShowPipelineModal(false)}
           onRefresh={processorData.fetchProcessorMeta}
+          onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }}
         />
       )}
  

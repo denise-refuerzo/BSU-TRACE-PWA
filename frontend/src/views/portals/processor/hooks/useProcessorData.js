@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { fetchWithAuth } from '../../../../api';
-import { io } from 'socket.io-client';
+import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 
-const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 export function useProcessorData(userId) {
   // --- USER & OFFICE STATE ---
@@ -173,6 +173,7 @@ export function useProcessorData(userId) {
 
     socketRef.current.on('connect', () => {
       socketRef.current.emit('join-office-room', processorOfficeId);
+      checkChatBadgeStatus();
     });
 
     const refreshOfficeFeed = () => {

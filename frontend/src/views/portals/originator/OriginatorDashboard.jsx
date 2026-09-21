@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, FileText, School, User, MessageSquare, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, School, User, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
 
 // Custom Hook
 import useOriginatorData from './hooks/useOriginatorData';
@@ -7,11 +7,11 @@ import useOriginatorData from './hooks/useOriginatorData';
 // Tab Components
 import OriginatorOverviewTab from './components/OriginatorOverviewTab';
 import OriginatorDocumentsTab from './components/OriginatorDocumentsTab';
-import OriginatorResourcesTab from './components/OriginatorResourcesTab';
+import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
 
 // Shared Components
 import UserProfileTab from '../../shared/components/UserProfileTab';
-import OfficeChatHub from '../../shared/OfficeChatHub';
+import FloatingChat from '../../shared/components/FloatingChat';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
@@ -25,6 +25,7 @@ export default function OriginatorDashboard() {
   const [targetChatDoc, setTargetChatDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   
   const {
     userId, userName, navigate,
@@ -69,7 +70,7 @@ export default function OriginatorDashboard() {
 
   const handleOpenChatWithDoc = (doc) => {
     setTargetChatDoc(doc);
-    setActiveTab('messages');
+    setIsChatOpen(true);
     setHasUnreadChats(false);
   };
 
@@ -136,14 +137,6 @@ export default function OriginatorDashboard() {
                 </div>
               )}
             </div>
-            <button onClick={() => { handleTabSelect('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'messages' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-              <div className="flex items-center gap-3">
-                <MessageSquare size={18} /> Chat with Offices
-              </div>
-              {hasUnreadChats && (
-                <span className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></span>
-              )}
-            </button>
           </nav>
         </div>
 
@@ -168,7 +161,7 @@ export default function OriginatorDashboard() {
               <Menu size={22} />
             </button>
             <h2 className="text-base md:text-lg font-bold text-neutral-800 truncate">
-              {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Documents' : activeTab === 'messages' ? 'Chat with Offices' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
+              {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Documents' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
             </h2>
           </div>
 
@@ -228,21 +221,24 @@ export default function OriginatorDashboard() {
             />
           )}
 
-          {activeTab === 'messages' && (
-            <OfficeChatHub 
-              userId={userId} 
-              roleId={1} 
-              targetDoc={targetChatDoc}
-              onClearTargetDoc={() => setTargetChatDoc(null)}
-            />
-          )}
-
-          {activeTab === 'resource-gym' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} facility="Gymnasium" />}
-          {activeTab === 'resource-room' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} facility="Multimedia Room" />}
-          {activeTab === 'resource-vehicle' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} facility="Van" />}
-          {activeTab === 'resource-requests' && <OriginatorResourcesTab userId={userId} officeName={profile.departmentName} view="requests" />}
+          {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Gymnasium" />}
+          {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Multimedia Room" />}
+          {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Van" />}
+          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} view="requests" />}
         </div>
       </div>
+
+      <FloatingChat
+        isOpen={isChatOpen}
+        onOpenChange={setIsChatOpen}
+        hasUnread={hasUnreadChats}
+        onUnreadCleared={() => setHasUnreadChats(false)}
+        userId={userId}
+        roleId={1}
+        targetDoc={targetChatDoc}
+        onClearTargetDoc={() => setTargetChatDoc(null)}
+        label="Chat with Offices"
+      />
 
       {/* MODALS */}
       <ChangePasswordModal 

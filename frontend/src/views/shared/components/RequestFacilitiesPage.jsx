@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Lock, Calendar, MapPin, Box, Search, Eye, ClipboardList, Truck, MonitorPlay, Users } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { fetchWithAuth } from "../../../../api";
+import { fetchWithAuth } from "../../../api";
 import Swal from 'sweetalert2';
-import {blockOnDay,blockMatchesResource} from '../../../../utils/resourceSchedule';
-import ResourceDayModal from '../modals/ResourceDayModal';
-import ResourceBookingModal from '../modals/ResourceBookingModal';
-import SubmittedRequestDetailsModal from './SubmittedRequestDetailsModal';
+import {blockOnDay,blockMatchesResource} from '../../../utils/resourceSchedule';
+import ResourceDayModal from './request-facilities/ResourceDayModal';
+import ResourceBookingModal from './request-facilities/ResourceBookingModal';
+import SubmittedRequestDetailsModal from './request-facilities/SubmittedRequestDetailsModal';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
-export default function OriginatorResourcesTab({ userId, officeName = '', facility = null, view = 'calendar' }) {
+export default function RequestFacilitiesPage({ userId, officeName = '', facility = null, view = 'calendar' }) {
   const userName = localStorage.getItem('user') || 'Faculty User';
   
   const [selectedFacility, setSelectedFacility] = useState('Gymnasium');
