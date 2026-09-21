@@ -1089,6 +1089,18 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
 app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
   const { iniId } = req.params;
   try {
+    const contextResult = await pool.query(
+      `SELECT idoc.submission_office_id, u.o_id AS user_office_id
+       FROM public.initial_document idoc
+       JOIN public."User" u ON u.u_id = $2
+       WHERE idoc.ini_id = $1`,
+      [parseInt(iniId), req.user.u_id]
+    );
+    const context = contextResult.rows[0];
+    const isOfficeSubmission = Boolean(
+      context?.submission_office_id && Number(context.submission_office_id) === Number(context.user_office_id)
+    );
+
     const docStepsQuery = `
       SELECT pd_id, s_id, current_office_id, next_office_id, time_in, time_out, is_adhoc, adhoc_return_office_id 
       FROM public.processed_document 
@@ -1178,7 +1190,8 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
         officeName: officeNameRes.rows[0]?.office_name || `Office Station #${oId}`,
         isLocked: officeChannels[oId].isLocked,
         statusMessage: officeChannels[oId].statusMessage,
-        hasChat: hasChat
+        hasChat: hasChat,
+        isOfficeSubmission
       });
     }
 
@@ -1296,7 +1309,8 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
 
     if (roleId === 1) {
       query = `
-        SELECT idoc.ini_id, idoc.title, idoc.created_at,
+        SELECT idoc.ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
+          false AS "isOfficeSubmission",
           EXISTS (
             SELECT 1 FROM public.chat_rooms cr
             JOIN public.chat_messages cm ON cr.room_id = cm.room_id
@@ -1315,7 +1329,8 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
 
       query = `
         SELECT DISTINCT ON (idoc.ini_id) 
-          idoc.ini_id, idoc.title, idoc.created_at,
+          idoc.ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
+          (idoc.submission_office_id = $1) AS "isOfficeSubmission",
           EXISTS (
             SELECT 1 FROM public.chat_rooms cr
             JOIN public.chat_messages cm ON cr.room_id = cm.room_id
