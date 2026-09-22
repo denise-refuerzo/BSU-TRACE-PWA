@@ -2,22 +2,62 @@ import pandas as pd
 from database import get_db_connection
 
 def calculate_document_routing_efficiency():
+    """Summarize true end-to-end turnaround for each document process.
+
+    A processed_document row is one office stop, so averaging those rows only
+    reports stop dwell time.  Aggregate each document first to keep this metric
+    distinct from the office bottleneck calculation.
+    """
     query = """
-        SELECT 
-            pt.process_name AS route_name,
-            AVG(EXTRACT(EPOCH FROM (pd.time_out - pd.time_in))) AS avg_processing_seconds
-        FROM public.processed_document pd
-        JOIN public.initial_document id ON pd.ini_id = id.ini_id
-        JOIN public.process_type pt ON id.p_id = pt.p_id
-        WHERE pd.time_in IS NOT NULL AND pd.time_out IS NOT NULL
-        GROUP BY pt.process_name;
+        WITH completed_documents AS (
+            SELECT
+                pt.process_name AS route_name,
+                pd.ini_id,
+                COUNT(*) AS stop_count,
+                EXTRACT(EPOCH FROM (MAX(pd.time_out) - MIN(pd.time_in))) / 3600.0
+                    AS completion_hours,
+                SUM(
+                    COALESCE(
+                        pd.duration_minutes,
+                        EXTRACT(EPOCH FROM (pd.time_out - pd.time_in)) / 60.0
+                    )
+                ) / 60.0 AS active_processing_hours
+            FROM public.processed_document pd
+            JOIN public.initial_document idoc ON pd.ini_id = idoc.ini_id
+            JOIN public.process_type pt ON idoc.p_id = pt.p_id
+            WHERE pd.time_in IS NOT NULL AND pd.time_out IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.processed_document open_stop
+                  WHERE open_stop.ini_id = pd.ini_id
+                    AND open_stop.time_out IS NULL
+              )
+            GROUP BY pt.process_name, pd.ini_id
+        )
+        SELECT
+            route_name,
+            COUNT(*) AS total_documents,
+            AVG(stop_count) AS avg_stops,
+            AVG(completion_hours) AS avg_completion_hours,
+            AVG(active_processing_hours) AS avg_active_processing_hours
+        FROM completed_documents
+        GROUP BY route_name
+        ORDER BY avg_completion_hours DESC;
     """
     with get_db_connection() as conn:
         df = pd.read_sql_query(query, conn)
     if df.empty:
         return []
-    df['avg_completion_hours'] = (df['avg_processing_seconds'] / 3600).round(2)
-    return df[['route_name', 'avg_completion_hours']].to_dict(orient='records')
+    numeric_columns = [
+        'total_documents', 'avg_stops', 'avg_completion_hours',
+        'avg_active_processing_hours'
+    ]
+    for column in numeric_columns:
+        df[column] = pd.to_numeric(df[column], errors='coerce').fillna(0)
+    df['total_documents'] = df['total_documents'].astype(int)
+    for column in ['avg_stops', 'avg_completion_hours', 'avg_active_processing_hours']:
+        df[column] = df[column].round(2)
+    return df.to_dict(orient='records')
 
 
 def calculate_vehicle_scheduling_performance():

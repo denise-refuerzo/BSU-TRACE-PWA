@@ -41,12 +41,16 @@ export function useGSOAdminData() {
   // --- 5. Procurement States ---
   const [reservationsList, setReservationsList] = useState([]);
   const [logisticsList, setLogisticsList] = useState([]);
+  const [resourceRevision, setResourceRevision] = useState(0);
 
   // --- 6. Analytics States ---
   const [bottleneckData, setBottleneckData] = useState([]);
   const [peakDemandData, setPeakDemandData] = useState([]);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   const [routePerf, setRoutePerf] = useState({ document_routes: [], vehicle_scheduling: [] });
+  const [administrativeInsights, setAdministrativeInsights] = useState({
+    peak_traffic: [], frequent_documents: [], utilized_assets: []
+  });
   const [systemHealth, setSystemHealth] = useState({
     database_connection: 'CHECKING',
     data_quality_audit: { status: 'PASS', integrity_score_percentage: 100, audit_details: {} }
@@ -159,8 +163,8 @@ export function useGSOAdminData() {
         const rawPeakData = await resPeak.json();
         const formattedPeakData = rawPeakData.map(item => ({
           ...item,
-          vehicle_demand: Number(item.vehicle_demand || 0), 
-          facility_demand: Number(item.facility_demand || 0)
+          vehicle_demand: item.vehicle_demand == null ? null : Number(item.vehicle_demand),
+          facility_demand: item.facility_demand == null ? null : Number(item.facility_demand)
         }));
         setPeakDemandData(formattedPeakData);
       }
@@ -195,10 +199,14 @@ export function useGSOAdminData() {
 
   const fetchSystemAnalyticsData = async () => {
     try {
-      const routeRes = await fetchWithAuth('/api/analytics/route-performance');
+      const [routeRes, healthRes, insightsRes] = await Promise.all([
+        fetchWithAuth('/api/analytics/route-performance'),
+        fetchWithAuth('/api/analytics/system-health'),
+        fetchWithAuth('/api/analytics/administrative-insights')
+      ]);
       if (routeRes.ok) setRoutePerf(await routeRes.json());
-      const healthRes = await fetchWithAuth('/api/analytics/system-health');
       if (healthRes.ok) setSystemHealth(await healthRes.json());
+      if (insightsRes.ok) setAdministrativeInsights(await insightsRes.json());
     } catch (err) { console.error("Error connecting to analytics engine:", err); }
   };
 
@@ -234,6 +242,8 @@ export function useGSOAdminData() {
       socketRef.current.emit('join-office-room', gsoOfficeId);
       // 3. Join user room for personal alerts
       socketRef.current.emit('join-user-room', userId);
+      // Resource assignments, availability, and booking status changes.
+      socketRef.current.emit('join-resource-room');
       checkChatBadgeStatus();
     });
 
@@ -268,6 +278,14 @@ export function useGSOAdminData() {
       fetchSystemAnalyticsData();
     });
 
+    socketRef.current.on('resource-schedule-updated', () => {
+      fetchProcurementData();
+      fetchInventoryMetrics();
+      fetchMasterAssets();
+      fetchBlackouts();
+      setResourceRevision(value => value + 1);
+    });
+
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
@@ -279,8 +297,8 @@ export function useGSOAdminData() {
     notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
     pipelineDocs, actionHistory, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
-    reservationsList, logisticsList,
-    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth,
+    reservationsList, logisticsList, resourceRevision,
+    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   };
 }

@@ -3,6 +3,7 @@ import {
   X, FileText, Calendar, Clock, MapPin, Users, Building, 
   Car, UserCheck
 } from 'lucide-react';
+import { publicReference } from '../../../../utils/publicReference';
 
 export default function BookingRequirementsModal({
   showActiveChecklistModal,
@@ -36,7 +37,7 @@ export default function BookingRequirementsModal({
             </div>
             <div>
               <h3 className="font-bold text-neutral-900 text-sm">Request Review & Checklist</h3>
-              <p className="text-[11px] text-gray-500">Request #{b.booking_id} · {b.requestor}</p>
+              <p className="text-[11px] text-gray-500">{publicReference('REQ', b.booking_id)} · {b.requestor}</p>
             </div>
           </div>
           <button 
@@ -61,7 +62,7 @@ export default function BookingRequirementsModal({
 
               <div>
                 <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border shadow-2xs ${
-                  b.status === 'Confirmed' 
+                  ['Confirmed','Approved'].includes(b.status)
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                     : 'bg-amber-50 text-amber-700 border-amber-200'
                 }`}>

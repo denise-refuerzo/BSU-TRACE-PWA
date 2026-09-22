@@ -24,7 +24,7 @@ export default function ProcessorPipelineTab({
   // Deep link handler: triggers verification modal and smooth scrolls
   useEffect(() => {
     if (targetDocId && pipelineDocs && pipelineDocs.length > 0) {
-      const matched = pipelineDocs.find(d => d.ini_id === parseInt(targetDocId));
+      const matched = pipelineDocs.find(d => String(d.ini_id) === String(targetDocId));
       if (matched) {
         handleOpenPipelineDetails(matched, false);
         if (tableRef.current) {

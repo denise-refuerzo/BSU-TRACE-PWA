@@ -172,7 +172,7 @@ export default function ProcessorDashboard() {
       const res = await fetchWithAuth(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qrCode: targetQr, processorUserId: parseInt(userId) })
+        body: JSON.stringify({ qrCode: targetQr })
       });
       const data = await res.json();
       

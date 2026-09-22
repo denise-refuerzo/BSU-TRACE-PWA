@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { resourceApi } from '../resourceActions';
+import { useCallback, useEffect, useState } from 'react';
+import { resourceApi, resourceError, resourceSuccess } from '../resourceActions';
 import { fetchWithAuth } from '../../../../api';
 import ResourceRegistry from './ResourceRegistry';
 import ResourceAdminCalendar from './ResourceAdminCalendar';
 import { 
-  Building2, Calendar, Landmark, Car, Users, Package, Boxes, ArrowRightLeft
+  Building2, Calendar, Landmark, Car, Users, Package, Boxes, ArrowRightLeft, Plus, X
 } from 'lucide-react';
 
 export default function ResourceManagementTab({ onOpenRequest, onSelectInventoryItem }) {
@@ -18,6 +18,28 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
   const [error, setError] = useState('');
   
   const [activeSection, setActiveSection] = useState('schedule');
+  const [equipmentForm, setEquipmentForm] = useState(null);
+  const [equipmentBusy, setEquipmentBusy] = useState(false);
+
+  const addEquipment = async event => {
+    event.preventDefault();
+    if (equipmentBusy) return;
+    setEquipmentBusy(true);
+    try {
+      const result = await resourceApi('assets', 'POST', {
+        assetName: equipmentForm.name,
+        assetTypeId: 3,
+        quantity: Number(equipmentForm.quantity)
+      });
+      setEquipmentForm(null);
+      await refresh();
+      await resourceSuccess(result.message || 'Equipment added successfully.');
+    } catch (error) {
+      await resourceError(error);
+    } finally {
+      setEquipmentBusy(false);
+    }
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -57,7 +79,7 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
           <Building2 size={24} />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">School Resources</h2>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Resource Inventory</h2>
           <p className="text-sm text-gray-500 mt-1">Manage campus facilities, vehicles, drivers, and inventory availability.</p>
         </div>
       </header>
@@ -109,6 +131,12 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
 
           {activeSection === 'supplies' && (
             <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                <div><p className="text-sm font-bold text-gray-900">Equipment inventory</p><p className="mt-0.5 text-xs text-gray-500">Register equipment and manage its lending stock.</p></div>
+                <button onClick={() => setEquipmentForm({name:'',quantity:1})} className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-red-900">
+                  <Plus size={14}/> Add Equipment
+                </button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {data.inventory.map(item => (
                   <div 
@@ -161,6 +189,19 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
           )}
         </div>
       </div>
+
+      {equipmentForm && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <form onSubmit={addEquipment} role="dialog" aria-modal="true" aria-label="Add equipment" className="w-full max-w-md space-y-4 rounded-2xl border border-gray-200 bg-white p-6 text-left shadow-2xl">
+            <header className="flex items-start justify-between border-b border-gray-100 pb-3"><div><h3 className="font-bold text-gray-900">Add Equipment</h3><p className="mt-1 text-xs text-gray-500">Create a new Equipment & Stock inventory item.</p></div><button type="button" onClick={() => setEquipmentForm(null)} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:text-gray-700"><X size={18}/></button></header>
+            <fieldset disabled={equipmentBusy} className="space-y-3">
+              <label className="block text-xs font-bold text-gray-700">Equipment name<input autoFocus required maxLength="100" value={equipmentForm.name} onChange={event => setEquipmentForm({...equipmentForm,name:event.target.value})} placeholder="e.g., Projector" className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-red-800"/></label>
+              <label className="block text-xs font-bold text-gray-700">Initial total stock<input required type="number" min="1" step="1" value={equipmentForm.quantity} onChange={event => setEquipmentForm({...equipmentForm,quantity:event.target.value})} className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-red-800"/></label>
+            </fieldset>
+            <footer className="flex justify-end gap-2 border-t border-gray-100 pt-4"><button type="button" disabled={equipmentBusy} onClick={() => setEquipmentForm(null)} className="rounded-xl border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700">Cancel</button><button disabled={equipmentBusy} className="rounded-xl bg-red-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{equipmentBusy?'Adding…':'Add Equipment'}</button></footer>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-const expectedDocumentsSql = `SELECT idoc.ini_id,idoc.title,idoc.qr_code,idoc.created_at,pt.process_name,creator.full_name AS requestor_name,
+const expectedDocumentsSql = `SELECT idoc.public_id AS ini_id,idoc.title,idoc.qr_code,idoc.created_at,pt.process_name,creator.full_name AS requestor_name,
   COALESCE(curr_o.office_name,'Origin Station') AS current_office
   FROM public.initial_document idoc JOIN public.process_type pt ON idoc.p_id=pt.p_id
   JOIN public."User" creator ON idoc.u_id=creator.u_id
@@ -16,7 +16,7 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT DISTINCT ON (idoc.ini_id)
-             idoc.ini_id, 
+             idoc.public_id AS ini_id,
              idoc.title, 
              idoc.edc, 
              idoc.qr_code, 
@@ -39,7 +39,7 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
              (
               SELECT json_agg(json_build_object(
                 'office_name', off2.office_name,
-                'pd_id', p2.pd_id,
+                'pd_id', p2.public_id,
                 'current_office_id', p2.current_office_id,
                 's_id', p2.s_id,
                 'time_in', p2.time_in AT TIME ZONE 'Asia/Manila',
@@ -59,7 +59,6 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
       WHERE (idoc.u_id = $1 OR ($2::integer IS NOT NULL AND idoc.submission_office_id=$2)) 
       ORDER BY idoc.ini_id DESC, (pdoc.time_out IS NULL) DESC, pdoc.pd_id DESC;
     `;
-    if (Number(req.params.userId) !== Number(req.user.u_id)) return res.status(403).json({error:"Access denied."});
     const result = await pool.query(query, [req.user.u_id, [2,3,4].includes(Number(req.user.a_id)) ? req.user.o_id : null]);
     res.json(result.rows.map(doc => ({...doc,
       history_logs: routeProgress(doc.route_snapshot || [],doc.history_logs || []).history
@@ -82,7 +81,7 @@ app.get('/api/processor/documents/:officeId', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT 
-        idoc.ini_id, 
+        idoc.public_id AS ini_id,
         idoc.title, 
         idoc.edc, 
         idoc.qr_code, 
@@ -125,7 +124,7 @@ app.get('/api/processor/documents/pipeline/:officeId', requireAuth, async (req, 
   try {
     const query = `
       SELECT DISTINCT ON (idoc.ini_id)
-        idoc.ini_id, 
+        idoc.public_id AS ini_id,
         idoc.title, 
         idoc.edc, 
         idoc.qr_code, 
@@ -177,13 +176,13 @@ app.get('/api/processor/history/:officeId', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT 
-        h.history_id,
+        h.public_id AS history_id,
         h.action_type,
         CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp - INTERVAL '8 hours' ELSE h.action_timestamp END AS action_timestamp,
         u.full_name,
         idoc.title,
         idoc.qr_code,
-        idoc.ini_id,
+        idoc.public_id AS ini_id,
         idoc.edc,
         idoc.created_at, 
         pt.process_name,
