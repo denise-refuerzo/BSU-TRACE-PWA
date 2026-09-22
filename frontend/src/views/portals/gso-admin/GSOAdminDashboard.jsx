@@ -7,6 +7,7 @@ import {
   ChevronDown, Boxes, CalendarClock
 } from 'lucide-react';
 import { fetchWithAuth } from '../../../api';
+import { prepareDemandChart } from './demandAnalytics';
 
 // Custom Hook
 import { useGSOAdminData } from './hooks/useGSOAdminData';
@@ -252,23 +253,7 @@ export default function GSOAdminDashboard() {
     .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
     .slice(0, 5);
 
-  const cutoffDate = new Date();
-  cutoffDate.setMonth(cutoffDate.getMonth() - demandTimeFilter);
-  const cutoffString = cutoffDate.toISOString().split('T')[0];
-  const timeFilteredDemand = peakDemandData.filter(d => d.type === 'forecast' || d.date >= cutoffString);
-  const transitionDate = timeFilteredDemand.find((d, i, arr) => d.type === 'historical' && arr[i + 1]?.type === 'forecast')?.date;
-
-  const chartReadyDemandData = timeFilteredDemand.map(d => {
-    const isForecast = d.type === 'forecast';
-    const isTransition = d.date === transitionDate;
-    return {
-      ...d,
-      van_hist: (!isForecast || isTransition) ? d.vehicle_demand : null,
-      fac_hist: (!isForecast || isTransition) ? d.facility_demand : null,
-      van_fore: (isForecast || isTransition) ? d.vehicle_demand : null,
-      fac_fore: (isForecast || isTransition) ? d.facility_demand : null,
-    };
-  });
+  const { chartReadyDemandData } = prepareDemandChart(peakDemandData, demandTimeFilter);
 
   const isAwaitingScanIn = selectedDoc && !selectedDoc.time_in;
   const isInVerification = selectedDoc?.status?.toLowerCase() === 'in verification' || ((selectedDoc?.current_step_is_adhoc || selectedDoc?.is_adhoc) && selectedDoc?.current_office !== gsoOfficeName);
@@ -551,7 +536,7 @@ export default function GSOAdminDashboard() {
           <div class="section">
             <h2>1. Office Bottlenecks</h2>
             <table>
-              <thead><tr><th>Office Name</th><th>Dwell Time (Hours)</th></tr></thead>
+              <thead><tr><th>Office Name</th><th>Average Processing Time (Hours)</th></tr></thead>
               <tbody>
                 ${(bottleneckData || []).map(b => `<tr><td>${b.office_name}</td><td>${Number(b.dwell_time_hours || 0).toFixed(2)}h</td></tr>`).join('')}
               </tbody>
@@ -600,7 +585,7 @@ export default function GSOAdminDashboard() {
           </div>
 
           <div class="section">
-            <h2>6. Demand Forecast Data</h2>
+            <h2>6. Short-Term Demand Projection</h2>
             <table>
               <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
               <tbody>
@@ -703,7 +688,13 @@ export default function GSOAdminDashboard() {
             <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
-            <button onClick={() => handleTabSelect('submissions')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold text-neutral-400 hover:text-white"><Archive size={18}/> Office Submissions</button>
+            <button
+              onClick={() => handleTabSelect('submissions')}
+              aria-current={activeTab === 'submissions' ? 'page' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'submissions' ? 'bg-red-700 text-white border-l-4 border-red-300 shadow-sm' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}
+            >
+              <Archive size={18}/> Office Submissions
+            </button>
             <div>
               <button onClick={() => setResourcesExpanded(value => !value)} aria-expanded={resourcesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['resources','procurement','manage-bookings'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
                 <span className="flex items-center gap-3"><Archive size={18} /> School Resources</span>
@@ -798,8 +789,9 @@ export default function GSOAdminDashboard() {
               handleNavigateToProcurement={handleNavigateToProcurement}
               handleOpenIncomingModal={handleOpenIncomingModal}
               processedBottleneckData={processedBottleneckData}
+              bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
               demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
-              chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
+              chartReadyDemandData={chartReadyDemandData}
             />
           )}
 
@@ -846,7 +838,7 @@ export default function GSOAdminDashboard() {
                 processedBottleneckData={processedBottleneckData}
                 equipmentInventory={equipmentInventory}
                 demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
-                chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
+                chartReadyDemandData={chartReadyDemandData}
                 systemHealth={systemHealth} routePerf={routePerf}
                 administrativeInsights={administrativeInsights}
               />

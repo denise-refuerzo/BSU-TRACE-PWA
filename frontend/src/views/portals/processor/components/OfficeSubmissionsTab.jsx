@@ -212,7 +212,15 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
 
         {/* Table Body - Mobile Friendly Horizontal Scroll */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-[1000px] text-left text-sm border-collapse">
+          <table className="w-full min-w-[1180px] table-fixed text-left text-sm border-collapse">
+            <colgroup>
+              <col className="w-[24%]" />
+              <col className="w-[19%]" />
+              <col className="w-[18%]" />
+              <col className="w-[12%]" />
+              <col className="w-[13%]" />
+              <col className="w-[14%]" />
+            </colgroup>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-wider">
                 <th className="p-4">Document Name</th>
@@ -229,8 +237,8 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
               {isDocsLoading && documents.length === 0 ? (
                 [...Array(4)].map((_, i) => (
                   <tr key={`skeleton-${i}`}>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+                    <td className="p-4 align-middle">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-gray-200 animate-pulse shrink-0"></div>
                         <div className="space-y-2">
                           <div className="h-4 w-48 bg-gray-200 rounded animate-pulse"></div>
@@ -251,40 +259,40 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                   <tr key={d.ini_id} 
                       onClick={() => setSelected(d)}
                       className={`transition-colors cursor-pointer group ${selected?.ini_id === d.ini_id ? 'bg-red-50/40' : 'hover:bg-gray-50/80'}`}>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+                    <td className="p-4 align-middle">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className={`p-2 rounded-lg transition-all duration-150 shrink-0 ${selected?.ini_id === d.ini_id ? 'bg-white shadow-sm border border-red-100' : 'bg-gray-50 border border-gray-100 group-hover:bg-white group-hover:border-red-100 group-hover:shadow-sm'}`}>
                           <FileText size={16} className={`transition-colors duration-150 ${selected?.ini_id === d.ini_id ? 'text-[#D32F2F]' : 'text-gray-500 group-hover:text-[#D32F2F]'}`} />
                         </div>
-                        <div>
-                          <p className="font-bold text-gray-900 text-sm leading-tight line-clamp-2">{d.title}</p>
-                          <p className="text-[10px] text-gray-500 font-medium mt-1 uppercase tracking-wide">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-bold text-gray-900 text-sm leading-5" title={d.title}>{d.title}</p>
+                          <p className="mt-1 whitespace-nowrap text-[10px] font-medium uppercase tracking-wide text-gray-500">
                             {formatPhilippineDateTime(d.created_at)}
                           </p>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4">
-                      <span className="font-mono font-bold text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2 py-1 rounded whitespace-nowrap">
+                    <td className="p-4 align-middle">
+                      <span title={d.qr_code} className="block max-w-full truncate rounded border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-xs font-bold text-gray-600">
                         {d.qr_code}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className="flex items-center gap-1.5 text-xs text-gray-700 font-medium whitespace-nowrap">
+                    <td className="p-4 align-middle">
+                      <span className="flex items-start gap-1.5 text-xs font-medium leading-5 text-gray-700">
                         <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                        {d.process_name}
+                        <span className="line-clamp-2" title={d.process_name}>{d.process_name}</span>
                       </span>
                     </td>
-                    <td className="p-4 text-xs text-gray-600 font-medium whitespace-nowrap">
+                    <td className="p-4 align-middle text-xs text-gray-600 font-medium whitespace-nowrap">
                       {d.edc ? new Date(d.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
                     </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm whitespace-nowrap ${getStatusStyles(d.status)}`}>
+                    <td className="p-4 align-middle">
+                      <span className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
                         {d.status?.toLowerCase() === 'completed' ? 'Completed' : 
                           d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
                       </span>
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="p-4 text-center align-middle">
                       <button 
                         onClick={(e) => { e.stopPropagation(); setSelected(d); }}
                         className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 hover:shadow-sm text-gray-500 hover:text-gray-900 mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
@@ -293,7 +301,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                       </button>
                       
                       {d.status?.toLowerCase() === 'action required' && (
-                        <div className="mt-3 text-left bg-red-50 border border-red-200 p-3 rounded-xl min-w-[200px]" onClick={e => e.stopPropagation()}>
+                        <div className="mt-3 w-full rounded-xl border border-red-200 bg-red-50 p-3 text-left" onClick={e => e.stopPropagation()}>
                           <p className="text-[11px] text-red-800 font-medium mb-2 leading-relaxed">
                             <strong className="block text-[10px] uppercase tracking-wider mb-0.5">Remarks:</strong>
                             {d.last_action}

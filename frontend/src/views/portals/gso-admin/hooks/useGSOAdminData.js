@@ -163,8 +163,8 @@ export function useGSOAdminData() {
         const rawPeakData = await resPeak.json();
         const formattedPeakData = rawPeakData.map(item => ({
           ...item,
-          vehicle_demand: Number(item.vehicle_demand || 0), 
-          facility_demand: Number(item.facility_demand || 0)
+          vehicle_demand: item.vehicle_demand == null ? null : Number(item.vehicle_demand),
+          facility_demand: item.facility_demand == null ? null : Number(item.facility_demand)
         }));
         setPeakDemandData(formattedPeakData);
       }

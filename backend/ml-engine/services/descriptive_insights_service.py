@@ -35,8 +35,7 @@ def calculate_frequently_requested_documents():
         FROM public.initial_document idoc
         JOIN public.process_type pt ON idoc.p_id = pt.p_id
         GROUP BY pt.process_name
-        ORDER BY request_count DESC, pt.process_name
-        LIMIT 8;
+        ORDER BY request_count DESC, pt.process_name;
     """
     with get_db_connection() as conn:
         frame = pd.read_sql_query(query, conn)
@@ -68,8 +67,7 @@ def calculate_most_utilized_assets():
         FROM asset_usage usage
         JOIN public.asset_details asset ON usage.asd_id = asset.asd_id
         GROUP BY asset.asset_name
-        ORDER BY usage_count DESC, asset.asset_name
-        LIMIT 8;
+        ORDER BY usage_count DESC, asset.asset_name;
     """
     with get_db_connection() as conn:
         frame = pd.read_sql_query(query, conn)

@@ -2,12 +2,10 @@ import React, { useRef } from 'react';
 import { 
   User, Building, Car, Landmark, Archive, Search, Filter, 
   Download, FileText, Eye, Folder, Inbox, Clock, AlertTriangle, 
-  CheckCircle, ChevronLeft, ChevronRight, BarChart2, Package, Activity 
+  CheckCircle, ChevronLeft, ChevronRight, BarChart2, Activity
 } from 'lucide-react';
-import { 
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, ReferenceLine 
-} from 'recharts';
+import { Bar, Line } from 'react-chartjs-2';
+import { baseChartOptions, buildForecastChartData, forecastChartOptions } from '../analyticsCharts';
 
 export default function GSODashboardTab({
   userName,
@@ -34,12 +32,33 @@ export default function GSODashboardTab({
   handleOpenIncomingModal,
   // Analytics Props
   processedBottleneckData,
+  bottleneckSort,
+  setBottleneckSort,
   demandTimeFilter,
   setDemandTimeFilter,
-  chartReadyDemandData,
-  transitionDate
+  chartReadyDemandData
 }) {
   const documentTableRef = useRef(null);
+  const bottleneckChartData = {
+    labels: (processedBottleneckData || []).map(row => row.office_name),
+    datasets: [{
+      label: 'Delay (hours)',
+      data: (processedBottleneckData || []).map(row => Number(row.dwell_time_hours || 0)),
+      backgroundColor: '#991b1b',
+      borderRadius: 6
+    }]
+  };
+  const bottleneckChartOptions = {
+    ...baseChartOptions,
+    indexAxis: 'y',
+    plugins: { ...baseChartOptions.plugins, legend: { display: false } },
+    scales: {
+      x: { beginAtZero: true, grid: { color: '#f3f4f6' }, ticks: { font: { size: 9 } } },
+      y: { grid: { display: false }, ticks: { font: { size: 9, weight: 600 } } }
+    }
+  };
+  const forecastChartData = buildForecastChartData(chartReadyDemandData || [], true);
+  const projectionInfo = (chartReadyDemandData || []).find(row => row.model_note);
 
   const handleKpiCardClick = (statusFilter) => {
     setFilterStatus(statusFilter);
@@ -129,56 +148,49 @@ export default function GSODashboardTab({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           
           {/* Descriptive Analytics */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
-            <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 mb-3 tracking-wide">
-              <BarChart2 className="text-purple-600" size={14} /> Bottleneck Delay Evaluation (Hours)
-            </h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col min-h-56 hover:shadow-md transition-shadow sm:h-64 lg:h-56">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 tracking-wide">
+                <BarChart2 className="text-purple-600" size={14} /> Average Processing Time per Office
+              </h3>
+              <select value={bottleneckSort} onChange={event => setBottleneckSort?.(event.target.value)} className="w-full rounded border border-gray-200 bg-gray-50 p-1 text-[9px] font-bold uppercase outline-none sm:w-auto">
+                <option value="desc">Highest first</option>
+                <option value="asc">Lowest first</option>
+              </select>
+            </div>
             <div className="flex-1 min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={processedBottleneckData || []} layout="vertical" margin={{ top: 0, right: 10, left: -25, bottom: 0 }}>
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="office_name" type="category" tick={{fontSize: 9, fill: '#4b5563', fontWeight: 600}} width={80} axisLine={false} tickLine={false} />
-                  <Tooltip cursor={{fill: '#f9fafb'}} contentStyle={{ borderRadius: '6px', fontSize: '10px', padding: '6px' }} />
-                  <Bar dataKey="dwell_time_hours" fill="#9333ea" radius={[0, 4, 4, 0]} barSize={12} name="Delay (Hrs)" />
-                </BarChart>
-              </ResponsiveContainer>
+              {!!processedBottleneckData?.length && <Bar data={bottleneckChartData} options={bottleneckChartOptions} />}
               {(!processedBottleneckData || processedBottleneckData.length === 0) && (
-                <div className="text-center text-[10px] text-gray-400 font-bold -mt-24">No bottleneck data.</div>
+                <div className="flex h-full items-center justify-center text-center text-[10px] font-bold text-gray-400">No processing-time data.</div>
               )}
             </div>
           </div>
 
           {/* Predictive Analytics */}
-          <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col h-56 hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-center mb-3">
+          <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col min-h-56 hover:shadow-md transition-shadow sm:h-64 lg:h-56">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
               <h3 className="text-[11px] font-bold text-gray-900 uppercase flex items-center gap-1.5 tracking-wide">
-                <Activity className="text-indigo-600" size={14} /> Demand Forecast
+                <Activity className="text-indigo-600" size={14} /> Short-Term Demand Projection
               </h3>
               <select 
                 value={demandTimeFilter} 
                 onChange={e => setDemandTimeFilter && setDemandTimeFilter(Number(e.target.value))} 
-                className="text-[9px] font-bold uppercase bg-gray-50 border border-gray-200 rounded p-1 outline-none cursor-pointer"
+                className="w-full text-[9px] font-bold uppercase bg-gray-50 border border-gray-200 rounded p-1 outline-none cursor-pointer sm:w-auto"
               >
                 <option value={3}>3 Months</option>
                 <option value={6}>6 Months</option>
+                <option value={9}>9 Months</option>
                 <option value={12}>12 Months</option>
               </select>
             </div>
+            {projectionInfo?.model_note && (
+              <p className="mb-2 rounded-md bg-amber-50 px-2 py-1 text-[9px] font-medium leading-snug text-amber-900">
+                {projectionInfo.model_note}
+              </p>
+            )}
             <div className="flex-1 min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartReadyDemandData || []} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
-                  <XAxis dataKey="date" tick={{fontSize: 9, fill: '#6b7280'}} axisLine={false} tickLine={false} minTickGap={20} />
-                  <YAxis tick={{fontSize: 9, fill: '#6b7280'}} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '6px', fontSize: '10px', padding: '6px' }} />
-                  {transitionDate && (
-                    <ReferenceLine x={transitionDate} stroke="#D32F2F" strokeDasharray="3 3" />
-                  )}
-                  <Area type="monotone" dataKey="van_hist" name="Van Hist" stroke="#2563eb" fill="#2563eb" fillOpacity={0.15} strokeWidth={2} />
-                  <Area type="monotone" dataKey="fac_hist" name="Fac Hist" stroke="#16a34a" fill="#16a34a" fillOpacity={0.15} strokeWidth={2} />
-                  <Area type="monotone" dataKey="van_fore" name="Van Forecast" stroke="#2563eb" strokeDasharray="3 3" fill="none" strokeWidth={1.5} />
-                  <Area type="monotone" dataKey="fac_fore" name="Fac Forecast" stroke="#16a34a" strokeDasharray="3 3" fill="none" strokeWidth={1.5} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {!!chartReadyDemandData?.length && <Line data={forecastChartData} options={forecastChartOptions} />}
+              {!chartReadyDemandData?.length && <div className="flex h-full items-center justify-center text-center text-[10px] font-bold text-gray-400">No booking history is available.</div>}
             </div>
           </div>
 
