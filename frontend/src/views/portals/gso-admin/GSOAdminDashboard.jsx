@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { fetchWithAuth } from '../../../api';
 import { prepareDemandChart } from './demandAnalytics';
+import { Smartphone } from 'lucide-react';
+import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
 
 // Custom Hook
 import { useGSOAdminData } from './hooks/useGSOAdminData';
@@ -64,6 +66,7 @@ export default function GSOAdminDashboard() {
   const [procurementTargetSection, setProcurementTargetSection] = useState(null);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [showCompanionModal, setShowCompanionModal] = useState(false);
 
   const handleNavigateToChat = (doc) => {
     setShowDetailsModal(false);
@@ -716,10 +719,19 @@ export default function GSOAdminDashboard() {
             </button>
           </nav>
         </div>
-        <div className="border-t border-neutral-700 pt-4">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
-            <LogOut size={16} /> Sign Out
+        <div className="space-y-3">
+          {/* COMPANION SCANNER BUTTON */}
+          <button 
+            onClick={() => { setShowCompanionModal(true); setIsSidebarOpen(false); }}
+            className="w-full py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider cursor-pointer"
+          >
+            <Smartphone size={16} /> Mobile Scanner
           </button>
+          <div className="border-t border-neutral-700 pt-3">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -954,6 +966,16 @@ export default function GSOAdminDashboard() {
         documents={incomingDocsList}
         isLoading={isIncomingLoading}
       />
+
+      {showCompanionModal && (
+        <CompanionScannerModal 
+          onClose={() => setShowCompanionModal(false)}
+          onScanSuccess={() => {
+            // Insert your data refresh function here
+            // e.g., gsoData.fetchGsoMeta()
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ const {lockSchedule, availability, assertConfirmable} = require('./resourceSched
 const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require('./mailer');
 const crypto = require('crypto');
 const axios = require('axios');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET is required.');
@@ -37,6 +38,27 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Global API Limiter: 200 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 200, 
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Strict Auth Limiter: 10 requests per 15 minutes per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 10, 
+  message: { error: 'Too many authentication attempts, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply global limiter to all standard API routes
+app.use('/api', globalLimiter);
 
 const io = new Server(server, {
   cors: {
@@ -154,7 +176,7 @@ const generateSixDigitCode = () => {
 // ==========================================
 // 1. LOGIN ENDPOINT (Conditional with 2FA)
 // ==========================================
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   try {
@@ -295,7 +317,7 @@ const requireAuth = async (req, res, next) => {
 // ==========================================
 // 1.2 2FA VERIFICATION ENDPOINT
 // ==========================================
-app.post('/api/login/verify-2fa', async (req, res) => {
+app.post('/api/login/verify-2fa', authLimiter, async (req, res) => {
   const { userId, otpCode } = req.body;
 
   try {
@@ -445,7 +467,7 @@ app.post('/api/profile/:id/verify-disable-2fa', requireAuth, async (req, res) =>
 // ==========================================
 // 1.4 FORGOT PASSWORD: IDENTIFY USER
 // ==========================================
-app.post('/api/auth/forgot-password/identify', async (req, res) => {
+app.post('/api/auth/forgot-password/identify', authLimiter, async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username is required.' });
 
@@ -480,7 +502,7 @@ app.post('/api/auth/forgot-password/identify', async (req, res) => {
 // ==========================================
 // 1.5 FORGOT PASSWORD: VERIFY EMAIL OTP
 // ==========================================
-app.post('/api/auth/forgot-password/verify-email', async (req, res) => {
+app.post('/api/auth/forgot-password/verify-email', authLimiter, async (req, res) => {
   const { username, fullEmail } = req.body;
   if (!username || !fullEmail) return res.status(400).json({ error: 'All fields are required.' });
 
@@ -524,7 +546,7 @@ app.post('/api/auth/forgot-password/verify-email', async (req, res) => {
 // ==========================================
 // 1.6 FORGOT PASSWORD: RESET PASSWORD
 // ==========================================
-app.post('/api/auth/forgot-password/reset', async (req, res) => {
+app.post('/api/auth/forgot-password/reset', authLimiter, async (req, res) => {
   const { username, code, newPassword } = req.body;
   if (!username || !code || !newPassword) return res.status(400).json({ error: 'All fields are required.' });
 
@@ -905,9 +927,9 @@ app.post('/api/offices', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/login/resend-2fa', async (req, res) => {
-  const userId = String(req.body.userId || '').trim();
-  if (!/^[0-9a-f-]{36}$/i.test(userId)) return res.status(400).json({error:'A valid user is required.'});
+app.post('/api/login/resend-2fa', authLimiter, async (req, res) => {
+  const userId = Number(req.body.userId);
+  if (!Number.isInteger(userId) || userId < 1) return res.status(400).json({error:'A valid user is required.'});
   const last = twoFaResendTracker.get(userId) || 0;
   if (Date.now() - last < TWO_FA_RESEND_MS) return res.status(429).json({error:'Please wait before requesting another code.'});
   try {
