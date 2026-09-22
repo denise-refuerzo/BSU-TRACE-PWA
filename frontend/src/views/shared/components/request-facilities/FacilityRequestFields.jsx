@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function FacilityRequestFields({ activeFacility, form, setForm, todayString, currentTimeString }) {
+export default function FacilityRequestFields({ activeFacility, form, setForm, todayString, currentTimeString, facilityOptions = [], facilityOptionsLoading = false }) {
   const details = form.facilityDetails || {};
   const dates = form.intendedDates || [''];
   const inputClass = 'w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs mt-1 bg-white';
@@ -26,9 +26,6 @@ export default function FacilityRequestFields({ activeFacility, form, setForm, t
   return (
     <div className="space-y-6">
       <h4 className="font-semibold text-neutral-800 border-b pb-3">Facility and schedule</h4>
-      <label className="block text-xs text-neutral-600">Facility being requested
-        <input readOnly value={activeFacility} className={`${inputClass} bg-neutral-50`} />
-      </label>
       <label className="block text-xs text-neutral-600">Requesting Office/Unit/Organization
         <input required value={form.department} onChange={e => setForm({...form, department: e.target.value})} className={inputClass} />
       </label>
@@ -50,6 +47,12 @@ export default function FacilityRequestFields({ activeFacility, form, setForm, t
           <input type="time" required min={form.startTime} value={form.endTime} onChange={e => setForm({...form, endTime: e.target.value})} className={inputClass} />
         </label>
       </div>
+      <label className="block text-xs text-neutral-600">Available {activeFacility === 'Gymnasium' ? 'gymnasium' : 'room'}
+        <select required value={form.assetName || ''} onChange={e => setForm({...form, assetName: e.target.value})} disabled={facilityOptionsLoading || !form.startTime || !form.endTime} className={`${inputClass} disabled:bg-neutral-100 disabled:text-neutral-400`}>
+          <option value="">{facilityOptionsLoading ? 'Checking availability…' : facilityOptions.length ? 'Choose an available facility' : 'No available facility for this schedule'}</option>
+          {facilityOptions.map(option => <option key={option.asd_id} value={option.asset_name}>{option.asset_name}</option>)}
+        </select>
+      </label>
       <p className="text-xs text-neutral-500">The same time and request details apply to every selected date.</p>
       <h4 className="font-semibold text-neutral-800 border-b pb-3">Event details</h4>
       {choices('Purpose', 'purposes', ['Seminar/Training', 'Meeting', 'Special Class/Class Activity', 'Acquaintance', 'Presentation', 'Others'])}

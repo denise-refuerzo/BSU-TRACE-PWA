@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Pencil, Trash2, Plus, Users, Car, Building2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import { Pencil, Trash2, Plus, Users, Car, Building2, Search } from 'lucide-react';
 import { resourceApi, confirmResourceAction, resourceError, resourceSuccess } from '../resourceActions';
 
 const input = 'w-full mt-1 rounded-xl border border-gray-300 px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-red-800 outline-none';
@@ -22,7 +22,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
 
     if (viewMode === 'facilities') {
       rows = assets
-        .filter(a => a.ast_id !== 4)
+        .filter(a => [1, 2].includes(a.ast_id))
         .map(a => ({
           kind: 'assets',
           id: a.asd_id,
@@ -30,6 +30,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
           type: a.asset_type,
           quantity: a.quantity,
           status: a.current_status || 'Available',
+          active: a.is_active !== false,
           ast_id: a.ast_id,
           assetTypeId: String(a.ast_id)
         }));
@@ -196,19 +197,17 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
 
                 <td className="px-4 py-3.5 text-right">
                   <div className="flex items-center justify-end gap-1.5">
-                    {row.kind !== 'assets' && (
-                      <button
-                        disabled={busy}
-                        className={button}
-                        onClick={() => mutate(
-                          'Update Status?',
-                          `Mark ${row.name} as ${row.active ? 'Unavailable' : 'Available'}?`,
-                          () => resourceApi(`fleet/${row.kind}/${row.id}/active`, 'PUT', { active: !row.active })
-                        )}
-                      >
-                        {row.active ? 'Set Unavailable' : 'Set Available'}
-                      </button>
-                    )}
+                    <button
+                      disabled={busy}
+                      className={button}
+                      onClick={() => mutate(
+                        'Update Availability?',
+                        `Mark ${row.name} as ${row.active ? 'Unavailable' : 'Available'}? Existing approved bookings will remain visible for GSO follow-up.`,
+                        () => resourceApi(row.kind === 'assets' ? `registry/assets/${row.id}/active` : `fleet/${row.kind}/${row.id}/active`, 'PUT', { active: !row.active })
+                      )}
+                    >
+                      {row.active ? 'Set Unavailable' : 'Set Available'}
+                    </button>
                     <button
                       disabled={busy}
                       title="Edit"
@@ -290,7 +289,6 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
                     <select value={editor.assetTypeId} onChange={e => setEditor({ ...editor, assetTypeId: e.target.value })} className={input}>
                       <option value="1">Room</option>
                       <option value="2">Gymnasium</option>
-                      <option value="3">General Facility</option>
                     </select>
                   </div>
                   <div>

@@ -1506,9 +1506,10 @@ app.post('/api/resources/inventory/return', requireAuth, async (req, res) => {
 app.get('/api/resources/assets', async (req, res) => {
   try {
     const query = `
-      SELECT ad.asd_id, ad.asset_name, ad.quantity, at.asset_type, at.ast_id,
+      SELECT ad.asd_id, ad.asset_name, ad.quantity, ad.is_active, at.asset_type, at.ast_id,
       (
         SELECT CASE
+          WHEN NOT ad.is_active THEN 'Unavailable'
           WHEN EXISTS (
             SELECT 1 FROM public.asset_blackouts ab 
             WHERE ab.asd_id = ad.asd_id AND TIMEZONE('Asia/Manila', NOW()) BETWEEN ab.start_time AND ab.end_time
@@ -1516,14 +1517,14 @@ app.get('/api/resources/assets', async (req, res) => {
           WHEN EXISTS (
             SELECT 1 FROM public.bookings b
             JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id
-            WHERE gm.asd_id = ad.asd_id AND b.status = 'Confirmed'
+            WHERE gm.asd_id = ad.asd_id AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
             AND b.reservation_date = (TIMEZONE('Asia/Manila', NOW()))::date
             AND (TIMEZONE('Asia/Manila', NOW()))::time BETWEEN gm.start_time AND gm.end_time
           ) THEN 'Occupied'
           WHEN EXISTS (
             SELECT 1 FROM public.bookings b
             JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id
-            WHERE vr.asd_id = ad.asd_id AND b.status = 'Confirmed'
+            WHERE vr.asd_id = ad.asd_id AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
             AND b.reservation_date = (TIMEZONE('Asia/Manila', NOW()))::date
             AND (TIMEZONE('Asia/Manila', NOW()))::time BETWEEN vr.pick_up_time AND vr.drop_off_time
           ) THEN 'Occupied'
@@ -1557,7 +1558,7 @@ app.get('/api/resources/assets/:id/schedule', async (req, res) => {
       LEFT JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id AND gm.asd_id = $1
       LEFT JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id AND vr.asd_id = $1
       WHERE (gm.asd_id = $1 OR vr.asd_id = $1) 
-      AND b.status = 'Confirmed'
+      AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
       AND b.reservation_date >= (TIMEZONE('Asia/Manila', NOW()))::date
       ORDER BY b.reservation_date ASC, start_time ASC
     `;
@@ -1668,7 +1669,7 @@ app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date,
-             b.purpose, CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status,
+             b.purpose, CASE WHEN b.status = 'Reserved' THEN 'Pending' WHEN b.status = 'Confirmed' THEN 'Approved' ELSE b.status END AS status,
              b.department, b.created_at, b.updated_at, u.full_name AS requestor,
              COALESCE(gm.start_time, vr.pick_up_time)::text AS start_time,
              COALESCE(gm.end_time, vr.drop_off_time)::text AS end_time,
@@ -1676,13 +1677,20 @@ app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
              vr.vehicle_to_be_used, vr.designated_driver, vr.plate_number, vr.license_number,
              vr.prepared_by_name, vr.prepared_by_position,
              vr.recommending_approval_name, vr.recommending_approval_position,
-             st.service_type AS trip_type, gm.expected_attendees, gm.request_details
+             st.service_type AS trip_type, gm.expected_attendees, gm.request_details,
+             latest_update.reason AS latest_update_reason,
+             latest_update.notification_message AS latest_notification,
+             latest_update.created_at AS latest_update_at
       FROM public.bookings b
       JOIN public."User" u ON b.u_id = u.u_id
       LEFT JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id
       LEFT JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id
       LEFT JOIN public.service_type st ON vr.sv_id = st.sv_id
       LEFT JOIN public.asset_details ad ON (gm.asd_id = ad.asd_id OR vr.asd_id = ad.asd_id)
+      LEFT JOIN LATERAL (
+        SELECT reason,notification_message,created_at FROM public.booking_status_updates
+        WHERE booking_id=b.booking_id ORDER BY created_at DESC LIMIT 1
+      ) latest_update ON true
       WHERE b.u_id = $1
       ORDER BY b.created_at DESC, b.booking_id DESC
     `, [req.user.u_id]);
@@ -1697,7 +1705,7 @@ app.get('/api/resources/bookings', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
-             CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status, u.full_name,
+             CASE WHEN b.status = 'Reserved' THEN 'Pending' WHEN b.status = 'Confirmed' THEN 'Approved' ELSE b.status END AS status, u.full_name,
              gm.start_time as gm_start, gm.end_time as gm_end,
              vr.pick_up_time as vr_start, vr.drop_off_time as vr_end, vr.destination,
              ad.asset_name
@@ -1852,11 +1860,11 @@ app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
-             CASE WHEN b.status = 'Reserved' THEN 'Pending' ELSE b.status END AS status,
+             CASE WHEN b.status = 'Reserved' THEN 'Pending' WHEN b.status = 'Confirmed' THEN 'Approved' ELSE b.status END AS status,
              b.department,
              b.created_at, 
              CASE 
-                WHEN b.status = 'Confirmed' THEN b.updated_at 
+                WHEN b.status IN ('Confirmed','Approved') THEN b.updated_at
                 ELSE NULL 
              END as updated_at,
              u.full_name as requestor,
@@ -1868,10 +1876,12 @@ app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
              vr.destination,
              vr.passenger_count,
              vr.official_passengers,
-             vr.vehicle_to_be_used,
-             vr.designated_driver,
-             vr.plate_number,
-             vr.license_number,
+              vr.vehicle_to_be_used,
+              vr.designated_driver,
+              vr.plate_number,
+              vr.license_number,
+              vr.assigned_vehicle_id,
+              vr.assigned_driver_id,
              vr.prepared_by_name,
              vr.prepared_by_position,
              vr.recommending_approval_name,
@@ -1992,7 +2002,7 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
 // Auto-update booking status if requirements are met
   if (allChecked && allItems.rows.length > 0) {
     await assertConfirmable(client, internalBookingId);
-    await client.query("UPDATE public.bookings SET status = 'Confirmed', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [internalBookingId]);
+    await client.query("UPDATE public.bookings SET status = 'Approved', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [internalBookingId]);
   } else {
     await client.query("UPDATE public.bookings SET status = 'Pending' WHERE booking_id = $1", [internalBookingId]);
   }

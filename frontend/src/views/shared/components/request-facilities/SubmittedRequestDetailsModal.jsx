@@ -1,4 +1,4 @@
-import { Calendar, Car, ClipboardList, MapPin, Users, X } from 'lucide-react';
+import { Bell, Calendar, Car, ClipboardList, MapPin, Users, X } from 'lucide-react';
 
 const parseDetails = value => {
   if (!value) return {};
@@ -55,10 +55,17 @@ export default function SubmittedRequestDetailsModal({ request, officeName, onCl
         </div>
 
         <div className="space-y-5 overflow-y-auto p-5 sm:p-6">
+          {request.latest_notification && (
+            <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <h5 className="mb-2 flex items-center gap-2 text-sm font-black text-amber-900"><Bell size={16}/> Latest GSO booking update</h5>
+              <p className="text-sm font-medium leading-relaxed text-amber-900">{request.latest_notification}</p>
+              {request.latest_update_at && <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-amber-700">Updated {new Date(request.latest_update_at).toLocaleString()}</p>}
+            </section>
+          )}
           <section className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h5 className="flex items-center gap-2 text-sm font-black text-gray-900"><ClipboardList size={16} className="text-red-700" /> Request summary</h5>
-              <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${status === 'Confirmed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{status}</span>
+              <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${['Confirmed','Approved'].includes(status) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{status}</span>
             </div>
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Detail label="Requested by">{request.requestor}</Detail>

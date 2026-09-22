@@ -11,7 +11,9 @@ export default function ResourceBookingModal({
   todayString,
   currentTimeString,
   form,
-  setForm
+  setForm,
+  facilityOptions,
+  facilityOptionsLoading
 }) {
   const isVan = activeFacility === 'Van';
   const passengers = form.officialPassengers || [''];
@@ -63,7 +65,7 @@ export default function ResourceBookingModal({
           </>}
 
           {activeFacility !== 'Van' ? (
-            <FacilityRequestFields {...{activeFacility, form, setForm, todayString, currentTimeString}} />
+            <FacilityRequestFields {...{activeFacility, form, setForm, todayString, currentTimeString, facilityOptions, facilityOptionsLoading}} />
           ) : (
             <div className="space-y-4 pt-2 border-t border-dashed border-neutral-200 animate-in fade-in">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

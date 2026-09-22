@@ -14,6 +14,15 @@ async function availability(client, {date, start, end, type, assetName, exclude 
   validateWindow(date, start, end);
 
   if (type === 'Vehicle') {
+    // A legacy approved trip without an individual assignment reserves the fleet window.
+    const legacy = await client.query(`SELECT 1 FROM public.bookings b
+      JOIN public.vehicle_requirements vr USING(booking_id)
+      WHERE b.booking_id <> $4
+        AND (b.status = 'Confirmed' OR b.status IN ('Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned'))
+        AND b.reservation_date=$1::date AND vr.assigned_vehicle_id IS NULL
+        AND vr.pick_up_time < $3::time AND vr.drop_off_time > $2::time LIMIT 1`,[date,start,end,exclude]);
+    if(legacy.rows.length) return {available:false,vehicles:[],drivers:[],reason:'An approved trip still needs an available vehicle and driver assignment for this time window.'};
+
     // 1. Available Vehicles: Active, not blacked out, and NOT assigned to another booking in overlapping time
     const vehicles = await client.query(`
       SELECT f.vehicle_id, f.vehicle_name, f.plate_number 
@@ -30,10 +39,10 @@ async function availability(client, {date, start, end, type, assetName, exclude 
           SELECT 1 FROM public.bookings b 
           JOIN public.vehicle_requirements vr USING (booking_id)
           WHERE b.booking_id <> $4
+            AND (b.status = 'Confirmed' OR b.status IN ('Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned'))
             AND b.reservation_date = $1::date
             AND vr.assigned_vehicle_id = f.vehicle_id
-            AND vr.pick_up_time < $3::time 
-            AND vr.drop_off_time > $2::time
+            AND vr.pick_up_time < $3::time AND vr.drop_off_time > $2::time
         )
       ORDER BY f.vehicle_name
     `, [date, start, end, exclude]);
@@ -47,6 +56,7 @@ async function availability(client, {date, start, end, type, assetName, exclude 
           SELECT 1 FROM public.bookings b 
           JOIN public.vehicle_requirements vr USING (booking_id)
           WHERE b.booking_id <> $4
+            AND (b.status = 'Confirmed' OR b.status IN ('Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned'))
             AND b.reservation_date = $1::date
             AND vr.assigned_driver_id = d.driver_id
             AND vr.pick_up_time < $3::time 
@@ -77,10 +87,11 @@ async function availability(client, {date, start, end, type, assetName, exclude 
   if (!['Room', 'Gymnasium'].includes(type)) throw fail('Invalid resource type.');
 
   const assets = await client.query(
-    `SELECT asd_id FROM public.asset_details WHERE ast_id = $2 ORDER BY (asset_name = $1) DESC, asd_id LIMIT 1`,
+    `SELECT asd_id,is_active FROM public.asset_details WHERE ast_id = $2 ORDER BY (asset_name = $1) DESC, asd_id LIMIT 1`,
     [assetName, type === 'Room' ? 1 : 2]
   );
   if (!assets.rows.length) throw fail('Facility not found.');
+  if (assets.rows[0].is_active === false) throw fail('This facility is currently unavailable.');
   const id = assets.rows[0].asd_id;
 
   const blocked = await client.query(`
@@ -88,7 +99,8 @@ async function availability(client, {date, start, end, type, assetName, exclude 
       AND start_time < ($2::date + $4::time) AND end_time > ($2::date + $3::time)
     UNION ALL 
     SELECT 1 FROM public.bookings b JOIN public.gm_requirements gm USING (booking_id)
-    WHERE gm.asd_id = $1 AND b.reservation_date = $2 AND b.status = 'Confirmed' AND b.booking_id <> $5
+    WHERE gm.asd_id = $1 AND b.reservation_date = $2
+      AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned') AND b.booking_id <> $5
       AND gm.start_time < $4::time AND gm.end_time > $3::time
   `, [id, date, start, end, exclude]);
 
@@ -126,7 +138,11 @@ async function assertConfirmable(client, bookingId) {
   });
   
   if (!free.available) throw fail(free.reason);
-  // Requirement removed: Vehicle requests no longer need prior driver/vehicle assignment to be confirmed.
+  if (b.booking_type === 'Vehicle' && b.assigned_vehicle_id && b.assigned_driver_id && (
+    !free.vehicles.some(vehicle => Number(vehicle.vehicle_id) === Number(b.assigned_vehicle_id)) ||
+    !free.drivers.some(driver => Number(driver.driver_id) === Number(b.assigned_driver_id))
+  )) throw fail('Please assign an available vehicle and driver before approving this request.');
+  // Vehicle requests may still be approved before the final vehicle and driver assignment.
 }
 
 module.exports = { lockSchedule, availability, assertConfirmable, validateWindow };

@@ -3,7 +3,8 @@ import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
-  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X
+  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X,
+  ChevronDown, Boxes, CalendarClock
 } from 'lucide-react';
 import { fetchWithAuth } from '../../../api';
 
@@ -16,6 +17,7 @@ import ResourceManagementTab from './components/ResourceManagementTab';
 import VehicleAssignmentModal from './modals/VehicleAssignmentModal';
 import {confirmResourceAction, resourceSuccess, resourceError} from './resourceActions';
 import GSOProcurementTab from './components/GSOProcurementTab';
+import ManageBookingsTab from './components/ManageBookingsTab';
 import GSOHistoryTab from './components/GSOHistoryTab';
 const OperationalAnalyticsTab = lazy(() => import('./components/OperationalAnalyticsTab'));
 
@@ -55,6 +57,8 @@ export default function GSOAdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [previousTab, setPreviousTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [resourcesExpanded, setResourcesExpanded] = useState(true);
+  const [manageRefreshKey, setManageRefreshKey] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [procurementTargetSection, setProcurementTargetSection] = useState(null);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
@@ -110,7 +114,7 @@ export default function GSOAdminDashboard() {
       fetchMasterAssets();
       fetchBlackouts();
       fetchInventoryMetrics();
-    } else if (activeTab === 'procurement') {
+    } else if (activeTab === 'procurement' || activeTab === 'manage-bookings') {
       fetchProcurementData();
     }
   }, [activeTab]);
@@ -351,9 +355,9 @@ export default function GSOAdminDashboard() {
           item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
         ));
         const result = await res.json();
-        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Pending'}));
+        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Approved' : 'Pending'}));
         fetchProcurementData();
-        await resourceSuccess(result.allChecked ? 'Request confirmed.' : 'Requirement updated. Request is pending.');
+        await resourceSuccess(result.allChecked ? 'Request approved.' : 'Requirement updated. Request is pending.');
       } else {
         const result = await res.json();
         await minimalSwal.fire({icon:'warning',title:'Request could not be confirmed',text:result.error || 'Please review the assignment and schedule.'});
@@ -700,12 +704,19 @@ export default function GSOAdminDashboard() {
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
             <button onClick={() => handleTabSelect('submissions')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold text-neutral-400 hover:text-white"><Archive size={18}/> Office Submissions</button>
-            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'resources' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <Archive size={18} /> School Resources
-            </button>
-            <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'procurement' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <ShoppingCart size={18} /> List of Requests
-            </button>
+            <div>
+              <button onClick={() => setResourcesExpanded(value => !value)} aria-expanded={resourcesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['resources','procurement','manage-bookings'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+                <span className="flex items-center gap-3"><Archive size={18} /> School Resources</span>
+                <ChevronDown size={15} className={`transition-transform ${resourcesExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              {resourcesExpanded && (
+                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                  <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'resources' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><Boxes size={14}/>Resource Inventory</button>
+                  <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'procurement' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><ShoppingCart size={14}/>List of Requests</button>
+                  <button onClick={() => handleTabSelect('manage-bookings')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'manage-bookings' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><CalendarClock size={14}/>Manage Bookings</button>
+                </div>
+              )}
+            </div>
             <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <BarChart3 size={18} /> Operational Analytics
             </button>
@@ -842,6 +853,10 @@ export default function GSOAdminDashboard() {
             </Suspense>
           )}
 
+          {activeTab === 'manage-bookings' && (
+            <ManageBookingsTab key={manageRefreshKey} onAssignVehicle={setAssignmentRequest} />
+          )}
+
           {activeTab === 'history' && (
             <GSOHistoryTab
               historyFilter={historyFilter} setHistoryFilter={setHistoryFilter}
@@ -880,7 +895,7 @@ export default function GSOAdminDashboard() {
         hasUnread={hasUnreadChats} onUnreadCleared={() => setHasUnreadChats(false)}
         userId={userId} roleId={2} officeId={gsoOfficeId}
         targetDoc={chatTargetDoc} onClearTargetDoc={() => setChatTargetDoc(null)} label="Chat Inbox" />
-      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={fetchProcurementData} />}
+      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={async () => { await fetchProcurementData(); setManageRefreshKey(value => value + 1); }} />}
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
         scanMode={scanMode} setScanMode={setScanMode}
