@@ -47,7 +47,7 @@ def get_edc_forecasts(route: str | None = None):
 
 @app.get("/api/analytics/peak-demand")
 def get_peak_demand_forecast():
-    """Endpoint serving Holt-Winters time-series forecasts for resource scheduling."""
+    """Endpoint serving seasonality-validated short-term demand projections."""
     try:
         data = calculate_peak_demand()
         return data

@@ -3,9 +3,11 @@ import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
-  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X
+  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X,
+  ChevronDown, Boxes, CalendarClock
 } from 'lucide-react';
 import { fetchWithAuth } from '../../../api';
+import { prepareDemandChart } from './demandAnalytics';
 
 // Custom Hook
 import { useGSOAdminData } from './hooks/useGSOAdminData';
@@ -16,6 +18,7 @@ import ResourceManagementTab from './components/ResourceManagementTab';
 import VehicleAssignmentModal from './modals/VehicleAssignmentModal';
 import {confirmResourceAction, resourceSuccess, resourceError} from './resourceActions';
 import GSOProcurementTab from './components/GSOProcurementTab';
+import ManageBookingsTab from './components/ManageBookingsTab';
 import GSOHistoryTab from './components/GSOHistoryTab';
 const OperationalAnalyticsTab = lazy(() => import('./components/OperationalAnalyticsTab'));
 
@@ -55,6 +58,8 @@ export default function GSOAdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [previousTab, setPreviousTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [resourcesExpanded, setResourcesExpanded] = useState(true);
+  const [manageRefreshKey, setManageRefreshKey] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [procurementTargetSection, setProcurementTargetSection] = useState(null);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
@@ -94,7 +99,7 @@ export default function GSOAdminDashboard() {
     notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
     pipelineDocs, actionHistory, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
-    reservationsList, logisticsList,
+    reservationsList, logisticsList, resourceRevision,
     bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
@@ -110,7 +115,7 @@ export default function GSOAdminDashboard() {
       fetchMasterAssets();
       fetchBlackouts();
       fetchInventoryMetrics();
-    } else if (activeTab === 'procurement') {
+    } else if (activeTab === 'procurement' || activeTab === 'manage-bookings') {
       fetchProcurementData();
     }
   }, [activeTab]);
@@ -248,23 +253,7 @@ export default function GSOAdminDashboard() {
     .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
     .slice(0, 5);
 
-  const cutoffDate = new Date();
-  cutoffDate.setMonth(cutoffDate.getMonth() - demandTimeFilter);
-  const cutoffString = cutoffDate.toISOString().split('T')[0];
-  const timeFilteredDemand = peakDemandData.filter(d => d.type === 'forecast' || d.date >= cutoffString);
-  const transitionDate = timeFilteredDemand.find((d, i, arr) => d.type === 'historical' && arr[i + 1]?.type === 'forecast')?.date;
-
-  const chartReadyDemandData = timeFilteredDemand.map(d => {
-    const isForecast = d.type === 'forecast';
-    const isTransition = d.date === transitionDate;
-    return {
-      ...d,
-      van_hist: (!isForecast || isTransition) ? d.vehicle_demand : null,
-      fac_hist: (!isForecast || isTransition) ? d.facility_demand : null,
-      van_fore: (isForecast || isTransition) ? d.vehicle_demand : null,
-      fac_fore: (isForecast || isTransition) ? d.facility_demand : null,
-    };
-  });
+  const { chartReadyDemandData } = prepareDemandChart(peakDemandData, demandTimeFilter);
 
   const isAwaitingScanIn = selectedDoc && !selectedDoc.time_in;
   const isInVerification = selectedDoc?.status?.toLowerCase() === 'in verification' || ((selectedDoc?.current_step_is_adhoc || selectedDoc?.is_adhoc) && selectedDoc?.current_office !== gsoOfficeName);
@@ -351,9 +340,9 @@ export default function GSOAdminDashboard() {
           item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
         ));
         const result = await res.json();
-        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Pending'}));
+        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Approved' : 'Pending'}));
         fetchProcurementData();
-        await resourceSuccess(result.allChecked ? 'Request confirmed.' : 'Requirement updated. Request is pending.');
+        await resourceSuccess(result.allChecked ? 'Request approved.' : 'Requirement updated. Request is pending.');
       } else {
         const result = await res.json();
         await minimalSwal.fire({icon:'warning',title:'Request could not be confirmed',text:result.error || 'Please review the assignment and schedule.'});
@@ -547,7 +536,7 @@ export default function GSOAdminDashboard() {
           <div class="section">
             <h2>1. Office Bottlenecks</h2>
             <table>
-              <thead><tr><th>Office Name</th><th>Dwell Time (Hours)</th></tr></thead>
+              <thead><tr><th>Office Name</th><th>Average Processing Time (Hours)</th></tr></thead>
               <tbody>
                 ${(bottleneckData || []).map(b => `<tr><td>${b.office_name}</td><td>${Number(b.dwell_time_hours || 0).toFixed(2)}h</td></tr>`).join('')}
               </tbody>
@@ -596,7 +585,7 @@ export default function GSOAdminDashboard() {
           </div>
 
           <div class="section">
-            <h2>6. Demand Forecast Data</h2>
+            <h2>6. Short-Term Demand Projection</h2>
             <table>
               <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
               <tbody>
@@ -699,13 +688,26 @@ export default function GSOAdminDashboard() {
             <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
-            <button onClick={() => handleTabSelect('submissions')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold text-neutral-400 hover:text-white"><Archive size={18}/> Office Submissions</button>
-            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'resources' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <Archive size={18} /> School Resources
+            <button
+              onClick={() => handleTabSelect('submissions')}
+              aria-current={activeTab === 'submissions' ? 'page' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'submissions' ? 'bg-red-700 text-white border-l-4 border-red-300 shadow-sm' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}
+            >
+              <Archive size={18}/> Office Submissions
             </button>
-            <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'procurement' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <ShoppingCart size={18} /> List of Requests
-            </button>
+            <div>
+              <button onClick={() => setResourcesExpanded(value => !value)} aria-expanded={resourcesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['resources','procurement','manage-bookings'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+                <span className="flex items-center gap-3"><Archive size={18} /> School Resources</span>
+                <ChevronDown size={15} className={`transition-transform ${resourcesExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              {resourcesExpanded && (
+                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                  <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'resources' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><Boxes size={14}/>Resource Inventory</button>
+                  <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'procurement' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><ShoppingCart size={14}/>List of Requests</button>
+                  <button onClick={() => handleTabSelect('manage-bookings')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'manage-bookings' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><CalendarClock size={14}/>Manage Bookings</button>
+                </div>
+              )}
+            </div>
             <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <BarChart3 size={18} /> Operational Analytics
             </button>
@@ -787,14 +789,15 @@ export default function GSOAdminDashboard() {
               handleNavigateToProcurement={handleNavigateToProcurement}
               handleOpenIncomingModal={handleOpenIncomingModal}
               processedBottleneckData={processedBottleneckData}
+              bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
               demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
-              chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
+              chartReadyDemandData={chartReadyDemandData}
             />
           )}
 
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} />}
           {activeTab === 'resources' && (
-              <ResourceManagementTab
+              <ResourceManagementTab key={resourceRevision}
                 onOpenRequest={(request) => {
                   setActiveTab('procurement');
                   setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
@@ -835,11 +838,15 @@ export default function GSOAdminDashboard() {
                 processedBottleneckData={processedBottleneckData}
                 equipmentInventory={equipmentInventory}
                 demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
-                chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
+                chartReadyDemandData={chartReadyDemandData}
                 systemHealth={systemHealth} routePerf={routePerf}
                 administrativeInsights={administrativeInsights}
               />
             </Suspense>
+          )}
+
+          {activeTab === 'manage-bookings' && (
+            <ManageBookingsTab key={`${manageRefreshKey}-${resourceRevision}`} onAssignVehicle={setAssignmentRequest} />
           )}
 
           {activeTab === 'history' && (
@@ -880,7 +887,7 @@ export default function GSOAdminDashboard() {
         hasUnread={hasUnreadChats} onUnreadCleared={() => setHasUnreadChats(false)}
         userId={userId} roleId={2} officeId={gsoOfficeId}
         targetDoc={chatTargetDoc} onClearTargetDoc={() => setChatTargetDoc(null)} label="Chat Inbox" />
-      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={fetchProcurementData} />}
+      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={async () => { await fetchProcurementData(); setManageRefreshKey(value => value + 1); }} />}
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
         scanMode={scanMode} setScanMode={setScanMode}

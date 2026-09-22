@@ -18,6 +18,8 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
   const [bookings, setBookings] = useState([]);
   const [myRequests, setMyRequests] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [facilityOptions, setFacilityOptions] = useState([]);
+  const [facilityOptionsLoading, setFacilityOptionsLoading] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date()); 
   const [selectedDay, setSelectedDay] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -31,7 +33,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
 
   const [form, setForm] = useState({
     reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {},
-    startTime: '', endTime: '', expectedAttendees: '',
+    startTime: '', endTime: '', expectedAttendees: '', assetName: '',
     destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: ''
   });
 
@@ -95,6 +97,27 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
     return () => socket.disconnect();
   }, [userId]);
 
+  useEffect(() => {
+    if (activeFacility === 'Van' || form.intendedDates.some(date => !date) || !form.startTime || !form.endTime || form.startTime >= form.endTime) {
+      setFacilityOptions([]);
+      return;
+    }
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setFacilityOptionsLoading(true);
+      try {
+        const query = new URLSearchParams({type: activeFacility === 'Multimedia Room' ? 'Room' : 'Gymnasium', dates: form.intendedDates.join(','), start: form.startTime, end: form.endTime});
+        const response = await fetchWithAuth(`/api/resources/available-facilities?${query}`);
+        const data = await response.json();
+        if (active && response.ok) {
+          setFacilityOptions(Array.isArray(data) ? data : []);
+          setForm(previous => ({...previous, assetName: data.some(option => option.asset_name === previous.assetName) ? previous.assetName : ''}));
+        }
+      } finally { if (active) setFacilityOptionsLoading(false); }
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [activeFacility, form.intendedDates, form.startTime, form.endTime]);
+
   const handleBookingSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -125,7 +148,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
 
     const payload = {
       bookingType: typeMapping[activeFacility],
-      assetName: activeFacility,
+      assetName: activeFacility === 'Van' ? activeFacility : form.assetName,
       ...form,
       ...(activeFacility !== 'Van' ? {purpose: form.facilityDetails.purposes.map(value => value === 'Others' ? form.facilityDetails.purposesOther : value).join(', ')} : {})
     };
@@ -141,7 +164,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
       });
       if (res.ok) {
         setShowFormModal(false);
-        setForm({ reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {}, startTime: '', endTime: '', expectedAttendees: '', destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
+        setForm({ reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {}, startTime: '', endTime: '', expectedAttendees: '', assetName: '', destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
         fetchActiveReservations();
         await Swal.fire({
           icon: 'success',
@@ -293,7 +316,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
                 <span className="w-2.5 h-2.5 bg-red-100 border border-red-300 rounded-sm inline-block"></span> Pending
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-emerald-100 border border-emerald-300 rounded-sm inline-block"></span> Confirmed
+                <span className="w-2.5 h-2.5 bg-emerald-100 border border-emerald-300 rounded-sm inline-block"></span> Approved
               </span>
             </div>
           </div>
@@ -501,6 +524,8 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
           currentTimeString={currentTimeString} 
           form={form} 
           setForm={setForm} 
+          facilityOptions={facilityOptions}
+          facilityOptionsLoading={facilityOptionsLoading}
         />
       )}
 

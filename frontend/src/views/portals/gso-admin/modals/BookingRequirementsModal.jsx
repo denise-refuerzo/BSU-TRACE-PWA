@@ -62,7 +62,7 @@ export default function BookingRequirementsModal({
 
               <div>
                 <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border shadow-2xs ${
-                  b.status === 'Confirmed' 
+                  ['Confirmed','Approved'].includes(b.status)
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                     : 'bg-amber-50 text-amber-700 border-amber-200'
                 }`}>

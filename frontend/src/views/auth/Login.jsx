@@ -354,8 +354,8 @@ export default function Login() {
                 <div className="pl-8 text-justify">
                   <p className="mb-2">To continuously improve campus operations, BSU-Trace applies data-driven intelligence to historical administrative logs:</p>
                   <ul className="list-disc pl-5 space-y-2 text-gray-600 marker:text-[#D32F2F]">
-                    <li><strong>Bottleneck Analysis:</strong> The system conducts an analytical evaluation process on document "dwell times" at various offices. This identifies constraints and operational friction without automated intervention, allowing governance to address delays proactively.</li>
-                    <li><strong>Predictive Forecasting:</strong> Historical scheduling data is used to forecast peak demand for van scheduling and facility usage, ensuring optimal distribution of institutional assets.</li>
+                    <li><strong>Processing Delay Analysis:</strong> The system compares average document processing time across offices. This identifies operational delays without automated intervention, allowing governance to address constraints proactively.</li>
+                    <li><strong>Demand Planning:</strong> Historical van and facility bookings are evaluated for a recurring weekly pattern. A short-term projection is shown only when the pattern meets the reliability threshold, and it remains a supporting planning indicator rather than a guaranteed prediction.</li>
                   </ul>
                 </div>
               </section>
