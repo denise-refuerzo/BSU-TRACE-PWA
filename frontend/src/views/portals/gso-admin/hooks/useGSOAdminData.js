@@ -41,6 +41,7 @@ export function useGSOAdminData() {
   // --- 5. Procurement States ---
   const [reservationsList, setReservationsList] = useState([]);
   const [logisticsList, setLogisticsList] = useState([]);
+  const [resourceRevision, setResourceRevision] = useState(0);
 
   // --- 6. Analytics States ---
   const [bottleneckData, setBottleneckData] = useState([]);
@@ -241,6 +242,8 @@ export function useGSOAdminData() {
       socketRef.current.emit('join-office-room', gsoOfficeId);
       // 3. Join user room for personal alerts
       socketRef.current.emit('join-user-room', userId);
+      // Resource assignments, availability, and booking status changes.
+      socketRef.current.emit('join-resource-room');
       checkChatBadgeStatus();
     });
 
@@ -275,6 +278,14 @@ export function useGSOAdminData() {
       fetchSystemAnalyticsData();
     });
 
+    socketRef.current.on('resource-schedule-updated', () => {
+      fetchProcurementData();
+      fetchInventoryMetrics();
+      fetchMasterAssets();
+      fetchBlackouts();
+      setResourceRevision(value => value + 1);
+    });
+
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
@@ -286,7 +297,7 @@ export function useGSOAdminData() {
     notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
     pipelineDocs, actionHistory, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
-    reservationsList, logisticsList,
+    reservationsList, logisticsList, resourceRevision,
     bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   };

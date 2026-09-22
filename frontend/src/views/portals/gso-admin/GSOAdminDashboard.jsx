@@ -98,7 +98,7 @@ export default function GSOAdminDashboard() {
     notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
     pipelineDocs, actionHistory, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
-    reservationsList, logisticsList,
+    reservationsList, logisticsList, resourceRevision,
     bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
@@ -805,7 +805,7 @@ export default function GSOAdminDashboard() {
 
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} />}
           {activeTab === 'resources' && (
-              <ResourceManagementTab
+              <ResourceManagementTab key={resourceRevision}
                 onOpenRequest={(request) => {
                   setActiveTab('procurement');
                   setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
@@ -854,7 +854,7 @@ export default function GSOAdminDashboard() {
           )}
 
           {activeTab === 'manage-bookings' && (
-            <ManageBookingsTab key={manageRefreshKey} onAssignVehicle={setAssignmentRequest} />
+            <ManageBookingsTab key={`${manageRefreshKey}-${resourceRevision}`} onAssignVehicle={setAssignmentRequest} />
           )}
 
           {activeTab === 'history' && (
