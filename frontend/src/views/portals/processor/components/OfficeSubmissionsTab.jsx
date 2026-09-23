@@ -29,7 +29,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [predictions, setPredictions] = useState([]);
-  const [customHours, setCustomHours] = useState(null);
+  const [customEstimate, setCustomEstimate] = useState({ routeKey: '', hours: null });
   const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false });
 
   // --- OPTIMIZATION: Search Debouncing ---
@@ -86,18 +86,17 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
     return () => { cancelled = true; }; 
   }, []);
 
-  useEffect(() => { 
-    let cancelled = false; 
-    const ids = form.customRoute?.stops?.filter(Boolean); 
-    if (!ids?.length) { 
-      setCustomHours(null); 
-      return; 
-    } 
-    fetchWithAuth(`/api/analytics/edc?route=${ids.join(',')}`).then(async r => r.ok ? r.json() : []).then(d => { 
-      if (!cancelled) setCustomHours(d[0]?.estimated_hours_to_complete ?? null); 
-    }).catch(() => setCustomHours(null)); 
-    return () => { cancelled = true; }; 
-  }, [form.customRoute?.stops?.join(',')]);
+  const customRouteKey = form.customRoute?.stops?.filter(Boolean).join(',') || '';
+  useEffect(() => {
+    if (!customRouteKey) return undefined;
+    let cancelled = false;
+    fetchWithAuth(`/api/analytics/edc?route=${customRouteKey}`).then(async r => r.ok ? r.json() : []).then(d => {
+      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, hours: d[0]?.estimated_hours_to_complete ?? null });
+    }).catch(() => {
+      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, hours: null });
+    });
+    return () => { cancelled = true; };
+  }, [customRouteKey]);
 
   // --- LOGIC ---
   const process = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
@@ -105,7 +104,8 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const hours = Number(predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete);
   const estimate = Number.isFinite(hours) && hours >= 0 ? new Date(estimateBase + hours * 3600000) : null;
   const edc = estimate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(estimate) : null;
-  const customEdc = form.customRoute?.stops?.every(Boolean) && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + customHours * 3600000)) : null;
+  const customHours = customEstimate.routeKey === customRouteKey ? customEstimate.hours : null;
+  const customEdc = form.customRoute?.stops?.every(Boolean) && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(estimateBase + customHours * 3600000)) : null;
   const resolvedEdc = form.customRoute ? customEdc : edc;
 
   const submit = async e => {
@@ -150,8 +150,8 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">Office Submissions</h2>
-          <p className="text-xs text-gray-500 font-medium mt-1">Manage and track documents submitted by your office.</p>
+          <h2 className="text-xl font-black text-gray-900 tracking-tight">Personal Submissions</h2>
+          <p className="text-xs text-gray-500 font-medium mt-1">Manage and track only the documents you submitted.</p>
         </div>
         <button 
           onClick={() => { setEstimateBase(Date.now()); setLoading(true); setShowModal(true); workflows(); }} 

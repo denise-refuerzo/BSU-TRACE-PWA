@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X,
   ChevronDown, Boxes, CalendarClock
 } from 'lucide-react';
-import { fetchWithAuth } from '../../../api';
+import { endSession, fetchWithAuth } from '../../../api';
 import { prepareDemandChart } from './demandAnalytics';
 import { Smartphone } from 'lucide-react';
 import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
@@ -29,6 +29,8 @@ import UserProfileTab from '../../shared/components/UserProfileTab';
 import FloatingChat from '../../shared/components/FloatingChat';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
+import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
 
 // Modals
 import QRScannerModal from './modals/QRScannerModal';
@@ -106,6 +108,7 @@ export default function GSOAdminDashboard() {
     bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
+  const submissionAccess = useSubmissionAccess(userId);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -472,10 +475,9 @@ export default function GSOAdminDashboard() {
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Yes, Sign Out'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
-        localStorage.clear();
+        await endSession();
         navigate('/login');
       }
     });
@@ -696,8 +698,10 @@ export default function GSOAdminDashboard() {
               aria-current={activeTab === 'submissions' ? 'page' : undefined}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'submissions' ? 'bg-red-700 text-white border-l-4 border-red-300 shadow-sm' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}
             >
-              <Archive size={18}/> Office Submissions
+              <Archive size={18}/> Personal Submissions
             </button>
+            {submissionAccess.offices.length > 0 && <button onClick={() => handleTabSelect('office-submissions')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'office-submissions' ? 'bg-red-700 text-white border-l-4 border-red-300 shadow-sm' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><Archive size={18} /> Office Submissions</button>}
+            {submissionAccess.departments.length > 0 && <button onClick={() => handleTabSelect('department-submissions')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'department-submissions' ? 'bg-red-700 text-white border-l-4 border-red-300 shadow-sm' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><Archive size={18} /> Department Submissions</button>}
             <div>
               <button onClick={() => setResourcesExpanded(value => !value)} aria-expanded={resourcesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['resources','procurement','manage-bookings'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
                 <span className="flex items-center gap-3"><Archive size={18} /> School Resources</span>
@@ -808,6 +812,8 @@ export default function GSOAdminDashboard() {
           )}
 
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} />}
+          {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
+          {activeTab === 'department-submissions' && <SubmissionOverviewTab type="department" scopes={submissionAccess.departments} />}
           {activeTab === 'resources' && (
               <ResourceManagementTab key={resourceRevision}
                 onOpenRequest={(request) => {

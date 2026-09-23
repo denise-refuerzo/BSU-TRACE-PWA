@@ -1,47 +1,18 @@
-import React from 'react';
+import AccessManagementTab from './AccessManagementTab';
 
 export default function AccountManagementTab({
-  activeTab, setActiveTab, searchTerm, setSearchTerm, roleFilter, setRoleFilter,
-  filteredAccounts, setSelectedUser, message, form, setForm, handleCreateAccount, offices
+  activeTab, searchTerm, setSearchTerm, roleFilter, setRoleFilter,
+  accounts, filteredAccounts, setSelectedUser, message, emailAvailability, checkEmailAvailability,
+  form, setForm, handleCreateAccount, offices, departments
 }) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-2">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900">Account Management</h2>
-          <p className="text-sm text-gray-500 mt-1 mb-6">Manage university staff access and system permissions.</p>
-        </div>
+  if (activeTab === 'access') return <AccessManagementTab accounts={accounts} offices={offices} departments={departments} />;
 
-        {/* TAB SELECTOR CONTROL BAR */}
-        <div className="flex border-b border-gray-200 mb-6 gap-6">
-          <button 
-            type="button"
-            onClick={() => setActiveTab('registry')}
-            className={`pb-3 text-sm font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
-              activeTab === 'registry' 
-                ? 'border-[#D32F2F] text-[#D32F2F]' 
-                : 'border-transparent text-gray-400 hover:text-gray-700'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Accounts Registry
-          </button>
-          <button 
-            type="button"
-            onClick={() => setActiveTab('create')}
-            className={`pb-3 text-sm font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
-              activeTab === 'create' 
-                ? 'border-[#D32F2F] text-[#D32F2F]' 
-                : 'border-transparent text-gray-400 hover:text-gray-700'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-            </svg>
-            Create Account
-          </button>
+  return (
+    <div className="w-full">
+      <div className="w-full">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900">Accounts Management</h2>
+          <p className="text-sm text-gray-500 mt-1 mb-6">Manage university staff access and system permissions.</p>
         </div>
 
         {/* PANEL CONTEXT 1: ACCOUNTS REGISTRY TABLE */}
@@ -71,7 +42,7 @@ export default function AccountManagementTab({
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 bg-gray-50 focus:bg-white rounded-lg outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] transition-colors appearance-none cursor-pointer"
                 >
                   <option value="">All Roles</option>
-                  <option value="1">Originator</option>
+                  <option value="1">Faculty Staff</option>
                   <option value="2">Office Staff</option>
                   <option value="4">GSO Admin</option>
                   <option value="5">ICT Admin</option>
@@ -81,14 +52,14 @@ export default function AccountManagementTab({
 
             {/* Scrollable Table Container */}
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col max-h-[450px]">
-              <div className="overflow-y-auto custom-scrollbar flex-1">
-                <table className="w-full text-left border-collapse text-sm relative">
+              <div className="overflow-auto custom-scrollbar flex-1">
+                <table className="w-full min-w-[960px] text-left border-collapse text-sm relative">
                   <thead className="sticky top-0 bg-gray-50 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                     <tr className="text-gray-500 font-bold uppercase tracking-wider text-[11px]">
-                      <th className="p-4 border-b border-gray-200">User Profile / Info</th>
-                      <th className="p-4 border-b border-gray-200">Role</th>
-                      <th className="p-4 border-b border-gray-200">Station / Scope Location</th>
-                      <th className="p-4 border-b border-gray-200 text-center">Actions</th>
+                      <th className="p-4 border-b border-gray-200 whitespace-nowrap">User Profile / Info</th>
+                      <th className="p-4 border-b border-gray-200 whitespace-nowrap">Role</th>
+                      <th className="p-4 border-b border-gray-200 whitespace-nowrap">Office</th>
+                      <th className="p-4 border-b border-gray-200 text-center whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -106,40 +77,40 @@ export default function AccountManagementTab({
                                   <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">Suspended</span>
                                 )}
                               </p>
-                              <p className="text-xs text-gray-500">@{user.username} &bull; {user.uni_email}</p>
+                              <p className="text-xs text-gray-500 whitespace-nowrap">@{user.username} &bull; {user.uni_email}</p>
                             </div>
                           </div>
                         </td>
                         <td className="p-4">
-                          <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider ${
+                          <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider ${
                             user.a_id === 5 ? 'bg-purple-50 border border-purple-100 text-purple-700' :
                             user.a_id === 3 ? 'bg-amber-50 border border-amber-100 text-amber-700' :
                             user.a_id === 2 ? 'bg-blue-50 border border-blue-100 text-blue-700' : 
                             user.a_id === 4 ? 'bg-red-50 border border-red-100 text-[#D32F2F]' : 
                             'bg-gray-100 border border-gray-200 text-gray-700'
                           }`}>
-                            {user.role_name}
+                            {Number(user.a_id) === 1 ? 'Faculty Staff' : user.role_name}
                           </span>
                         </td>
                         <td className="p-4">
                           {user.office_name ? (
-                            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800 whitespace-nowrap">
                               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                               {user.office_name}
                             </div>
                           ) : user.department_name ? (
-                            <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
                               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
                               {user.department_name}
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400 italic">No Sector Bound</span>
+                            <span className="text-xs text-gray-400 italic whitespace-nowrap">No Sector Bound</span>
                           )}
                         </td>
                         <td className="p-4 text-center">
                           <button 
                             type="button"
-                            onClick={() => setSelectedUser({ ...user })}
+                            onClick={() => setSelectedUser({ ...user, _originalUniEmail: user.uni_email })}
                             className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-all text-[11px] shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-200"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -190,8 +161,9 @@ export default function AccountManagementTab({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">University Email</label>
-                  <input type="email" required value={form.email} onChange={e => setForm({...form, email: e.target.value})}
-                         className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors" placeholder="juan.delacruz@batstate-u.edu.ph" />
+                  <input type="email" required pattern="[A-Za-z0-9._%+\-]+@g\.batstate-u\.edu\.ph" title="Use an official email ending in @g.batstate-u.edu.ph" value={form.email} onChange={e => setForm({...form, email: e.target.value.toLowerCase()})} onBlur={e => checkEmailAvailability(e.target.value)}
+                         className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors" placeholder="name@g.batstate-u.edu.ph" />
+                  <p className={`mt-1.5 text-xs ${emailAvailability.available === true ? 'text-emerald-700' : emailAvailability.available === false ? 'text-red-700' : 'text-gray-500'}`}>{emailAvailability.message || 'Must end in @g.batstate-u.edu.ph and cannot already belong to another account.'}</p>
                 </div>
               </div>
 
@@ -217,32 +189,26 @@ export default function AccountManagementTab({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Account Type (Role)</label>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Role</label>
                   <select required value={form.accountType} onChange={e => setForm({...form, accountType: parseInt(e.target.value)})}
                           className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors appearance-none cursor-pointer">
                     <option value="">Select assigned role...</option>
-                    <option value="1">Originator</option>
+                    <option value="1">Faculty Staff</option>
                     <option value="2">Office Staff</option>
                     <option value="4">GSO Admin</option>
                     <option value="5">ICT Admin</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Department Scope</label>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Department {form.accountType === 1 ? '(Required)' : '(Optional)'}</label>
                   <select 
                     required={form.accountType === 1} 
                     value={form.departmentId} 
                     onChange={e => setForm({...form, departmentId: e.target.value ? parseInt(e.target.value) : ''})}
-                    disabled={form.accountType !== 1 && form.accountType !== ''}
-                    className={`w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors appearance-none ${form.accountType !== 1 && form.accountType !== '' ? 'bg-gray-100 opacity-70 cursor-not-allowed text-gray-500' : 'cursor-pointer'}`}
+                    className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors appearance-none cursor-pointer"
                   >
-                    <option value="">Select campus college...</option>
-                    <option value="1">College of Informatics and Computing Sciences</option>
-                    <option value="2">College of Accountancy, Business, Economics and International Hospitality Management</option>
-                    <option value="3">College of Arts and Sciences</option>
-                    <option value="4">College of Industrial Technology</option>
-                    <option value="5">College of Engineering</option>
-                    <option value="6">College of Teacher Education</option>
+                    <option value="">{form.accountType === 1 ? 'Choose a department...' : 'No department affiliation'}</option>
+                    {departments.map(department => <option key={department.id} value={department.id}>{department.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -251,7 +217,7 @@ export default function AccountManagementTab({
                 <div className="animate-in fade-in slide-in-from-top-4 duration-300 p-5 bg-gray-50 border border-gray-200 rounded-xl">
                   <label className="block text-xs font-bold text-[#D32F2F] uppercase mb-3 tracking-wider flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                    Assigned Office Workspace (Routing)
+                    Office {form.accountType === 4 ? '' : '(Required)'}
                   </label>
                   
                   {form.accountType === 4 ? (
@@ -264,7 +230,7 @@ export default function AccountManagementTab({
                       required value={form.officeId} onChange={e => setForm({...form, officeId: parseInt(e.target.value)})}
                       className="w-full border border-gray-300 bg-white rounded-lg px-4 py-3 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none font-semibold text-gray-800 cursor-pointer shadow-sm appearance-none"
                     >
-                      <option value="">-- Choose Assigned Campus Branch Office Stop --</option>
+                      <option value="">Choose an office...</option>
                       {offices
                         .filter(off => !/general services|\bgso\b/i.test(off.name))
                         .map((off) => (
@@ -296,42 +262,6 @@ export default function AccountManagementTab({
         )}
       </div>
 
-      {/* RIGHT SIDEBAR: ROLE DEFINITIONS */}
-      <div className="mt-14 lg:mt-0">
-        <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm sticky top-6">
-          <h4 className="text-sm font-bold text-gray-900 mb-5 flex items-center gap-2 uppercase tracking-wide border-b border-gray-100 pb-3">
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            Role Definitions
-          </h4>
-          <div className="space-y-4">
-            
-            <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-2 mb-1.5">
-                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                <p className="font-bold text-gray-900 text-sm">Originator</p>
-              </div>
-              <p className="text-xs text-gray-600 leading-relaxed">Initializes new document workflows and drafts requests across specific campus sectors.</p>
-            </div>
-
-            <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-2 mb-1.5">
-                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p className="font-bold text-blue-900 text-sm">Office Staff</p>
-              </div>
-              <p className="text-xs text-blue-800/80 leading-relaxed">Receives, signs, releases, returns, and routes documents. Staff share office submissions while actions are recorded under individual names.</p>
-            </div>
-
-            <div className="p-4 bg-red-50/50 border border-red-100 rounded-xl hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-2 mb-1.5">
-                <svg className="w-4 h-4 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>
-              <p className="font-bold text-red-900 text-sm">GSO Admin</p>
-              </div>
-              <p className="text-xs text-red-800/80 leading-relaxed">Hybrid Processor/Signee role locked permanently to the General Services office for specialized operations.</p>
-            </div>
-
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -11,7 +11,9 @@ export function useAccountManagement() {
     username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: ''
   });
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [emailAvailability, setEmailAvailability] = useState({ checking: false, available: null, message: '' });
   const [offices, setOffices] = useState([]);
+  const [departments, setDepartments] = useState([]);
 
   // --- ADVANCED MANAGEMENT REGISTRY STATES ---
   const [accounts, setAccounts] = useState([]);
@@ -19,12 +21,6 @@ export function useAccountManagement() {
   const [roleFilter, setRoleFilter] = useState('');
   const [selectedUser, setSelectedUser] = useState(null); // Tracks account loaded into editing modal
  
-  // Sync baseline lookup catalogs upon initial component mount
-  useEffect(() => {
-    fetchOffices();
-    fetchAccounts();
-  }, []);
-
   const fetchOffices = async () => {
     try {
       const res = await fetchWithAuth('/api/offices');
@@ -45,6 +41,43 @@ export function useAccountManagement() {
     }
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const res = await fetchWithAuth('/api/departments');
+      const data = await res.json();
+      if (res.ok) setDepartments(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Unable to load departments:', err);
+    }
+  };
+
+  const checkEmailAvailability = async emailValue => {
+    const email = String(emailValue || '').trim().toLowerCase();
+    if (!email) return setEmailAvailability({ checking: false, available: null, message: '' });
+    if (!/^[a-z0-9._%+-]+@g\.batstate-u\.edu\.ph$/.test(email)) {
+      setEmailAvailability({ checking: false, available: false, message: 'Use an official email ending in @g.batstate-u.edu.ph.' });
+      return;
+    }
+    setEmailAvailability({ checking: true, available: null, message: 'Checking email...' });
+    try {
+      const response = await fetchWithAuth(`/api/accounts/email-availability?email=${encodeURIComponent(email)}`);
+      const data = await response.json();
+      setEmailAvailability({ checking: false, available: Boolean(data.available), message: data.message || (data.available ? 'This email is available.' : 'This email is already registered.') });
+    } catch {
+      setEmailAvailability({ checking: false, available: null, message: 'Email availability could not be checked.' });
+    }
+  };
+
+  // Sync baseline lookup catalogs upon initial component mount
+  useEffect(() => {
+    const refreshId = window.setTimeout(() => {
+      fetchOffices();
+      fetchDepartments();
+      fetchAccounts();
+    }, 0);
+    return () => window.clearTimeout(refreshId);
+  }, []);
+
   // --- ACCOUNT CREATION SUBMISSION ---
   const handleCreateAccount = async (e) => {
     e.preventDefault();
@@ -55,7 +88,21 @@ export function useAccountManagement() {
       return; 
     }
 
-    const submissionFormPayload = { ...form };
+    const normalizedEmail = form.email.trim().toLowerCase();
+    if (!/^[a-z0-9._%+-]+@g\.batstate-u\.edu\.ph$/.test(normalizedEmail)) {
+      setMessage({ type: 'error', text: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+      return;
+    }
+    if (form.accountType === 1 && !form.departmentId) {
+      setMessage({ type: 'error', text: 'Choose a department for Faculty Staff.' });
+      return;
+    }
+    if (form.accountType === 2 && !form.officeId) {
+      setMessage({ type: 'error', text: 'Choose an office for Office Staff.' });
+      return;
+    }
+
+    const submissionFormPayload = { ...form, email: normalizedEmail };
     
     // GSO Admin Auto-Assignment Interceptor
     if (form.accountType === 4) {
@@ -63,11 +110,6 @@ export function useAccountManagement() {
       submissionFormPayload.officeId = gsoOffice?.id || null;
     } else if (form.accountType !== 2 && form.accountType !== 3) {
       submissionFormPayload.officeId = null;
-    }
-
-    // Clean out departmentId if not an Originator role to ensure database mapping alignment
-    if (form.accountType !== 1) {
-      submissionFormPayload.departmentId = null;
     }
 
     try {
@@ -81,6 +123,7 @@ export function useAccountManagement() {
       if (!response.ok) throw new Error(data.error || 'Creation failed');
 
       setMessage({ type: 'success', text: data.message });
+      setEmailAvailability({ checking: false, available: null, message: '' });
       setForm({ username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: '' });
       fetchAccounts(); // Silent refresh of registry data cache
     } catch (err) {
@@ -113,12 +156,6 @@ export function useAccountManagement() {
             payloadOfficeId = null;
           }
 
-          // Force null state if changed away from Originator
-          let payloadDeptId = selectedUser.d_id;
-          if (selectedUser.a_id !== 1) {
-            payloadDeptId = null;
-          }
-
           const response = await fetchWithAuth(`/api/accounts/${selectedUser.u_id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -127,7 +164,7 @@ export function useAccountManagement() {
               fullName: selectedUser.full_name,
               email: selectedUser.uni_email,
               accountType: selectedUser.a_id,
-              departmentId: payloadDeptId,
+              departmentId: selectedUser.d_id || null,
               officeId: payloadOfficeId,
               isActive: selectedUser.is_active // 🟢 Passed soft active state toggle to backend schema query maps
             })
@@ -159,7 +196,8 @@ export function useAccountManagement() {
     activeTab, setActiveTab,
     form, setForm,
     message,
-    offices,
+    emailAvailability, checkEmailAvailability,
+    accounts, offices, departments,
     searchTerm, setSearchTerm,
     roleFilter, setRoleFilter,
     selectedUser, setSelectedUser,
