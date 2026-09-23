@@ -1,4 +1,3 @@
-import React from 'react';
 import FacilityRequestFields from './FacilityRequestFields';
 import { X } from 'lucide-react';
 
@@ -13,7 +12,8 @@ export default function ResourceBookingModal({
   form,
   setForm,
   facilityOptions,
-  facilityOptionsLoading
+  facilityOptionsLoading,
+  signatories
 }) {
   const isVan = activeFacility === 'Van';
   const passengers = form.officialPassengers || [''];
@@ -43,17 +43,8 @@ export default function ResourceBookingModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">{isVan ? 'Department/Office :' : 'Department Unit'}</label>
-              {isVan ? (
-                <input aria-label="Department/Office" type="text" required value={form.department} onChange={e => setForm({...form, department: e.target.value})} className={inputClass} />
-              ) : (
-              <select value={form.department} onChange={e => setForm({...form, department: e.target.value})} className="w-full border px-3 py-2 text-xs rounded-lg border-neutral-300 focus:ring-1 focus:ring-red-700 outline-none bg-white font-bold text-neutral-700">
-                <option value="College of Education">College of Education</option>
-                <option value="CICS Department">CICS Department</option>
-                <option value="CABEIHM">CABEIHM</option>
-                <option value="CAS Department">CAS Department</option>
-              </select>
-              )}
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Requesting office or department</label>
+              <input aria-label="Requesting office or department" type="text" required readOnly value={form.department} className={`${inputClass} bg-neutral-50 text-neutral-600`} />
             </div>
           </div>
 
@@ -65,7 +56,7 @@ export default function ResourceBookingModal({
           </>}
 
           {activeFacility !== 'Van' ? (
-            <FacilityRequestFields {...{activeFacility, form, setForm, todayString, currentTimeString, facilityOptions, facilityOptionsLoading}} />
+            <FacilityRequestFields {...{activeFacility, form, setForm, todayString, currentTimeString, facilityOptions, facilityOptionsLoading, signatories}} />
           ) : (
             <div className="space-y-4 pt-2 border-t border-dashed border-neutral-200 animate-in fade-in">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -110,7 +101,7 @@ export default function ResourceBookingModal({
 
           {isVan && (
             <div className="space-y-5 border-t border-neutral-200 pt-5">
-              <h4 className="font-semibold text-neutral-800">GSO assignment and signatories</h4>
+              <h4 className="font-semibold text-neutral-800">Vehicle assignment and approvals</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {['Vehicle to be Used:', 'Designated Driver:', 'Plate Number:', 'License Number:'].map(label => (
                   <label key={label} className="block text-xs font-semibold text-gray-600">
@@ -119,19 +110,25 @@ export default function ResourceBookingModal({
                   </label>
                 ))}
               </div>
-              {[{title: 'Prepared/Requested by:', name: 'preparedByName', position: 'preparedByPosition'}, {title: 'Recommending Approval:', name: 'recommendingApprovalName', position: 'recommendingApprovalPosition'}].map(section => (
-                <fieldset key={section.name}>
-                  <legend className="text-xs font-semibold text-gray-600 mb-2">{section.title}</legend>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="text-xs text-neutral-600">Name
-                      <input type="text" required value={form[section.name] || ''} onChange={e => setForm({...form, [section.name]: e.target.value})} className={`${inputClass} mt-1`} />
-                    </label>
-                    <label className="text-xs text-neutral-600">Position
-                      <input type="text" required value={form[section.position] || ''} onChange={e => setForm({...form, [section.position]: e.target.value})} className={`${inputClass} mt-1`} />
-                    </label>
-                  </div>
-                </fieldset>
-              ))}
+              <fieldset>
+                <legend className="mb-2 text-xs font-semibold text-gray-600">Prepared/Requested by:</legend>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label className="text-xs text-neutral-600">Office<input type="text" readOnly value={form.preparedByPosition || 'No office assigned'} className={`${inputClass} mt-1 bg-neutral-50 text-neutral-600`} /></label>
+                  <label className="text-xs text-neutral-600">Name<input type="text" readOnly value={form.preparedByName || 'Account not found'} className={`${inputClass} mt-1 bg-neutral-50 text-neutral-600`} /></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend className="mb-2 text-xs font-semibold text-gray-600">Recommending Approval:</legend>
+                {(() => {
+                  const offices = (signatories?.offices || []).filter(office => office.recommenders.length);
+                  const selectedOffice = offices.find(office => String(office.officeId) === String(form.recommendingApprovalOfficeId));
+                  return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label className="text-xs text-neutral-600">Office<select required value={form.recommendingApprovalOfficeId || ''} onChange={e => setForm({...form, recommendingApprovalOfficeId: e.target.value, recommendingApprovalUserId: ''})} className={`${inputClass} mt-1`}><option value="">Choose an office</option>{offices.map(office => <option key={office.officeId} value={office.officeId}>{office.officeName}</option>)}</select></label>
+                    <label className="text-xs text-neutral-600">Name<select required disabled={!selectedOffice} value={form.recommendingApprovalUserId || ''} onChange={e => setForm({...form, recommendingApprovalUserId: e.target.value})} className={`${inputClass} mt-1 disabled:bg-neutral-100 disabled:text-neutral-400`}><option value="">{selectedOffice ? 'Choose a person' : 'Choose an office first'}</option>{(selectedOffice?.recommenders || []).map(person => <option key={person.userId} value={person.userId}>{person.name}</option>)}</select></label>
+                  </div>;
+                })()}
+              </fieldset>
+              {!(signatories?.offices || []).some(office => office.recommenders.length) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">A recommending signatory must be assigned by ICT Admin before this request can be submitted.</p>}
             </div>
           )}
 

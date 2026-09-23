@@ -56,10 +56,10 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
       LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE (idoc.u_id = $1 OR ($2::integer IS NOT NULL AND idoc.submission_office_id=$2)) 
+      WHERE idoc.u_id = $1
       ORDER BY idoc.ini_id DESC, (pdoc.time_out IS NULL) DESC, pdoc.pd_id DESC;
     `;
-    const result = await pool.query(query, [req.user.u_id, [2,3,4].includes(Number(req.user.a_id)) ? req.user.o_id : null]);
+    const result = await pool.query(query, [req.user.u_id]);
     res.json(result.rows.map(doc => ({...doc,
       history_logs: routeProgress(doc.route_snapshot || [],doc.history_logs || []).history
     })));

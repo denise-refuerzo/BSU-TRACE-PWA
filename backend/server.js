@@ -6,18 +6,27 @@ const jwt = require('jwt-simple');
 const bcrypt = require('bcrypt');
 const pool = require('./db');
 const {lockSchedule, availability, assertConfirmable} = require('./resourceScheduling');
+const { resolveBookingSignatories } = require('./accountAccessRoutes');
+const { resolveChatDocument: resolveChatDocumentAccess, resolveChatRoom: resolveChatRoomAccess } = require('./chatAccess');
 const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require('./mailer');
 const crypto = require('crypto');
 const axios = require('axios');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET is required.');
+const SESSION_LIFETIME_MINUTES = Math.max(30, Number(process.env.SESSION_LIFETIME_MINUTES) || 480);
+const IDLE_TIMEOUT_MINUTES = Math.max(5, Number(process.env.IDLE_TIMEOUT_MINUTES) || 30);
+const sessionExpiry = () => new Date(Date.now() + SESSION_LIFETIME_MINUTES * 60 * 1000);
+const jwtExpiry = () => Math.floor(Date.now() / 1000) + SESSION_LIFETIME_MINUTES * 60;
 
 // ==========================================
 // 0. SERVER INITIALIZATION & SETUP
 // ==========================================
 const app = express();
+// Render and similar hosts forward the original address through one proxy.
+// This keeps public/auth limits from treating every visitor as the proxy itself.
+app.set('trust proxy', 1);
 const server = http.createServer(app); // 3. Wrap Express
 
 const allowedOrigins = [
@@ -39,19 +48,50 @@ app.use(cors({
 
 app.use(express.json());
 
-// Global API Limiter: 200 requests per 15 minutes per IP
+const requestKey = req => {
+  const authorization = req.get('authorization');
+  if (authorization?.startsWith('Bearer ')) {
+    return `session:${crypto.createHash('sha256').update(authorization.slice(7)).digest('hex')}`;
+  }
+  return `ip:${ipKeyGenerator(req.ip)}`;
+};
+
+// Normal signed-in screens make several parallel reads and receive real-time
+// refresh events. Use a generous per-session ceiling while still containing
+// runaway clients and unauthenticated request floods.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
-  max: 200, 
-  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+  limit: 1200,
+  keyGenerator: requestKey,
+  message: { error: 'This session is sending requests too quickly. Please wait a moment and try again.' },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 180,
+  keyGenerator: requestKey,
+  message: { error: 'Too many changes were submitted in a short time. Please wait before trying again.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  keyGenerator: requestKey,
+  message: { error: 'Messages are being sent too quickly. Please wait a moment.' },
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
 // Strict Auth Limiter: 10 requests per 15 minutes per IP
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
-  max: 10, 
+  limit: 10,
+  keyGenerator: req => `auth:${ipKeyGenerator(req.ip)}`,
+  skipSuccessfulRequests: true,
   message: { error: 'Too many authentication attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -59,6 +99,7 @@ const authLimiter = rateLimit({
 
 // Apply global limiter to all standard API routes
 app.use('/api', globalLimiter);
+app.use('/api', (req, res, next) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? writeLimiter(req, res, next) : next());
 
 const io = new Server(server, {
   cors: {
@@ -80,10 +121,13 @@ io.use(async (socket, next) => {
   if (!token) return next();
   try {
     const decoded = jwt.decode(token, JWT_SECRET);
-    const result = await pool.query(`SELECT u_id,public_id,a_id,o_id,session_token,is_active
+    const result = await pool.query(`SELECT u_id,public_id,a_id,o_id,d_id,session_token,is_active,session_expires_at,last_activity_at
       FROM public."User" WHERE public_id=$1`, [decoded.sub]);
     const user = result.rows[0];
-    if (user?.is_active && user.session_token === decoded.session_token) socket.user = user;
+    const now = Date.now();
+    const idleDeadline = user?.last_activity_at ? new Date(user.last_activity_at).getTime() + IDLE_TIMEOUT_MINUTES * 60 * 1000 : 0;
+    if (user?.is_active && user.session_token === decoded.session_token && decoded.exp * 1000 > now &&
+        new Date(user.session_expires_at).getTime() > now && idleDeadline > now) socket.user = user;
   } catch { /* Invalid optional tokens remain unauthenticated. */ }
   next();
 });
@@ -120,6 +164,27 @@ io.on('connection', (socket) => {
   socket.on('join-office-room', (officeId) => {
     if (socket.user?.o_id && Number(officeId) === Number(socket.user.o_id)) {
       socket.join(`office_${socket.user.o_id}`);
+    }
+  });
+
+  socket.on('join-submission-overview-rooms', async () => {
+    if (!socket.user) return;
+    try {
+      for (const room of socket.rooms) {
+        if (room.startsWith('overview_office_') || room.startsWith('overview_department_')) socket.leave(room);
+      }
+      const result = await pool.query(`
+        SELECT scope_type,office_id,department_id
+        FROM public.account_access_assignments aa
+        WHERE u_id=$1 AND can_view_submissions IS TRUE AND is_active IS TRUE
+          AND (starts_on IS NULL OR starts_on <= CURRENT_DATE)
+          AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)
+      `, [socket.user.u_id]);
+      result.rows.forEach(row => socket.join(row.scope_type === 'office'
+        ? `overview_office_${row.office_id}`
+        : `overview_department_${row.department_id}`));
+    } catch (error) {
+      console.error('Unable to join submission overview rooms:', error.message);
     }
   });
 
@@ -185,7 +250,7 @@ app.post('/api/login', authLimiter, async (req, res) => {
               a.account_type, d.department_name, u.full_name
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
-       JOIN public.department d ON u.d_id = d.d_id
+       LEFT JOIN public.department d ON u.d_id = d.d_id
        WHERE u.username = $1`,
       [username]
     );
@@ -235,14 +300,15 @@ app.post('/api/login', authLimiter, async (req, res) => {
     // NORMAL LOGIC: If 2FA is OFF, generate token immediately
     // ----------------------------------------------------
     const sessionToken = crypto.randomBytes(32).toString('hex');
-    await pool.query('UPDATE public."User" SET session_token = $1 WHERE u_id = $2', [sessionToken, user.u_id]);
+    await pool.query('UPDATE public."User" SET session_token=$1,session_expires_at=$2,last_activity_at=NOW() WHERE u_id=$3', [sessionToken, sessionExpiry(), user.u_id]);
     
     // Maintain the JWT payload structure required by your middleware
     const token = jwt.encode({ 
       sub: user.public_id,
       username: username, 
       a_id: user.a_id,
-      session_token: sessionToken 
+      session_token: sessionToken,
+      exp: jwtExpiry()
     }, JWT_SECRET);
 
     return res.status(200).json({
@@ -289,7 +355,7 @@ const requireAuth = async (req, res, next) => {
     }
     
     // Check the database to see if the session token matches the current one
-    const result = await pool.query('SELECT u_id,session_token,a_id,o_id,d_id,is_active,public_id FROM public."User" WHERE public_id = $1', [decoded.sub]);
+    const result = await pool.query('SELECT u_id,session_token,a_id,o_id,d_id,is_active,public_id,session_expires_at,last_activity_at FROM public."User" WHERE public_id = $1', [decoded.sub]);
     
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'User account no longer exists.', forceLogout: true });
@@ -305,14 +371,40 @@ const requireAuth = async (req, res, next) => {
       });
     }
 
+    const now = Date.now();
+    const lastActivity = result.rows[0].last_activity_at ? new Date(result.rows[0].last_activity_at).getTime() : 0;
+    const idleDeadline = lastActivity + IDLE_TIMEOUT_MINUTES * 60 * 1000;
+    const absoluteDeadline = result.rows[0].session_expires_at ? new Date(result.rows[0].session_expires_at).getTime() : 0;
+    if (!decoded.exp || decoded.exp * 1000 <= now || absoluteDeadline <= now || idleDeadline <= now) {
+      await pool.query('UPDATE public."User" SET session_token=NULL,session_expires_at=NULL,last_activity_at=NULL WHERE u_id=$1', [result.rows[0].u_id]);
+      return res.status(401).json({ error: 'Your session expired due to inactivity or reaching its maximum lifetime.', forceLogout: true });
+    }
+
     // If it matches, attach user info to req and proceed
     if (!result.rows[0].is_active) return res.status(403).json({error:'Account is inactive.'});
     req.user = {...decoded, ...result.rows[0]};
+    if (now - lastActivity > 60 * 1000) {
+      pool.query('UPDATE public."User" SET last_activity_at=NOW() WHERE u_id=$1 AND session_token=$2', [req.user.u_id, decoded.session_token]).catch(() => {});
+    }
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token.', forceLogout: true });
   }
 };
+
+app.post('/api/logout', requireAuth, async (req, res) => {
+  try {
+    await pool.query(`UPDATE public."User"
+      SET session_token=NULL,session_expires_at=NULL,last_activity_at=NULL
+      WHERE u_id=$1 AND session_token=$2`, [req.user.u_id, req.user.session_token]);
+    res.json({ message: 'Signed out successfully.' });
+  } catch (error) {
+    console.error('Logout failed:', error);
+    res.status(500).json({ error: 'Unable to end the session.' });
+  }
+});
+
+app.post('/api/session/activity', requireAuth, (_req, res) => res.status(204).end());
 
 // ==========================================
 // 1.2 2FA VERIFICATION ENDPOINT
@@ -348,13 +440,12 @@ app.post('/api/login/verify-2fa', authLimiter, async (req, res) => {
     }
 
     // 3. If successful, generate the session token
-    const crypto = require('crypto');
     const sessionToken = crypto.randomBytes(32).toString('hex');
 
     // 4. Update the token in the DB and clear the temporary OTP code for security
     await pool.query(
-      'UPDATE public."User" SET session_token = $1, two_fa_code = NULL, two_fa_code_expires = NULL, two_fa_attempts = 0 WHERE u_id = $2',
-      [sessionToken, user.u_id]
+      'UPDATE public."User" SET session_token=$1,session_expires_at=$2,last_activity_at=NOW(),two_fa_code=NULL,two_fa_code_expires=NULL,two_fa_attempts=0 WHERE u_id=$3',
+      [sessionToken, sessionExpiry(), user.u_id]
     );
 
     // 5. Generate the JWT with the full payload
@@ -362,7 +453,8 @@ app.post('/api/login/verify-2fa', authLimiter, async (req, res) => {
       sub: user.public_id,
       username: user.username, 
       a_id: user.a_id,
-      session_token: sessionToken 
+      session_token: sessionToken,
+      exp: jwtExpiry()
     }, JWT_SECRET);
 
     // 6. Log the user in with the exact same payload structure as the standard login
@@ -598,7 +690,7 @@ app.get('/api/accounts', requireAuth, async (req, res) => {
                         off.office_name
                   FROM public."User" u
                   JOIN public.account a ON u.a_id = a.a_id
-                  JOIN public.department d ON u.d_id = d.d_id
+                  LEFT JOIN public.department d ON u.d_id = d.d_id
                   LEFT JOIN public.offices off ON u.o_id = off.o_id
                   ORDER BY u.u_id DESC;
                 `;
@@ -627,19 +719,48 @@ const findGsoOfficeId = async (db) => {
   return result.rows[0] ? Number(result.rows[0].o_id) : null;
 };
 
+const normalizeUniversityEmail = value => String(value || '').trim().toLowerCase();
+const isUniversityEmail = value => /^[a-z0-9._%+-]+@g\.batstate-u\.edu\.ph$/.test(value);
+const isPositiveId = value => Number.isInteger(Number(value)) && Number(value) > 0;
+
+app.get('/api/accounts/email-availability', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({ error: 'Administrator access required.' });
+  const email = normalizeUniversityEmail(req.query.email);
+  if (!isUniversityEmail(email)) return res.json({ available: false, message: 'Use an official email ending in @g.batstate-u.edu.ph.' });
+  try {
+    const result = await pool.query('SELECT 1 FROM public."User" WHERE LOWER(BTRIM(uni_email))=$1 LIMIT 1', [email]);
+    res.json({ available: !result.rowCount, message: result.rowCount ? 'This email is already registered.' : 'This email is available.' });
+  } catch (error) {
+    console.error('Email availability check failed:', error);
+    res.status(500).json({ error: 'Unable to check this email right now.' });
+  }
+});
+
 app.post('/api/accounts', requireAuth, async (req, res) => {
-  const { username, password, fullName, email, departmentId, officeId } = req.body;
+  const { username, password, fullName, departmentId, officeId } = req.body;
+  const email = normalizeUniversityEmail(req.body.email);
   const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});
   
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'Rejection: Password must be at least 6 characters long.' });
   }
+  if (!String(username || '').trim() || !String(fullName || '').trim()) return res.status(400).json({ error: 'Enter the staff member’s full name and username.' });
+  if (!isUniversityEmail(email)) {
+    return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+  }
+  if (![1, 2, 4, 5].includes(accountType)) return res.status(400).json({ error: 'Choose a valid account role.' });
+  if (accountType === 1 && !isPositiveId(departmentId)) {
+    return res.status(400).json({ error: 'Choose a department for Faculty Staff.' });
+  }
+  if (accountType === 2 && !isPositiveId(officeId)) {
+    return res.status(400).json({ error: 'Choose an office for Office Staff.' });
+  }
   
   try {
     const userCheck = await pool.query(
-      'SELECT * FROM public."User" WHERE username = $1 OR uni_email = $2', 
-      [username, email]
+      'SELECT username,uni_email FROM public."User" WHERE LOWER(username) = LOWER($1) OR LOWER(BTRIM(uni_email)) = $2',
+      [String(username || '').trim(), email]
     );
     if (userCheck.rows.length > 0) {
       return res.status(400).json({ error: 'Rejection: Username or email already registered.' });
@@ -663,19 +784,21 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
       }
     }
 
-    const assignedDepartmentId = departmentId ? parseInt(departmentId) : 1;
+    const assignedDepartmentId = departmentId ? parseInt(departmentId) : null;
 
     await pool.query(
       `INSERT INTO public."User" (a_id, d_id, username, password, full_name, uni_email, o_id) 
        VALUES ($1, $2, $3, $4, $5, $6, $7)`, 
-      [parseInt(accountType), assignedDepartmentId, username, hashedPassword, fullName, email, assignedOfficeId]
+       [parseInt(accountType), assignedDepartmentId, String(username).trim(), hashedPassword, String(fullName).trim(), email, assignedOfficeId]
     );
 
     broadcastIctConfiguration(req);
     res.status(201).json({ message: 'Success: Account architecture generated and synchronized successfully!' });
   } catch (err) {
     console.error("Account registration script processing breakdown:", err);
-    res.status(500).json({ error: 'Failed account generation sequence structural assignment loop.' });
+    if (err.code === '23505') return res.status(409).json({ error: 'That username or university email is already in use.' });
+    if (err.code === '23514') return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    res.status(500).json({ error: 'The account could not be created. Please try again.' });
   }
 });
 
@@ -684,17 +807,32 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
 // ==========================================
 app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
   const { userId } = req.params;
-  const { username, fullName, email, departmentId, officeId, isActive } = req.body;
+  const { username, fullName, departmentId, officeId, isActive } = req.body;
+  const email = normalizeUniversityEmail(req.body.email);
   const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});  
+  if (!String(username || '').trim() || !String(fullName || '').trim()) return res.status(400).json({ error: 'Enter the staff member’s full name and username.' });
+  if (![1, 2, 4, 5].includes(accountType)) return res.status(400).json({ error: 'Choose a valid account role.' });
+  if (accountType === 1 && !isPositiveId(departmentId)) return res.status(400).json({ error: 'Choose a department for Faculty Staff.' });
+  if (accountType === 2 && !isPositiveId(officeId)) return res.status(400).json({ error: 'Choose an office for Office Staff.' });
   try {
+    const currentAccount = await pool.query('SELECT uni_email FROM public."User" WHERE public_id=$1', [userId]);
+    if (!currentAccount.rowCount) return res.status(404).json({ error: 'Account not found.' });
+    const savedEmail = currentAccount.rows[0].uni_email;
+    const emailChanged = normalizeUniversityEmail(savedEmail) !== email;
+    if (emailChanged && !isUniversityEmail(email)) {
+      return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph when changing this address.' });
+    }
+    const emailToStore = emailChanged ? email : savedEmail;
+
     const duplicateCheck = await pool.query(
-      `SELECT * FROM public."User" WHERE username = $1 AND public_id != $2`,
-      [username, userId]
+      `SELECT username,uni_email FROM public."User"
+       WHERE (LOWER(username)=LOWER($1) OR LOWER(BTRIM(uni_email))=$2) AND public_id<>$3`,
+      [String(username || '').trim(), email, userId]
     );
 
     if (duplicateCheck.rows.length > 0) {
-      return res.status(400).json({ error: 'Rejection: This username identifier is already registered to another user account.' });
+      return res.status(409).json({ error: 'That username or university email is already in use.' });
     }
 
     let assignedOfficeId = ([2, 3, 4].includes(accountType) && officeId) ? parseInt(officeId) : null;
@@ -712,7 +850,7 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
       }
     }
 
-    const assignedDepartmentId = departmentId ? parseInt(departmentId) : 1;
+    const assignedDepartmentId = departmentId ? parseInt(departmentId) : null;
 
     const query = `
       UPDATE public."User"
@@ -721,16 +859,20 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
     `;
     
     await pool.query(query, [
-      username, fullName, email, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, userId
+      String(username).trim(), String(fullName).trim(), emailToStore, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, userId
     ]);
 
     broadcastIctConfiguration(req);
     res.json({ message: 'Personnel access profile parameters re-indexed and synchronized cleanly!' });
   } catch (err) {
     console.error("Account update failure:", err);
-    res.status(500).json({ error: 'Failed execution update sequence constraint loop.' });
+    if (err.code === '23505') return res.status(409).json({ error: 'That username or university email is already in use.' });
+    if (err.code === '23514') return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    res.status(500).json({ error: 'The account could not be updated. Please try again.' });
   }
 });
+
+require('./accountAccessRoutes')(app, pool, requireAuth);
 
 require('./profilePictureRoutes')(app, pool, requireAuth);
 
@@ -744,7 +886,7 @@ app.get('/api/profile/:userId', requireAuth, async (req, res) => {
               a.account_type, d.department_name, off.office_name
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
-       JOIN public.department d ON u.d_id = d.d_id
+       LEFT JOIN public.department d ON u.d_id = d.d_id
        LEFT JOIN public.offices off ON u.o_id = off.o_id
        WHERE u.u_id = $1`,
       [req.user.u_id]
@@ -854,6 +996,16 @@ app.get('/api/offices', requireAuth, async (req, res) => {
   } catch (err) {
     console.error("Error fetching offices directory:", err);
     res.status(500).json({ error: "Failed to pull campus offices directory." });
+  }
+});
+
+app.get('/api/departments', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT d_id AS id, department_name AS name FROM public.department ORDER BY department_name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching departments:', err);
+    res.status(500).json({ error: 'Unable to load the department list.' });
   }
 });
 
@@ -1134,24 +1286,11 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
 // 10. CHAT: FETCH DOCUMENT CHANNELS ENDPOINT
 // ==========================================
 const resolveChatDocument = async (publicId, user) => {
-  const officeId = [2,3,4].includes(Number(user.a_id)) ? user.o_id : null;
-  const result = await pool.query(`SELECT idoc.ini_id,idoc.submission_office_id
-    FROM public.initial_document idoc
-    WHERE idoc.public_id=$1 AND (idoc.u_id=$2 OR ($3::integer IS NOT NULL AND
-      (idoc.submission_office_id=$3 OR EXISTS (SELECT 1 FROM public.processed_document pd
-        WHERE pd.ini_id=idoc.ini_id AND pd.current_office_id=$3))))`, [publicId,user.u_id,officeId]);
-  return result.rows[0] || null;
+  return resolveChatDocumentAccess(pool, publicId, user);
 };
 
 const resolveChatRoom = async (publicId, user) => {
-  const officeId = [2,3,4].includes(Number(user.a_id)) ? user.o_id : null;
-  const result = await pool.query(`SELECT cr.room_id,cr.public_id,cr.ini_id,cr.o_id,idoc.submission_office_id
-    FROM public.chat_rooms cr JOIN public.initial_document idoc ON idoc.ini_id=cr.ini_id
-    WHERE cr.public_id=$1 AND (idoc.u_id=$2 OR ($3::integer IS NOT NULL AND
-      ((idoc.submission_office_id=$3 AND EXISTS (SELECT 1 FROM public.processed_document pd
-        WHERE pd.ini_id=idoc.ini_id AND pd.current_office_id=cr.o_id)) OR cr.o_id=$3)))`,
-    [publicId,user.u_id,officeId]);
-  return result.rows[0] || null;
+  return resolveChatRoomAccess(pool, publicId, user);
 };
 
 app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
@@ -1159,10 +1298,6 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
   try {
     const context = await resolveChatDocument(iniId, req.user);
     if (!context) return res.status(404).json({error:'Document conversation not found.'});
-    const isOfficeSubmission = Boolean(
-      context.submission_office_id && Number(context.submission_office_id) === Number(req.user.o_id)
-    );
-
     const docStepsQuery = `
       SELECT pd_id, s_id, current_office_id, next_office_id, time_in, time_out, is_adhoc, adhoc_return_office_id 
       FROM public.processed_document 
@@ -1230,6 +1365,7 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
 
     const finalChannels = [];
     for (const oId of Object.keys(officeChannels)) {
+      if (!context.is_owner && Number(oId) !== Number(req.user.o_id)) continue;
       const officeNameRes = await pool.query('SELECT office_name FROM public.offices WHERE o_id = $1', [parseInt(oId)]);
       
       // CHECK IF A CHAT ROOM ACTUALLY EXISTS AND HAS MESSAGES IN IT
@@ -1252,8 +1388,7 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
         officeName: officeNameRes.rows[0]?.office_name || `Office Station #${oId}`,
         isLocked: officeChannels[oId].isLocked,
         statusMessage: officeChannels[oId].statusMessage,
-        hasChat: hasChat,
-        isOfficeSubmission
+        hasChat: hasChat
       });
     }
 
@@ -1273,7 +1408,7 @@ app.post('/api/chat/get-or-create-room', requireAuth, async (req, res) => {
     const document = await resolveChatDocument(iniId, req.user);
     if (!document) return res.status(404).json({error:'Document conversation not found.'});
     const requestedOfficeId = Number(officeId);
-    const mayChooseStation = Number(req.user.a_id) === 1 || Number(document.submission_office_id) === Number(req.user.o_id);
+    const mayChooseStation = Boolean(document.is_owner);
     if (!mayChooseStation && requestedOfficeId !== Number(req.user.o_id)) return res.status(403).json({error:'This office conversation is not available to your account.'});
     const station = await pool.query('SELECT 1 FROM public.processed_document WHERE ini_id=$1 AND current_office_id=$2 LIMIT 1',[document.ini_id,requestedOfficeId]);
     if (!station.rows.length) return res.status(404).json({error:'Office station not found in this document route.'});
@@ -1327,7 +1462,7 @@ app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
 // ==========================================
 // 10.3 CHAT: SEND MESSAGE ENDPOINT
 // ==========================================
-app.post('/api/chat/messages', requireAuth, async (req, res) => {
+app.post('/api/chat/messages', requireAuth, chatLimiter, async (req, res) => {
   const { roomId, messageText } = req.body;
   const senderId = req.user.u_id;
 
@@ -1388,41 +1523,32 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
     let query = '';
     let params = [];
 
-    if (roleId === 1) {
-      query = `
-        SELECT idoc.public_id AS ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
-          false AS "isOfficeSubmission",
-          EXISTS (
-            SELECT 1 FROM public.chat_rooms cr
-            JOIN public.chat_messages cm ON cr.room_id = cm.room_id
-            WHERE cr.ini_id = idoc.ini_id
-          ) AS "hasAnyChat"
-        FROM public.initial_document idoc
-        WHERE idoc.u_id = $1
-        ORDER BY idoc.ini_id DESC;
-      `;
-      params = [userId];
-    } else if ([2,3,4].includes(Number(roleId))) {
+    if ([1,2,3,4].includes(Number(roleId))) {
+      let officeId = null;
+      if ([2,3,4].includes(Number(roleId))) {
       const userOfficeRes = await pool.query('SELECT o_id FROM public."User" WHERE u_id = $1', [userId]);
-      const officeId = userOfficeRes.rows[0]?.o_id;
-
-      if (!officeId) return res.json([]);
+        officeId = userOfficeRes.rows[0]?.o_id || null;
+      }
 
       query = `
-        SELECT DISTINCT ON (idoc.ini_id) 
+        SELECT
           idoc.public_id AS ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
-          (idoc.submission_office_id = $1) AS "isOfficeSubmission",
+          (idoc.u_id = $1) AS "isPersonalSubmission",
           EXISTS (
             SELECT 1 FROM public.chat_rooms cr
             JOIN public.chat_messages cm ON cr.room_id = cm.room_id
             WHERE cr.ini_id = idoc.ini_id
           ) AS "hasAnyChat"
         FROM public.initial_document idoc
-        JOIN public.processed_document pd ON idoc.ini_id = pd.ini_id
-        WHERE (pd.current_office_id = $1 OR idoc.submission_office_id = $1)
+        JOIN LATERAL (
+          SELECT pd.current_office_id,pd.s_id FROM public.processed_document pd
+          WHERE pd.ini_id=idoc.ini_id AND pd.time_out IS NULL
+          ORDER BY pd.pd_id DESC LIMIT 1
+        ) active ON active.s_id<>5
+        WHERE idoc.u_id=$1 OR ($2::integer IS NOT NULL AND active.current_office_id=$2)
         ORDER BY idoc.ini_id DESC;
       `;
-      params = [officeId];
+      params = [userId, officeId];
     } else {
       return res.json([]);
     }
@@ -1753,16 +1879,32 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
     bookingType, assetName, reservationDate, purpose, department,
     startTime, endTime, expectedAttendees, intendedDates, facilityDetails,
     destination, officialPassengers, serviceTypeId, pickUpTime, dropOffTime,
-    preparedByName, preparedByPosition, recommendingApprovalName, recommendingApprovalPosition
+    recommendingApprovalOfficeId, recommendingApprovalUserId,
+    approvedByOfficeId, approvedByUserId
   } = req.body;
+
+  let assignedSignatories;
+  try {
+    assignedSignatories = await resolveBookingSignatories(pool, req.user.u_id, {
+      recommendingApprovalOfficeId, recommendingApprovalUserId,
+      approvedByOfficeId, approvedByUserId
+    });
+  } catch (error) {
+    console.error('Booking signatory lookup failed:', error);
+    return res.status(500).json({ error: 'The assigned approvers could not be loaded.' });
+  }
+  if (!assignedSignatories?.requestedBy) return res.status(404).json({ error: 'Your account profile could not be loaded.' });
 
   const passengerNames = Array.isArray(officialPassengers)
     ? officialPassengers.map(name => typeof name === 'string' ? name.trim() : '') : [];
   if (bookingType === 'Vehicle') {
-    const requiredText = [department, purpose, destination, preparedByName, preparedByPosition, recommendingApprovalName, recommendingApprovalPosition];
+    if (!assignedSignatories.recommendingApproval) {
+      return res.status(400).json({ error: 'Choose an available recommending signatory and office.' });
+    }
+    const requiredText = [department, purpose, destination];
     if (!requiredText.every(value => typeof value === 'string' && value.trim()) ||
         passengerNames.length === 0 || passengerNames.some(name => !name)) {
-      return res.status(400).json({ error: 'Complete the travel details, official passenger names, and both name/position sections.' });
+      return res.status(400).json({ error: 'Complete the travel details and official passenger names.' });
     }
     if (!['1', '2', '3'].includes(String(serviceTypeId))) {
       return res.status(400).json({ error: 'Choose a valid service type.' });
@@ -1779,13 +1921,16 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
   const dates = isFacility ? intendedDates : [reservationDate];
   let details = null;
   if (isFacility) {
+    if (!assignedSignatories.recommendingApproval || !assignedSignatories.approvedBy) {
+      return res.status(400).json({ error: 'Choose an available recommending signatory and final signatory.' });
+    }
     if (!Array.isArray(dates) || dates.length === 0 || !dates.every(validDate) || new Set(dates).size !== dates.length) {
       return res.status(400).json({error: 'Provide unique, valid intended dates of use.'});
     }
     const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
     if (!validTime(startTime) || !validTime(endTime) || startTime >= endTime ||
-        !Number.isInteger(Number(expectedAttendees)) || Number(expectedAttendees) < 1) {
-      return res.status(400).json({error: 'Provide valid start/end times and a positive whole-number attendance.'});
+        !Number.isInteger(Number(expectedAttendees)) || Number(expectedAttendees) < 1 || Number(expectedAttendees) > 99999) {
+      return res.status(400).json({error: 'Provide valid start/end times and an expected attendance from 1 to 99,999.'});
     }
     if (!facilityDetails || typeof facilityDetails !== 'object' || Array.isArray(facilityDetails) ||
         typeof department !== 'string' || !department.trim()) {
@@ -1809,12 +1954,21 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
         details[`${key}Other`] = other.trim();
       }
     }
-    for (const key of ['personInChargeName', 'personInChargePosition', 'requestedByName', 'requestedByPosition', 'reviewedByName', 'reviewedByPosition', 'approvedByName', 'approvedByPosition']) {
+    for (const key of ['personInChargeName', 'personInChargePosition']) {
       if (typeof facilityDetails[key] !== 'string' || !facilityDetails[key].trim()) {
-        return res.status(400).json({error: 'Complete all name and position fields.'});
+        return res.status(400).json({error: 'Complete the person-in-charge name and position.'});
       }
       details[key] = facilityDetails[key].trim();
     }
+    details.requestedByName = assignedSignatories.requestedBy.name;
+    details.requestedByPosition = assignedSignatories.requestedBy.officeName;
+    details.requestedByUserId = assignedSignatories.requestedBy.userId;
+    details.reviewedByName = assignedSignatories.recommendingApproval.name;
+    details.reviewedByPosition = assignedSignatories.recommendingApproval.officeName;
+    details.reviewedByUserId = assignedSignatories.recommendingApproval.userId;
+    details.approvedByName = assignedSignatories.approvedBy.name;
+    details.approvedByPosition = assignedSignatories.approvedBy.officeName;
+    details.approvedByUserId = assignedSignatories.approvedBy.userId;
     if (facilityDetails.remarks != null && typeof facilityDetails.remarks !== 'string') {
       return res.status(400).json({error: 'Remarks must be text.'});
     }
@@ -1854,10 +2008,13 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
 
       await client.query(
         `INSERT INTO public.vehicle_requirements (asd_id, sv_id, booking_id, destination, passenger_count, pick_up_time, drop_off_time,
-          official_passengers, prepared_by_name, prepared_by_position, recommending_approval_name, recommending_approval_position)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          official_passengers, prepared_by_name, prepared_by_position, recommending_approval_name, recommending_approval_position,
+          prepared_by_user_id,recommending_approval_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [asdId, parseInt(serviceTypeId) || 3, bookingId, destination, passengerNames.length, finalizedPickUp, finalizedDropOff,
-          passengerNames, preparedByName.trim(), preparedByPosition.trim(), recommendingApprovalName.trim(), recommendingApprovalPosition.trim()]
+          passengerNames, assignedSignatories.requestedBy.name, assignedSignatories.requestedBy.officeName,
+          assignedSignatories.recommendingApproval.name, assignedSignatories.recommendingApproval.officeName,
+          assignedSignatories.requestedBy.userId, assignedSignatories.recommendingApproval.userId]
       );
     }
 

@@ -7,10 +7,11 @@ const API = axios.create({
   baseURL: API_BASE_URL,
 });
 let logoutPromptActive = false;
+const inFlightGets = new Map();
 
 export default API;
 
-export const fetchWithAuth = async (url, options = {}) => {
+const performAuthenticatedFetch = async (url, options = {}) => {
   const token = localStorage.getItem('token');
   
   // Form the full URL if a relative path is passed
@@ -31,32 +32,51 @@ export const fetchWithAuth = async (url, options = {}) => {
   // without locking the data stream for your components.
   const clonedResponse = response.clone();
   
-  try {
-    const data = await clonedResponse.json();
+  let data = null;
+  try { data = await clonedResponse.json(); } catch { /* Empty and non-JSON responses are valid. */ }
 
-    // 🚨 THE KICK-OUT INTERCEPTOR: Checks if another device logged in
-    if (response.status === 401 && data.forceLogout) {
-      if (!logoutPromptActive) {
-        logoutPromptActive = true;
-        // Remove the unusable credentials immediately. Waiting for the user to
-        // dismiss the dialog would let mounted views keep retrying the same token.
-        localStorage.clear();
-        Swal.fire({
-          title: 'Session Expired',
-          text: data.error || 'Your session is no longer valid. Please sign in again.',
-          icon: 'warning',
-          confirmButtonColor: '#800000',
-          allowOutsideClick: false
-        }).then(() => {
-          window.location.href = '/login'; // Boot them back to the login screen
-        });
-      }
-      throw new Error('Session terminated by concurrent login.');
+  // Handles concurrent login, inactivity expiry, and absolute session expiry.
+  if (response.status === 401 && data?.forceLogout) {
+    if (!logoutPromptActive) {
+      logoutPromptActive = true;
+      localStorage.clear();
+      Swal.fire({
+        title: 'Session Expired',
+        text: data.error || 'Your session is no longer valid. Please sign in again.',
+        icon: 'warning',
+        confirmButtonColor: '#800000',
+        allowOutsideClick: false
+      }).then(() => {
+        window.location.href = '/login';
+      });
     }
-  } catch {
-    // Fails silently if the response body is empty or not JSON
   }
 
   // Return the raw response object so res.json() and res.ok function perfectly in your views
   return response;
+};
+
+export const fetchWithAuth = async (url, options = {}) => {
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method !== 'GET') return performAuthenticatedFetch(url, options);
+  const key = `${localStorage.getItem('token') || ''}:${url}`;
+  if (!inFlightGets.has(key)) {
+    inFlightGets.set(key, performAuthenticatedFetch(url, options).finally(() => inFlightGets.delete(key)));
+  }
+  const response = await inFlightGets.get(key);
+  return response.clone();
+};
+
+export const endSession = async () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    try {
+      await fetch(`${API_BASE_URL}/api/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+      });
+    } catch { /* Local cleanup must still complete if the server is unavailable. */ }
+  }
+  localStorage.clear();
+  sessionStorage.removeItem('bsu_pwa_banner_dismissed');
 };

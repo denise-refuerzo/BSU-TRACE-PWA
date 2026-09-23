@@ -8,9 +8,12 @@ const broadcastDocumentUpdate = async (req, db, originUserId, currentOfficeId, n
   if (!io) return;
 
   if (originUserId) {
-    const result = await db.query('SELECT public_id FROM public."User" WHERE u_id=$1', [originUserId]);
-    const publicUserId = result.rows[0]?.public_id;
+    const result = await db.query('SELECT public_id,o_id,d_id FROM public."User" WHERE u_id=$1', [originUserId]);
+    const originUser = result.rows[0];
+    const publicUserId = originUser?.public_id;
     if (publicUserId) io.to(`user_${publicUserId}`).emit('document-updated');
+    if (originUser?.o_id) io.to(`overview_office_${originUser.o_id}`).emit('submission-overview-updated');
+    if (originUser?.d_id) io.to(`overview_department_${originUser.d_id}`).emit('submission-overview-updated');
   }
   if (currentOfficeId) io.to(`office_${currentOfficeId}`).emit('pipeline-updated');
   if (nextOfficeId) io.to(`office_${nextOfficeId}`).emit('pipeline-updated');
