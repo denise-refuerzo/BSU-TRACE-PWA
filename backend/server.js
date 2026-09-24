@@ -2370,7 +2370,7 @@ app.get('/api/analytics/peak-demand', requireAuth, async (req, res) => {
 // ==========================================
 app.get('/api/analytics/bottlenecks', async (req, res) => {
     try {
-        const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/bottlenecks`);
+        const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/bottlenecks`, { params: req.query });
         res.json(response.data);
     } catch (error) {
         console.error('Error fetching bottleneck analytics:', error.message);
@@ -2396,7 +2396,7 @@ app.get('/api/analytics/edc', requireAuth, async (req, res) => {
 // ==========================================
 app.get('/api/analytics/route-performance', requireAuth, async (req, res) => {
   try {
-      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/route-performance`);
+      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/route-performance`, { params: req.query });
       res.json(response.data);
   } catch (error) {
       console.error('Error fetching route performance analytics:', error.message);
@@ -2422,7 +2422,7 @@ app.get('/api/analytics/system-health', requireAuth, async (req, res) => {
 // ==========================================
 app.get('/api/analytics/administrative-insights', requireAuth, async (req, res) => {
   try {
-      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/administrative-insights`);
+      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/administrative-insights`, { params: req.query });
       res.json(response.data);
   } catch (error) {
       console.error('Error fetching administrative insights:', error.message);

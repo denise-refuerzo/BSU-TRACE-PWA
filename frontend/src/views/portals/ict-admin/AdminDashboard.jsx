@@ -255,7 +255,7 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        <main className="p-4 md:p-8 max-w-5xl w-full mx-auto space-y-6 md:space-y-8">
+        <main className={`w-full space-y-6 p-4 md:p-8 md:space-y-8 ${activeSidebar === 'analytics' ? 'max-w-none' : 'mx-auto max-w-5xl'}`}>
           {activeSidebar === 'dashboard' && <DashboardOverviewTab data={dashboardData} />}
           {activeSidebar === 'accounts' && <AccountManagementTab {...accountProps} />}
           

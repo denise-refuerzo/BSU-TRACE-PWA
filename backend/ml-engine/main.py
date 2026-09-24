@@ -25,10 +25,10 @@ app.add_middleware(
 )
 
 @app.get("/api/analytics/bottlenecks")
-def get_bottlenecks():
+def get_bottlenecks(start: str | None = None, end: str | None = None):
     """Endpoint serving descriptive bottleneck analytics for heatmap rendering."""
     try:
-        data = calculate_office_dwell_times()
+        data = calculate_office_dwell_times(start, end)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analytical engine error: {str(e)}")
@@ -55,12 +55,12 @@ def get_peak_demand_forecast():
         raise HTTPException(status_code=500, detail=f"Forecasting engine error: {str(e)}")
     
 @app.get("/api/analytics/route-performance")
-def get_route_performance():
+def get_route_performance(start: str | None = None, end: str | None = None):
     """Endpoint serving document routing and vehicle scheduling performance."""
     try:
         return {
-            "document_routes": calculate_document_routing_efficiency(),
-            "vehicle_scheduling": calculate_vehicle_scheduling_performance()
+            "document_routes": calculate_document_routing_efficiency(start, end),
+            "vehicle_scheduling": calculate_vehicle_scheduling_performance(start, end)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Routing analytics error: {str(e)}")
@@ -74,10 +74,10 @@ def get_system_health():
         raise HTTPException(status_code=500, detail=f"Health monitoring error: {str(e)}")
 
 @app.get("/api/analytics/administrative-insights")
-def get_admin_insights():
+def get_admin_insights(start: str | None = None, end: str | None = None):
     """Administrative traffic, document-frequency, and asset-use summaries."""
     try:
-        return get_administrative_insights()
+        return get_administrative_insights(start, end)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Administrative analytics error: {str(e)}")
     

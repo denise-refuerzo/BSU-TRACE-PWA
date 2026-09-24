@@ -1,14 +1,23 @@
 import pandas as pd
 from database import get_db_connection
 
-def calculate_document_routing_efficiency():
+def calculate_document_routing_efficiency(start_date=None, end_date=None):
     """Summarize true end-to-end turnaround for each document process.
 
     A processed_document row is one office stop, so averaging those rows only
     reports stop dwell time.  Aggregate each document first to keep this metric
     distinct from the office bottleneck calculation.
     """
-    query = """
+    completion_filters = []
+    params = []
+    if start_date:
+        completion_filters.append("MAX(pd.time_out)::date >= %s")
+        params.append(start_date)
+    if end_date:
+        completion_filters.append("MAX(pd.time_out)::date <= %s")
+        params.append(end_date)
+    having_clause = f"HAVING {' AND '.join(completion_filters)}" if completion_filters else ''
+    query = f"""
         WITH completed_documents AS (
             SELECT
                 pt.process_name AS route_name,
@@ -31,8 +40,9 @@ def calculate_document_routing_efficiency():
                   FROM public.processed_document open_stop
                   WHERE open_stop.ini_id = pd.ini_id
                     AND open_stop.time_out IS NULL
-              )
+            )
             GROUP BY pt.process_name, pd.ini_id
+            {having_clause}
         )
         SELECT
             route_name,
@@ -45,7 +55,7 @@ def calculate_document_routing_efficiency():
         ORDER BY avg_completion_hours DESC;
     """
     with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn, params=tuple(params))
     if df.empty:
         return []
     numeric_columns = [
@@ -60,18 +70,29 @@ def calculate_document_routing_efficiency():
     return df.to_dict(orient='records')
 
 
-def calculate_vehicle_scheduling_performance():
-    query = """
+def calculate_vehicle_scheduling_performance(start_date=None, end_date=None):
+    filters = []
+    params = []
+    if start_date:
+        filters.append("b.reservation_date >= %s")
+        params.append(start_date)
+    if end_date:
+        filters.append("b.reservation_date <= %s")
+        params.append(end_date)
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ''
+    query = f"""
         SELECT 
             a.asset_name,
             COUNT(v.v_id) AS total_trips,
             AVG(EXTRACT(EPOCH FROM (v.drop_off_time - v.pick_up_time))) AS avg_trip_seconds
         FROM public.vehicle_requirements v
         JOIN public.asset_details a ON v.asd_id = a.asd_id
+        JOIN public.bookings b ON v.booking_id = b.booking_id
+        {where_clause}
         GROUP BY a.asset_name;
     """
     with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn, params=tuple(params))
     if df.empty:
         return []
     df['avg_turnaround_hours'] = (df['avg_trip_seconds'] / 3600).round(2)
