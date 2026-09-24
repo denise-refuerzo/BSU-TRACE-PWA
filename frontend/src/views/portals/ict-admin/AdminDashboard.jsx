@@ -47,12 +47,26 @@ export default function AdminDashboard() {
   const accountProps = useAccountManagement();
   const matrixProps = useRolesPermissions();
 
+  const accountSectionTitles = {
+    registry: 'Account Registry',
+    create: 'Create Account',
+    access: 'Access & Responsibilities'
+  };
+
+  const systemSectionTitles = {
+    offices: 'Office Locations',
+    departments: 'Departments',
+    categories: 'Document Types',
+    workflows: 'Document Workflows',
+    requests: 'Additional Routing'
+  };
+
   const getHeaderTitle = () => {
     switch (activeSidebar) {
-      case 'accounts': return "";
-      case 'matrix': return "";
-      case 'analytics': return "";
-      default: return "";
+      case 'accounts': return accountSectionTitles[accountProps.activeTab] || 'Accounts Management';
+      case 'matrix': return systemSectionTitles[systemManagementSection] || 'System Management';
+      case 'analytics': return 'Operational Analytics';
+      default: return 'Operations Control Center';
     }
   };
 
@@ -225,8 +239,13 @@ export default function AdminDashboard() {
             >
               <Menu size={22} />
             </button>
-            <div className="text-neutral-900 font-black text-xs uppercase tracking-wider font-mono truncate">
-              {getHeaderTitle()}
+            <div className="min-w-0 text-left">
+              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+                {getHeaderTitle()}
+              </h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                ICT Administration
+              </p>
             </div>
           </div>
 

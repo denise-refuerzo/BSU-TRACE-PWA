@@ -200,6 +200,19 @@ export default function GSOAdminDashboard() {
     setIsSidebarOpen(false);
   };
 
+  const tabTitles = {
+    dashboard: 'GSO Dashboard',
+    submissions: 'Personal Submissions',
+    'office-submissions': 'Office Submissions',
+    'department-submissions': 'Department Submissions',
+    resources: 'Resource Inventory',
+    procurement: 'List of Requests',
+    'manage-bookings': 'Manage Bookings',
+    analytics: 'Operational Analytics',
+    history: 'GSO Transaction History',
+    profile: 'Profile Management'
+  };
+
   const handleNavigateToProcurement = (sectionKey) => {
     setProcurementTargetSection(sectionKey);
     setActiveTab('procurement');
@@ -742,15 +755,25 @@ export default function GSOAdminDashboard() {
       <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* HEADER */}
         <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
-            aria-label="Open menu"
-          >
-            <Menu size={22} />
-          </button>
+          <div className="flex min-w-0 items-center gap-3 text-left">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+                {tabTitles[activeTab] || 'GSO Admin Portal'}
+              </h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                Assigned: {gsoOfficeName || 'General Services Office'}
+              </p>
+            </div>
+          </div>
 
-          <div className="flex items-center gap-2 md:gap-4 text-neutral-600 ml-auto">
+          <div className="ml-auto flex items-center gap-2 text-neutral-600 md:gap-4">
             <div className="relative" ref={notificationRef}>
               <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 relative transition-colors">
                 <Bell size={20} />
