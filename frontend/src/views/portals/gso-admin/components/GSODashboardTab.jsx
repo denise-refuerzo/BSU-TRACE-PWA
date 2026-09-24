@@ -177,6 +177,7 @@ export default function GSODashboardTab({
                 onChange={e => setDemandTimeFilter && setDemandTimeFilter(Number(e.target.value))} 
                 className="w-full text-[9px] font-bold uppercase bg-gray-50 border border-gray-200 rounded p-1 outline-none cursor-pointer sm:w-auto"
               >
+                <option value={2}>2 Months</option>
                 <option value={3}>3 Months</option>
                 <option value={6}>6 Months</option>
                 <option value={9}>9 Months</option>

@@ -39,6 +39,60 @@ export function sortMetricRows(rows = [], valueKey, direction = 'desc') {
   });
 }
 
+export function summarizeDemandForecast(rows = []) {
+  const forecastRows = rows.filter(row => row?.type === 'forecast' && row?.date);
+  if (!forecastRows.length) return null;
+
+  const vehicleTotal = forecastRows.reduce((total, row) => total + (Number(row.vehicle_demand) || 0), 0);
+  const facilityTotal = forecastRows.reduce((total, row) => total + (Number(row.facility_demand) || 0), 0);
+  const weekdayGroups = new Map();
+  let weekdayTotal = 0;
+  let weekdayCount = 0;
+  let weekendTotal = 0;
+  let weekendCount = 0;
+
+  forecastRows.forEach(row => {
+    const day = new Date(`${row.date}T00:00:00Z`).getUTCDay();
+    const combined = (Number(row.vehicle_demand) || 0) + (Number(row.facility_demand) || 0);
+    const group = weekdayGroups.get(day) || { total: 0, count: 0 };
+    weekdayGroups.set(day, { total: group.total + combined, count: group.count + 1 });
+    if (day === 0 || day === 6) {
+      weekendTotal += combined;
+      weekendCount += 1;
+    } else {
+      weekdayTotal += combined;
+      weekdayCount += 1;
+    }
+  });
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const busiestDay = [...weekdayGroups.entries()]
+    .filter(([day]) => day > 0 && day < 6)
+    .map(([day, value]) => ({ day, average: value.total / value.count }))
+    .sort((left, right) => right.average - left.average)[0];
+  const metadata = forecastRows[0];
+  const vehicleSeasonal = Number(metadata.vehicle_seasonality_score || 0) >= 0.30;
+  const facilitySeasonal = Number(metadata.facility_seasonality_score || 0) >= 0.30;
+
+  return {
+    days: forecastRows.length,
+    vehicleTotal,
+    facilityTotal,
+    vehicleDailyAverage: vehicleTotal / forecastRows.length,
+    facilityDailyAverage: facilityTotal / forecastRows.length,
+    weekdayDailyAverage: weekdayCount ? weekdayTotal / weekdayCount : 0,
+    weekendDailyAverage: weekendCount ? weekendTotal / weekendCount : 0,
+    busiestWeekday: busiestDay ? dayNames[busiestDay.day] : 'Unavailable',
+    busiestWeekdayAverage: busiestDay?.average || 0,
+    dominantDemand: facilityTotal >= vehicleTotal ? 'facilities' : 'vans',
+    forecastBasis: vehicleSeasonal && facilitySeasonal
+      ? 'Validated weekly pattern'
+      : vehicleSeasonal || facilitySeasonal
+        ? 'Mixed seasonal and baseline estimate'
+        : 'Conservative weekday baseline'
+  };
+}
+
 export function prepareDemandChart(rows = [], months = 3) {
   const filteredRows = filterDemandByMonths(rows, months);
   const lastHistoricalIndex = filteredRows.findLastIndex(row => row.type === 'historical');

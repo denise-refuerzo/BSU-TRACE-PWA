@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Activity, BarChart2, Check, Database, Download, Lightbulb, Maximize2,
   Move, Package, RotateCcw, Search, Settings, ShieldCheck, Truck, Zap
 } from 'lucide-react';
 import { Bar, Doughnut, Line, Pie } from 'react-chartjs-2';
 import { baseChartOptions, buildForecastChartData, forecastChartOptions } from '../analyticsCharts';
-import { sortMetricRows } from '../demandAnalytics';
+import { sortMetricRows, summarizeDemandForecast } from '../demandAnalytics';
 
 const COLORS = ['#991b1b', '#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4b5563'];
 const LAYOUT_KEY = 'gso-operational-analytics-layout-v2';
@@ -215,7 +215,8 @@ export default function OperationalAnalyticsTab({
   };
 
   const forecastData = buildForecastChartData(chartReadyDemandData || [], forecastChart === 'line');
-  const projectionInfo = (chartReadyDemandData || []).find(row => row.model_note);
+  const demandSummary = summarizeDemandForecast(chartReadyDemandData || []);
+  const formatExpected = value => Number(value || 0).toFixed(1);
 
   const contents = {
     bottleneck: card => (
@@ -284,20 +285,35 @@ export default function OperationalAnalyticsTab({
       </DashboardCard>
     ),
     forecast: card => (
-      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
-        title="Demand Planning: Vans & Facilities" subtitle="Historical usage with seasonality-validated projections shown as dashed lines."
-        icon={<Activity className="text-emerald-600" size={18} />} accent="border-t-emerald-500">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-          <select value={demandTimeFilter} onChange={event => setDemandTimeFilter(Number(event.target.value))} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold sm:w-auto"><option value={3}>3 months</option><option value={6}>6 months</option><option value={9}>9 months</option><option value={12}>12 months</option></select>
-          <ChartSwitch value={forecastChart} onChange={setForecastChart} options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]} />
-        </div>
-        {projectionInfo?.model_note && (
-          <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
-            <strong>Methodology:</strong> {projectionInfo.model_note} Based on {projectionInfo.history_business_days || 0} business days of recorded activity. Weekly-pattern scores — vans: {Number(projectionInfo.vehicle_seasonality_score || 0).toFixed(2)}, facilities: {Number(projectionInfo.facility_seasonality_score || 0).toFixed(2)} (minimum 0.30).
+      <Fragment key={card.id}>
+        <DashboardCard card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+          title="Demand Planning: Vans & Facilities" subtitle="Historical usage with a 30-day demand forecast shown as dashed lines."
+          icon={<Activity className="text-emerald-600" size={18} />} accent="border-t-emerald-500">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <select value={demandTimeFilter} onChange={event => setDemandTimeFilter(Number(event.target.value))} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold sm:w-auto"><option value={2}>2 months</option><option value={3}>3 months</option><option value={6}>6 months</option><option value={9}>9 months</option><option value={12}>12 months</option></select>
+            <ChartSwitch value={forecastChart} onChange={setForecastChart} options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]} />
           </div>
+          <div className="h-64">{chartReadyDemandData?.length ? (forecastChart === 'line' ? <Line data={forecastData} options={forecastChartOptions} /> : <Bar data={forecastData} options={forecastChartOptions} />) : <EmptyState message="No booking history is available for demand planning." />}</div>
+        </DashboardCard>
+        {demandSummary && (
+          <section className="xl:col-span-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-2 border-b border-emerald-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900"><Lightbulb className="text-emerald-600" size={18} /> 30-Day Forecast Interpretation</h3>
+                <p className="mt-1 text-xs text-gray-500">Expected request averages across the complete projection period.</p>
+              </div>
+              <span className="w-fit rounded-full border border-emerald-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-800">{demandSummary.forecastBasis}</span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-blue-100 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Van demand</p><p className="mt-1 text-2xl font-black text-blue-700">{formatExpected(demandSummary.vehicleTotal)}</p><p className="mt-1 text-xs text-gray-500">requests expected · {formatExpected(demandSummary.vehicleDailyAverage)} daily</p></div>
+              <div className="rounded-xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Facility demand</p><p className="mt-1 text-2xl font-black text-emerald-700">{formatExpected(demandSummary.facilityTotal)}</p><p className="mt-1 text-xs text-gray-500">requests expected · {formatExpected(demandSummary.facilityDailyAverage)} daily</p></div>
+              <div className="rounded-xl border border-gray-200 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Busiest weekday</p><p className="mt-1 text-lg font-black text-gray-900">{demandSummary.busiestWeekday}</p><p className="mt-1 text-xs text-gray-500">{formatExpected(demandSummary.busiestWeekdayAverage)} combined requests expected</p></div>
+              <div className="rounded-xl border border-gray-200 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Daily pattern</p><p className="mt-1 text-lg font-black text-gray-900">{formatExpected(demandSummary.weekdayDailyAverage)} weekdays</p><p className="mt-1 text-xs text-gray-500">{formatExpected(demandSummary.weekendDailyAverage)} combined requests on weekends</p></div>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-gray-700"><strong className="text-gray-900">Overall interpretation:</strong> Demand for {demandSummary.dominantDemand} is expected to be higher over the next {demandSummary.days} days. Plan for approximately {formatExpected(demandSummary.facilityTotal)} facility requests and {formatExpected(demandSummary.vehicleTotal)} van requests, with the strongest average demand occurring on {demandSummary.busiestWeekday}s.</p>
+          </section>
         )}
-        <div className="h-64">{chartReadyDemandData?.length ? (forecastChart === 'line' ? <Line data={forecastData} options={forecastChartOptions} /> : <Bar data={forecastData} options={forecastChartOptions} />) : <EmptyState message="No booking history is available for demand planning." />}</div>
-      </DashboardCard>
+      </Fragment>
     ),
     routing: card => (
       <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
