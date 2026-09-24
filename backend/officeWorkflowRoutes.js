@@ -1,6 +1,7 @@
 const {fail, isOffice, resolveRoute, resolveTemplateRoute, assertAction} = require('./officeWorkflow');
 const crypto = require('node:crypto');
 const {routeProgress} = require('./routeProgress');
+const {attachStepActors} = require('./officeActionAudit');
 
 // --- NEW: WEBSOCKET BROADCASTER HELPER ---
 const broadcastDocumentUpdate = async (req, db, originUserId, currentOfficeId, nextOfficeId) => {
@@ -39,20 +40,21 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
       if (!(Number(doc.u_id)===Number(req.user.u_id) || (isOffice(req.user) &&
         (Number(doc.submission_office_id)===Number(req.user.o_id) || steps.some(s=>Number(s.current_office_id)===Number(req.user.o_id))))))
         return res.status(403).json({error:'This document is not assigned to your office.'});
-      const actions=(await pool.query(`SELECT h.public_id AS history_id,h.action_type,u.full_name,o.office_name,
+      const actions=(await pool.query(`SELECT h.public_id AS history_id,h.o_id AS office_id,h.action_type,u.full_name,o.office_name,
         CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS action_timestamp
         FROM public.office_action_history h JOIN public."User" u USING(u_id) JOIN public.offices o ON h.o_id=o.o_id
         WHERE h.ini_id=$1 ORDER BY h.history_id`,[doc.ini_id])).rows;
       const route=(await pool.query(`SELECT o.office_name FROM unnest($1::integer[]) WITH ORDINALITY AS r(o_id,position)
         JOIN public.offices o ON r.o_id=o.o_id ORDER BY r.position`,[doc.route_snapshot])).rows;
       const {public_id, u_id, ...publicDocument} = doc;
-      const publicSteps = steps.map(step => {
+      const publicSteps = attachStepActors(steps, actions).map(step => {
         const sanitized = {...step,pd_id:step.external_id};
         delete sanitized.public_id;
         delete sanitized.external_id;
         return sanitized;
       });
-      res.json({...publicDocument,ini_id:public_id,steps:publicSteps,route_steps:routeProgress(doc.route_snapshot || [],steps).routeSteps,actions,route_names:route.map(o=>o.office_name)});
+      const publicActions = actions.map(({office_id, ...action}) => action);
+      res.json({...publicDocument,ini_id:public_id,steps:publicSteps,route_steps:routeProgress(doc.route_snapshot || [],steps).routeSteps,actions:publicActions,route_names:route.map(o=>o.office_name)});
     } catch(err) {console.error(err);res.status(500).json({error:'Unable to load document details.'});}
   });
 
