@@ -30,6 +30,7 @@ import FloatingChat from '../../shared/components/FloatingChat';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import AnalyticsReportModal from '../../shared/components/AnalyticsReportModal';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
 
 // Modals
@@ -178,6 +179,7 @@ export default function GSOAdminDashboard() {
   const [demandTimeFilter, setDemandTimeFilter] = useState(3);
   const [auditStartDate, setAuditStartDate] = useState('');
   const [auditEndDate, setAuditEndDate] = useState('');
+  const [showAnalyticsReport, setShowAnalyticsReport] = useState(false);
   
   const [inventoryForm, setInventoryForm] = useState({
     requestorName: '', department: '', purpose: '', duration: '', quantityNeeded: '', returnDate: '', returnTime: '', isDamaged: false, damageNotes: ''
@@ -198,6 +200,19 @@ export default function GSOAdminDashboard() {
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false);
+  };
+
+  const tabTitles = {
+    dashboard: 'GSO Dashboard',
+    submissions: 'Personal Submissions',
+    'office-submissions': 'Office Submissions',
+    'department-submissions': 'Department Submissions',
+    resources: 'Resource Inventory',
+    procurement: 'List of Requests',
+    'manage-bookings': 'Manage Bookings',
+    analytics: 'Operational Analytics',
+    history: 'GSO Transaction History',
+    profile: 'Profile Management'
   };
 
   const handleNavigateToProcurement = (sectionKey) => {
@@ -505,107 +520,7 @@ export default function GSOAdminDashboard() {
     else return `${Math.round(elapsed / 86400000)} days ago`;   
   };
 
-  const handleGenerateAuditReport = () => {
-    const printWindow = window.open('', '_blank');
-    
-    const filteredDemand = (peakDemandData || []).filter(d => {
-      const dDate = d.date;
-      return (!auditStartDate || dDate >= auditStartDate) && (!auditEndDate || dDate <= auditEndDate);
-    });
-    const filteredTraffic = (administrativeInsights?.peak_traffic || []).filter(item => {
-      const monthStart = `${item.month}-01`;
-      return (!auditStartDate || monthStart >= auditStartDate) && (!auditEndDate || monthStart <= auditEndDate);
-    });
-
-    const htmlContent = `
-      <html>
-        <head>
-          <title>Full Operational Audit Report</title>
-          <style>
-            body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #333; }
-            .report-header { border-bottom: 2px solid #991b1b; padding-bottom: 20px; margin-bottom: 30px; }
-            .section { margin-bottom: 40px; }
-            h2 { color: #991b1b; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
-            th { background: #f9fafb; padding: 10px; border: 1px solid #ddd; text-align: left; }
-            td { padding: 8px; border: 1px solid #ddd; }
-          </style>
-        </head>
-        <body>
-          <div class="report-header">
-            <h1>BSU GSO Operational Audit</h1>
-            <p>Generated on: ${new Date().toLocaleString()}</p>
-            <p>Range: ${auditStartDate || 'Start'} to ${auditEndDate || 'Present'}</p>
-          </div>
-
-          <div class="section">
-            <h2>1. Office Bottlenecks</h2>
-            <table>
-              <thead><tr><th>Office Name</th><th>Average Processing Time (Hours)</th></tr></thead>
-              <tbody>
-                ${(bottleneckData || []).map(b => `<tr><td>${b.office_name}</td><td>${Number(b.dwell_time_hours || 0).toFixed(2)}h</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>2. Process Turnaround</h2>
-            <table>
-              <thead><tr><th>Document Process</th><th>End-to-End Hours</th><th>Active Processing Hours</th><th>Average Stops</th><th>Documents</th></tr></thead>
-              <tbody>
-                ${(routePerf?.document_routes || []).map(route => `<tr><td>${route.route_name}</td><td>${route.avg_completion_hours}h</td><td>${route.avg_active_processing_hours}h</td><td>${route.avg_stops}</td><td>${route.total_documents}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>3. Peak Document Traffic</h2>
-            <table>
-              <thead><tr><th>Month</th><th>Requests</th></tr></thead>
-              <tbody>
-                ${filteredTraffic.map(item => `<tr><td>${item.month}</td><td>${item.request_count}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>4. Frequently Requested Documents & Resources</h2>
-            <table>
-              <thead><tr><th>Type</th><th>Name</th><th>Recorded Uses</th></tr></thead>
-              <tbody>
-                ${(administrativeInsights?.frequent_documents || []).map(item => `<tr><td>Document</td><td>${item.name}</td><td>${item.request_count}</td></tr>`).join('')}
-                ${(administrativeInsights?.utilized_assets || []).map(item => `<tr><td>Resource</td><td>${item.name}</td><td>${item.usage_count}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>5. Equipment Inventory Status</h2>
-            <table>
-              <thead><tr><th>Asset</th><th>Total</th><th>Available</th></tr></thead>
-              <tbody>
-                ${(equipmentInventory || []).map(i => `<tr><td>${i.asset_name}</td><td>${i.capacity}</td><td>${i.current_stock}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>6. Short-Term Demand Projection</h2>
-            <table>
-              <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
-              <tbody>
-                ${filteredDemand.map(d => `<tr><td>${d.date}</td><td>${d.vehicle_demand || 0}</td><td>${d.facility_demand || 0}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-  };
+  const handleGenerateAuditReport = () => setShowAnalyticsReport(true);
 
   const handleInventorySubmit = async (e) => {
     e.preventDefault();
@@ -742,15 +657,25 @@ export default function GSOAdminDashboard() {
       <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* HEADER */}
         <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
-            aria-label="Open menu"
-          >
-            <Menu size={22} />
-          </button>
+          <div className="flex min-w-0 items-center gap-3 text-left">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+                {tabTitles[activeTab] || 'GSO Admin Portal'}
+              </h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                Assigned: {gsoOfficeName || 'General Services Office'}
+              </p>
+            </div>
+          </div>
 
-          <div className="flex items-center gap-2 md:gap-4 text-neutral-600 ml-auto">
+          <div className="ml-auto flex items-center gap-2 text-neutral-600 md:gap-4">
             <div className="relative" ref={notificationRef}>
               <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 relative transition-colors">
                 <Bell size={20} />
@@ -901,6 +826,16 @@ export default function GSOAdminDashboard() {
       </div>
 
       {/* RENDER MODALS */}
+      <AnalyticsReportModal
+        open={showAnalyticsReport}
+        onClose={() => setShowAnalyticsReport(false)}
+        scope="gso"
+        startDate={auditStartDate}
+        setStartDate={setAuditStartDate}
+        endDate={auditEndDate}
+        setEndDate={setAuditEndDate}
+        data={{ peakDemandData, equipmentInventory, systemHealth }}
+      />
       <FloatingChat isOpen={isChatOpen} onOpenChange={setIsChatOpen}
         hasUnread={hasUnreadChats} onUnreadCleared={() => setHasUnreadChats(false)}
         userId={userId} roleId={2} officeId={gsoOfficeId}

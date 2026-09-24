@@ -1,12 +1,21 @@
 import pandas as pd
 from database import get_db_connection
 
-def calculate_office_dwell_times():
+def calculate_office_dwell_times(start_date=None, end_date=None):
     """
     Queries historical tracking data and runs an analytical evaluation process 
     to group and rank average office dwell times. 
     """
-    query = """
+    filters = []
+    params = []
+    if start_date:
+        filters.append("pdoc.time_out::date >= %s")
+        params.append(start_date)
+    if end_date:
+        filters.append("pdoc.time_out::date <= %s")
+        params.append(end_date)
+    date_filter = ''.join(f" AND {condition}" for condition in filters)
+    query = f"""
         SELECT 
             off.office_name,
             pdoc.time_in,
@@ -15,11 +24,12 @@ def calculate_office_dwell_times():
         FROM public.processed_document pdoc
         JOIN public.offices off ON pdoc.current_office_id = off.o_id
         WHERE pdoc.time_in IS NOT NULL 
-          AND pdoc.time_out IS NOT NULL;
+          AND pdoc.time_out IS NOT NULL
+          {date_filter};
     """
     
     with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn, params=tuple(params))
         
     if df.empty:
         return []

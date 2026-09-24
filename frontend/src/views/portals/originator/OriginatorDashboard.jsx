@@ -170,7 +170,7 @@ export default function OriginatorDashboard() {
         
         {/* HEADER */}
         <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3 text-left">
             <button 
               onClick={() => setIsSidebarOpen(true)}
               className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden cursor-pointer"
@@ -178,9 +178,14 @@ export default function OriginatorDashboard() {
             >
               <Menu size={22} />
             </button>
-            <h2 className="text-base md:text-lg font-bold text-neutral-800 truncate">
-              {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Personal Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
-            </h2>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+                {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Personal Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
+              </h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                Assigned: {profile.departmentName || 'Campus Office'}
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 text-neutral-600">
