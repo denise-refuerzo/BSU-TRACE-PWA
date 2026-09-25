@@ -12,7 +12,7 @@ function mergeMessages(previous, incoming) {
   return [...messages.values()].sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at));
 }
 
-export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = null, onClearTargetDoc = null, compact = false }) {
+export default function OfficeChatHub({ userId, officeId, targetDoc = null, onClearTargetDoc = null, compact = false }) {
   const [directory, setDirectory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -64,12 +64,14 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
       if (version !== selectionVersion.current) return;
       if (!res.ok) throw new Error(data.error || 'Unable to load offices.');
       if (Array.isArray(data)) {
-        const isOfficeSubmission = Boolean(selectedDocument.isOfficeSubmission || data.some(channel => channel.isOfficeSubmission));
-        setSelectedDoc(previous => String(previous?.ini_id) === String(doc.ini_id) ? { ...previous, isOfficeSubmission } : previous);
+        const channelContext = data[0] || {};
+        const canViewAllChannels = Boolean(selectedDocument.canViewAllChannels || channelContext.canViewAllChannels);
+        const viewerRole = selectedDocument.viewerRole || channelContext.viewerRole || 'Processing Office';
+        setSelectedDoc(previous => String(previous?.ini_id) === String(doc.ini_id) ? { ...previous, canViewAllChannels, viewerRole } : previous);
         setChannels(data);
 
-        // Auto-select workspace channel for processors
-        if (roleId === 2 && officeId && !isOfficeSubmission) {
+        // Processing offices use their station. Submitters and collaborators can choose any station.
+        if (!canViewAllChannels && officeId) {
           const targetOfficeChannel = data.find(c => c.officeId === parseInt(officeId));
           if (targetOfficeChannel) {
             handleActivateChannel(doc.ini_id, targetOfficeChannel);
@@ -78,8 +80,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
           setError('No conversation is available for your office on this document.');
         }
 
-        // Auto-select first unlocked station for originators if requested
-        if (roleId === 1 && autoSelectFirstChannel && data.length > 0) {
+        if (canViewAllChannels && autoSelectFirstChannel && data.length > 0) {
           const firstAvailable = data.find(c => !c.isLocked) || data[0];
           if (firstAvailable) {
             handleActivateChannel(doc.ini_id, firstAvailable);
@@ -222,8 +223,8 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
     doc.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const adHocDetourChannel = roleId === 2 && channels.find(c => c.officeId !== parseInt(officeId));
-  const usesChannelPicker = roleId === 1 || Boolean(selectedDoc?.isOfficeSubmission);
+  const usesChannelPicker = Boolean(selectedDoc?.canViewAllChannels);
+  const adHocDetourChannel = !usesChannelPicker && channels.find(c => c.officeId !== parseInt(officeId));
 
   return (
     <div className={`${compact ? 'h-full w-full' : 'max-w-6xl mx-auto h-[calc(100vh-10rem)] md:h-[calc(100vh-12rem)]'} border border-gray-200 bg-white ${compact ? 'rounded-none border-0' : 'rounded-2xl shadow-sm'} flex overflow-hidden text-left relative`}>
@@ -294,7 +295,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         </div>
       </div>
 
-      {/* Originators choose the office channel for their submitted document. */}
+      {/* Submitters and collaborators choose among the document's office channels. */}
       {usesChannelPicker && selectedDoc && (
         <div className={`flex-col min-h-0 flex-shrink-0 w-full ${compact ? '' : 'md:w-64'} border-r border-gray-200 bg-white ${
           activeChannel ? (compact ? 'hidden' : 'hidden md:flex') : 'flex'
@@ -414,8 +415,8 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                 </div>
               </div>
 
-              {/* Ad-Hoc sub tabs for Processor (Role 2) */}
-              {roleId === 2 && !usesChannelPicker && adHocDetourChannel && (
+              {/* Ad-hoc station switcher for processing-office participants. */}
+              {!usesChannelPicker && adHocDetourChannel && (
                 <div className="flex bg-gray-100 p-1 rounded-lg text-xs font-bold w-full overflow-x-auto">
                   <button 
                     onClick={() => handleSelectDocument(selectedDoc, false)}
@@ -423,7 +424,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                       activeChannel.officeId === parseInt(officeId) ? 'bg-white text-[#D32F2F] shadow-xs' : 'text-gray-600'
                     }`}
                   >
-                    Originator
+                    Submitter channel
                   </button>
                   <button 
                     onClick={() => handleActivateChannel(selectedDoc.ini_id, adHocDetourChannel)}

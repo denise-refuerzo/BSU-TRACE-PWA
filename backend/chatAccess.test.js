@@ -15,6 +15,7 @@ test('overview or shared-office affiliation does not grant document chat access'
     CREATE TABLE public.chat_rooms (
       room_id serial PRIMARY KEY,public_id uuid DEFAULT gen_random_uuid(),ini_id integer,o_id integer
     );
+    CREATE TABLE public.document_collaborators (ini_id integer,user_id integer);
     INSERT INTO public.initial_document(u_id,submission_office_id) VALUES (1,10);
     INSERT INTO public.processed_document(ini_id,current_office_id,s_id,time_out) VALUES (1,20,1,NULL);
     INSERT INTO public.chat_rooms(ini_id,o_id) VALUES (1,20);
@@ -23,7 +24,11 @@ test('overview or shared-office affiliation does not grant document chat access'
   const roomId = (await db.query('SELECT public_id FROM public.chat_rooms')).rows[0].public_id;
 
   assert.ok(await resolveChatDocument(db, documentId, { u_id: 1, a_id: 1, o_id: null }), 'owner may chat');
+  assert.ok(await resolveChatRoom(db, roomId, { u_id: 1, a_id: 2, o_id: 10 }), 'office-account submitter may read every document conversation');
   assert.equal(await resolveChatDocument(db, documentId, { u_id: 2, a_id: 2, o_id: 10 }), null, 'coworker or overview user may not chat');
+  await db.exec('INSERT INTO public.document_collaborators VALUES (1,2)');
+  assert.ok(await resolveChatDocument(db, documentId, { u_id: 2, a_id: 1, o_id: null }), 'named collaborator may chat');
+  assert.ok(await resolveChatRoom(db, roomId, { u_id: 2, a_id: 2, o_id: 10 }), 'named office collaborator may read the conversation');
   assert.ok(await resolveChatDocument(db, documentId, { u_id: 3, a_id: 2, o_id: 20 }), 'current processing office may chat');
   assert.ok(await resolveChatRoom(db, roomId, { u_id: 3, a_id: 2, o_id: 20 }), 'processor may open its active office room');
 

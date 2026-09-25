@@ -9,8 +9,6 @@ import { useProcessorData } from "./hooks/useProcessorData";
 
 // --- EXTRACTED COMPONENTS ---
 import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
-import ProcessorPipelineTab from "./components/ProcessorPipelineTab";
-import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
 import RegistrationManagementPage from './components/RegistrationManagementPage';
 
 // --- EXTRACTED MODALS ---
@@ -29,6 +27,9 @@ import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
 import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
+import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
+import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -72,7 +73,7 @@ export default function ProcessorDashboard() {
 
   const processorData = useProcessorData(userId);
   const submissionAccess = useSubmissionAccess(userId);
-  const documentTabs = ['documents', 'submissions', 'office-submissions', 'department-submissions'];
+  const documentTabs = ['documents', 'submissions', 'office-submissions', 'department-submissions', 'shared-submissions', 'archived-submissions'];
 
   useEffect(() => {
     if (!userId || userId === 'undefined') {
@@ -360,6 +361,8 @@ export default function ProcessorDashboard() {
                   <button onClick={() => handleTabSelect('submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Personal Submissions</button>
                   {submissionAccess.offices.length > 0 && <button onClick={() => handleTabSelect('office-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'office-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Office Submissions</button>}
                   {submissionAccess.departments.length > 0 && <button onClick={() => handleTabSelect('department-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'department-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Department Submissions</button>}
+                  <button onClick={() => handleTabSelect('shared-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'shared-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Shared With Me</button>
+                  <button onClick={() => handleTabSelect('archived-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'archived-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Archived</button>
                 </div>
               )}
             </div>
@@ -431,7 +434,7 @@ export default function ProcessorDashboard() {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                 {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
+                 {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'History' : 'Office Dashboard'}
               </h2>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
             </div>
@@ -464,7 +467,7 @@ export default function ProcessorDashboard() {
             />
           )}
           {activeTab === 'documents' && (
-            <ProcessorPipelineTab 
+            <OfficeDocumentsTab
               {...processorData} 
               setActiveTab={setActiveTab}
               targetDocId={activeNotificationDocId}
@@ -473,7 +476,9 @@ export default function ProcessorDashboard() {
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
           )}
-          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} onProcessed={processorData.fetchProcessorMeta} />}
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} onProcessed={processorData.fetchProcessorMeta} onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
+          {activeTab === 'shared-submissions' && <CollaborativeSubmissionsTab mode="shared" onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
+          {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
           {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
           {activeTab === 'department-submissions' && <SubmissionOverviewTab type="department" scopes={submissionAccess.departments} />}
           {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Gymnasium" />}
@@ -482,10 +487,7 @@ export default function ProcessorDashboard() {
           {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
           {activeTab === 'registration-management' && <RegistrationManagementPage userId={userId} access={submissionAccess} />}
           {activeTab === 'history' && (
-            <ProcessorHistoryTab 
-              {...processorData} 
-              handleOpenPipelineDetails={handleOpenPipelineDetails} 
-            />
+            <SubmissionActivityHistoryTab title="History" includeOfficeActivity onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />
           )}
           {activeTab === 'profile' && (
             <UserProfileTab 
@@ -506,7 +508,6 @@ export default function ProcessorDashboard() {
         hasUnread={processorData.hasUnreadChats}
         onUnreadCleared={() => processorData.setHasUnreadChats(false)}
         userId={userId}
-        roleId={2}
         officeId={processorData.processorOfficeId}
         targetDoc={chatTargetDoc}
         onClearTargetDoc={() => setChatTargetDoc(null)}

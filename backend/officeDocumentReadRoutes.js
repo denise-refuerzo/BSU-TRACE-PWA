@@ -6,6 +6,7 @@ const expectedDocumentsSql = `SELECT idoc.public_id AS ini_id,idoc.title,idoc.qr
     ORDER BY (pd.time_out IS NULL) DESC,pd.pd_id DESC LIMIT 1) current_step ON TRUE
   LEFT JOIN public.offices curr_o ON current_step.current_office_id=curr_o.o_id
   WHERE $1=ANY(idoc.route_snapshot)
+    AND idoc.lifecycle_state <> 'cancelled'
     AND (SELECT s_id FROM public.processed_document latest WHERE latest.ini_id=idoc.ini_id ORDER BY pd_id DESC LIMIT 1) NOT IN (4,5)
     AND NOT EXISTS (SELECT 1 FROM public.processed_document received WHERE received.ini_id=idoc.ini_id
       AND received.current_office_id=$1 AND received.time_in IS NOT NULL)
@@ -23,12 +24,15 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
              idoc.created_at,
              idoc.submission_office_id,
              idoc.route_snapshot,
+             idoc.lifecycle_state,
+             idoc.cancelled_at,
+             idoc.cancellation_reason,
              (SELECT full_name FROM public."User" WHERE u_id=idoc.u_id) AS submitted_by,
              pdoc.time_out AS release_time,
              pt.process_name,
              curr_o.office_name as current_office, 
              next_o.office_name as next_office, 
-             st.current_status as status,
+             CASE WHEN idoc.lifecycle_state='cancelled' THEN 'Cancelled' ELSE st.current_status END as status,
              (
                SELECT action_type 
                FROM public.office_action_history 
@@ -57,6 +61,7 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
       LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON pdoc.s_id = st.s_id
       WHERE idoc.u_id = $1
+        AND NOT EXISTS (SELECT 1 FROM public.document_user_archives dua WHERE dua.ini_id=idoc.ini_id AND dua.user_id=$1)
       ORDER BY idoc.ini_id DESC, (pdoc.time_out IS NULL) DESC, pdoc.pd_id DESC;
     `;
     const result = await pool.query(query, [req.user.u_id]);
@@ -104,7 +109,7 @@ app.get('/api/processor/documents/:officeId', requireAuth, async (req, res) => {
       LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE pdoc.current_office_id = $1 AND pdoc.time_out IS NULL
+      WHERE pdoc.current_office_id = $1 AND pdoc.time_out IS NULL AND idoc.lifecycle_state <> 'cancelled'
       ORDER BY pdoc.pd_id DESC;
     `;
     const result = await pool.query(query, [parseInt(officeId)]);
@@ -153,7 +158,7 @@ app.get('/api/processor/documents/pipeline/:officeId', requireAuth, async (req, 
       LEFT JOIN public.offices curr_o ON COALESCE(pdoc_active.current_office_id, pdoc_office.current_office_id) = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc_active.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON COALESCE(pdoc_active.s_id, pdoc_office.s_id) = st.s_id
-      WHERE pdoc_office.current_office_id = $1
+      WHERE pdoc_office.current_office_id = $1 AND idoc.lifecycle_state <> 'cancelled'
       ORDER BY idoc.ini_id DESC, pdoc_office.pd_id DESC;
     `;
     const result = await pool.query(query, [parseInt(officeId)]);
@@ -229,8 +234,9 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
 
   try {
     const incoming=await pool.query(expectedDocumentsSql,[officeId]);
-    const result=await pool.query(`WITH latest AS (SELECT DISTINCT ON(ini_id) * FROM public.processed_document
-      WHERE current_office_id=$1 ORDER BY ini_id,pd_id DESC)
+    const result=await pool.query(`WITH latest AS (SELECT DISTINCT ON(pd.ini_id) pd.* FROM public.processed_document pd
+      JOIN public.initial_document idoc ON idoc.ini_id=pd.ini_id
+      WHERE pd.current_office_id=$1 AND idoc.lifecycle_state <> 'cancelled' ORDER BY pd.ini_id,pd.pd_id DESC)
       SELECT count(*) FILTER(WHERE time_in IS NULL AND time_out IS NULL AND s_id=1)::int AS awaiting,
       count(*) FILTER(WHERE time_in IS NOT NULL AND time_out IS NULL AND s_id IN(1,2,3))::int AS pending,
       count(*) FILTER(WHERE time_out IS NULL AND s_id=2)::int AS verification,

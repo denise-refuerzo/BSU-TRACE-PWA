@@ -8,7 +8,6 @@ export default function FloatingChat({
   hasUnread = false,
   onUnreadCleared,
   userId,
-  roleId,
   officeId,
   targetDoc = null,
   onClearTargetDoc = null,
@@ -52,7 +51,7 @@ export default function FloatingChat({
             <button type="button" onClick={() => onOpenChange(false)} aria-label="Close chat" className="rounded-lg p-2 text-white/75 hover:bg-white/10 hover:text-white"><X size={19} /></button>
           </header>
           <div className="min-h-0 flex-1">
-            <OfficeChatHub compact userId={userId} roleId={roleId} officeId={officeId} targetDoc={targetDoc} onClearTargetDoc={onClearTargetDoc} />
+            <OfficeChatHub compact userId={userId} officeId={officeId} targetDoc={targetDoc} onClearTargetDoc={onClearTargetDoc} />
           </div>
         </section>
       )}
