@@ -90,7 +90,7 @@ export default function SubmittedRequestDetailsModal({ request, officeName, onCl
                 </dl>
               </section>
               <section className="rounded-xl border border-gray-200 p-4">
-                <h5 className="mb-4 flex items-center gap-2 text-sm font-black text-gray-900"><Users size={16} className="text-red-700" /> Submitted names and positions</h5>
+                <h5 className="mb-4 flex items-center gap-2 text-sm font-black text-gray-900"><Users size={16} className="text-red-700" /> Submitted names and offices</h5>
                 <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Person label="Prepared / requested by" name={request.prepared_by_name} position={request.prepared_by_position} />
                   <Person label="Recommending approval" name={request.recommending_approval_name} position={request.recommending_approval_position} />
@@ -118,7 +118,7 @@ export default function SubmittedRequestDetailsModal({ request, officeName, onCl
                 </dl>
               </section>
               <section className="rounded-xl border border-gray-200 p-4">
-                <h5 className="mb-4 text-sm font-black text-gray-900">Submitted names and positions</h5>
+                <h5 className="mb-4 text-sm font-black text-gray-900">Submitted names and offices</h5>
                 <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Person label="Requested by" name={details.requestedByName} position={details.requestedByPosition} />
                   <Person label="Reviewed by" name={details.reviewedByName} position={details.reviewedByPosition} />

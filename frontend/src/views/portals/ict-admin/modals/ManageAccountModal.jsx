@@ -1,15 +1,20 @@
-import React from 'react';
 import { publicReference } from '../../../../utils/publicReference';
+import AccessManagementTab from '../components/AccessManagementTab';
 
 export default function ManageAccountModal({ 
-  selectedUser, setSelectedUser, handleUpdateAccount, offices 
+  selectedUser, setSelectedUser, handleUpdateAccount, offices, departments, accounts
 }) {
   // Mirrors the original conditional rendering: {selectedUser && (...)}
   if (!selectedUser) return null;
+  const officialEmailPattern = '[A-Za-z0-9._%+\\-]+@g\\.batstate-u\\.edu\\.ph';
+  const normalizeEmail = value => String(value || '').trim().toLowerCase();
+  const originalEmail = selectedUser._originalUniEmail ?? selectedUser.uni_email;
+  const originalIsOfficial = /^[a-z0-9._%+-]+@g\.batstate-u\.edu\.ph$/i.test(normalizeEmail(originalEmail));
+  const emailWasChanged = normalizeEmail(selectedUser.uni_email) !== normalizeEmail(originalEmail);
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white border border-neutral-200 max-w-lg w-full rounded-2xl p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
         <div className="flex justify-between items-center border-b border-neutral-100 pb-3 mb-4">
           <div>
             <h3 className="text-base font-black text-neutral-900">Manage Operational Profile</h3>
@@ -40,10 +45,11 @@ export default function ManageAccountModal({
           <div>
             <label className="block text-[10px] uppercase text-gray-400 font-bold mb-1">Institutional Notification Email</label>
             <input 
-              type="email" required value={selectedUser.uni_email}
-              onChange={e => setSelectedUser({...selectedUser, uni_email: e.target.value})}
+              type="email" required pattern={originalIsOfficial || emailWasChanged ? officialEmailPattern : undefined} title="Use an official email ending in @g.batstate-u.edu.ph" value={selectedUser.uni_email}
+              onChange={e => setSelectedUser({...selectedUser, uni_email: e.target.value.toLowerCase()})}
               className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm outline-none"
             />
+            {!originalIsOfficial && !emailWasChanged && <p className="mt-1 text-[10px] font-normal text-amber-700">This existing address can remain unchanged. A new address must end in @g.batstate-u.edu.ph.</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -54,7 +60,7 @@ export default function ManageAccountModal({
                 onChange={e => setSelectedUser({...selectedUser, a_id: parseInt(e.target.value)})}
                 className="w-full border border-neutral-300 bg-white rounded-lg px-2 py-2 outline-none"
               >
-                <option value="1">Originator</option>
+                <option value="1">Faculty Staff</option>
                 <option value="2">Office Staff</option>
                 <option value="4">GSO Admin</option>
                 <option value="5">ICT Admin</option>
@@ -62,20 +68,15 @@ export default function ManageAccountModal({
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase text-gray-400 font-bold mb-1">Department Sector Linkage</label>
+              <label className="block text-[10px] uppercase text-gray-400 font-bold mb-1">Department {selectedUser.a_id === 1 ? '(Required)' : '(Optional)'}</label>
               <select 
                 value={selectedUser.d_id || ''}
-                disabled={selectedUser.a_id !== 1}
+                required={selectedUser.a_id === 1}
                 onChange={e => setSelectedUser({...selectedUser, d_id: e.target.value ? parseInt(e.target.value) : null})}
-                className={`w-full border border-neutral-300 bg-white rounded-lg px-2 py-2 outline-none ${selectedUser.a_id !== 1 ? 'bg-neutral-100 opacity-60' : ''}`}
+                className="w-full border border-neutral-300 bg-white rounded-lg px-2 py-2 outline-none"
               >
-                <option value="">No Location Assigned</option>
-                <option value="1">College of Informatics and Computing Sciences</option>
-                <option value="2">College of Accountancy, Business, Economics and International Hospitality Management</option>
-                <option value="3">College of Arts and Sciences</option>
-                <option value="4">College of Industrial Technology</option>
-                <option value="5">College of Engineering</option>
-                <option value="6">College of Teacher Education</option>
+                <option value="">{selectedUser.a_id === 1 ? 'Choose a department' : 'No department affiliation'}</option>
+                {departments.map(department => <option key={department.id} value={department.id}>{department.name}</option>)}
               </select>
             </div>
           </div>
@@ -145,6 +146,18 @@ export default function ManageAccountModal({
             >
               {selectedUser.is_active || selectedUser.is_active === undefined ? "🟢 Active" : "🔴 Suspended"}
             </button>
+          </div>
+
+          <div className="border-t border-neutral-200 pt-5">
+            <h4 className="text-sm font-black text-neutral-900">Access &amp; Responsibilities</h4>
+            <p className="mt-1 mb-4 text-[11px] font-normal text-neutral-500">Override submission visibility, signatory responsibilities, position titles, and registration-link authority.</p>
+            <AccessManagementTab
+              accounts={accounts}
+              offices={offices}
+              departments={departments}
+              fixedUserId={selectedUser.u_id}
+              embedded
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">

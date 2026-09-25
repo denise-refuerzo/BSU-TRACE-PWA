@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Activity, BarChart2, Check, Database, Download, Lightbulb, Maximize2,
-  Move, Package, RotateCcw, Search, Settings, ShieldCheck, Truck, Zap
+  Move, Package, RotateCcw, Search, Settings, Truck, Zap
 } from 'lucide-react';
 import { Bar, Doughnut, Line, Pie } from 'react-chartjs-2';
 import { baseChartOptions, buildForecastChartData, forecastChartOptions } from '../analyticsCharts';
-import { sortMetricRows } from '../demandAnalytics';
+import { sortMetricRows, summarizeDemandForecast } from '../demandAnalytics';
 
 const COLORS = ['#991b1b', '#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4b5563'];
-const LAYOUT_KEY = 'gso-operational-analytics-layout-v2';
-const DEFAULT_LAYOUT = [
+const GSO_LAYOUT = [
   { id: 'bottleneck', size: 2 },
   { id: 'inventory', size: 1 },
   { id: 'traffic', size: 2 },
@@ -19,16 +18,28 @@ const DEFAULT_LAYOUT = [
   { id: 'vehicles', size: 1 }
 ];
 
-function readLayout() {
+const ICT_LAYOUT = [
+  { id: 'bottleneck', size: 2 },
+  { id: 'traffic', size: 1 },
+  { id: 'frequency', size: 1 },
+  { id: 'routing', size: 2 }
+];
+
+const getLayoutConfig = scope => scope === 'ict'
+  ? { key: 'ict-operational-analytics-layout-v1', defaultLayout: ICT_LAYOUT }
+  : { key: 'gso-operational-analytics-layout-v2', defaultLayout: GSO_LAYOUT };
+
+function readLayout(scope) {
+  const { key, defaultLayout } = getLayoutConfig(scope);
   try {
-    const stored = JSON.parse(localStorage.getItem(LAYOUT_KEY));
-    if (!Array.isArray(stored)) return DEFAULT_LAYOUT;
-    const validIds = new Set(DEFAULT_LAYOUT.map(item => item.id));
+    const stored = JSON.parse(localStorage.getItem(key));
+    if (!Array.isArray(stored)) return defaultLayout;
+    const validIds = new Set(defaultLayout.map(item => item.id));
     const valid = stored.filter(item => validIds.has(item.id) && [1, 2, 3].includes(item.size));
-    const missing = DEFAULT_LAYOUT.filter(item => !valid.some(saved => saved.id === item.id));
+    const missing = defaultLayout.filter(item => !valid.some(saved => saved.id === item.id));
     return [...valid, ...missing];
   } catch {
-    return DEFAULT_LAYOUT;
+    return defaultLayout;
   }
 }
 
@@ -138,10 +149,11 @@ export default function OperationalAnalyticsTab({
   setBottleneckSearch, bottleneckSort, setBottleneckSort,
   processedBottleneckData, equipmentInventory, demandTimeFilter,
   setDemandTimeFilter, chartReadyDemandData, systemHealth, routePerf,
-  administrativeInsights
+  administrativeInsights, analyticsScope = 'gso'
 }) {
+  const { key: layoutKey, defaultLayout } = getLayoutConfig(analyticsScope);
   const [editMode, setEditMode] = useState(false);
-  const [layout, setLayout] = useState(readLayout);
+  const [layout, setLayout] = useState(() => readLayout(analyticsScope));
   const [draggedId, setDraggedId] = useState(null);
   const [bottleneckMode, setBottleneckMode] = useState('office');
   const [bottleneckChart, setBottleneckChart] = useState('bar');
@@ -158,8 +170,8 @@ export default function OperationalAnalyticsTab({
   const [vehicleSort, setVehicleSort] = useState('desc');
 
   useEffect(() => {
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
-  }, [layout]);
+    localStorage.setItem(layoutKey, JSON.stringify(layout));
+  }, [layout, layoutKey]);
 
   const processBottlenecks = useMemo(() => (routePerf?.document_routes || [])
     .map(route => ({ office_name: route.route_name, dwell_time_hours: Number(route.avg_completion_hours || 0) }))
@@ -196,7 +208,7 @@ export default function OperationalAnalyticsTab({
     item.id === id ? { ...item, size: item.size === 3 ? 1 : item.size + 1 } : item
   )));
 
-  const resetLayout = () => setLayout(DEFAULT_LAYOUT.map(item => ({ ...item })));
+  const resetLayout = () => setLayout(defaultLayout.map(item => ({ ...item })));
 
   const trafficData = {
     labels: trafficRows.map(item => item.month),
@@ -215,7 +227,8 @@ export default function OperationalAnalyticsTab({
   };
 
   const forecastData = buildForecastChartData(chartReadyDemandData || [], forecastChart === 'line');
-  const projectionInfo = (chartReadyDemandData || []).find(row => row.model_note);
+  const demandSummary = summarizeDemandForecast(chartReadyDemandData || []);
+  const formatExpected = value => Number(value || 0).toFixed(1);
 
   const contents = {
     bottleneck: card => (
@@ -271,12 +284,12 @@ export default function OperationalAnalyticsTab({
     ),
     frequency: card => (
       <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
-        title="Frequently Requested" subtitle={frequencyMode === 'documents' ? 'Most transacted document processes.' : 'Most utilized school resources.'}
+        title={analyticsScope === 'ict' ? 'Frequently Requested Documents' : 'Frequently Requested'} subtitle={frequencyMode === 'documents' ? 'Most transacted document processes.' : 'Most utilized school resources.'}
         icon={<Package className="text-amber-600" size={18} />} accent="border-t-amber-500">
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="inline-flex rounded-lg bg-gray-100 p-1">
+          {analyticsScope !== 'ict' && <div className="inline-flex rounded-lg bg-gray-100 p-1">
             {[['documents', 'Documents'], ['assets', 'Assets']].map(([value, label]) => <button key={value} type="button" onClick={() => setFrequencyMode(value)} className={`rounded-md px-2.5 py-1 text-[10px] font-bold ${frequencyMode === value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{label}</button>)}
-          </div>
+          </div>}
           <ChartSwitch value={frequencyChart} onChange={setFrequencyChart} options={[{ value: 'bar', label: 'Bar' }, { value: 'doughnut', label: 'Doughnut' }]} />
         </div>
         <div className="mb-3 flex justify-stretch sm:justify-end"><SortSelect value={frequencySort} onChange={setFrequencySort} highestLabel="Most requested" lowestLabel="Least requested" /></div>
@@ -284,20 +297,35 @@ export default function OperationalAnalyticsTab({
       </DashboardCard>
     ),
     forecast: card => (
-      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
-        title="Demand Planning: Vans & Facilities" subtitle="Historical usage with seasonality-validated projections shown as dashed lines."
-        icon={<Activity className="text-emerald-600" size={18} />} accent="border-t-emerald-500">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-          <select value={demandTimeFilter} onChange={event => setDemandTimeFilter(Number(event.target.value))} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold sm:w-auto"><option value={3}>3 months</option><option value={6}>6 months</option><option value={9}>9 months</option><option value={12}>12 months</option></select>
-          <ChartSwitch value={forecastChart} onChange={setForecastChart} options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]} />
-        </div>
-        {projectionInfo?.model_note && (
-          <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
-            <strong>Methodology:</strong> {projectionInfo.model_note} Based on {projectionInfo.history_business_days || 0} business days of recorded activity. Weekly-pattern scores — vans: {Number(projectionInfo.vehicle_seasonality_score || 0).toFixed(2)}, facilities: {Number(projectionInfo.facility_seasonality_score || 0).toFixed(2)} (minimum 0.30).
+      <Fragment key={card.id}>
+        <DashboardCard card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+          title="Demand Planning: Vans & Facilities" subtitle="Historical usage with a 30-day demand forecast shown as dashed lines."
+          icon={<Activity className="text-emerald-600" size={18} />} accent="border-t-emerald-500">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <select value={demandTimeFilter} onChange={event => setDemandTimeFilter(Number(event.target.value))} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold sm:w-auto"><option value={2}>2 months</option><option value={3}>3 months</option><option value={6}>6 months</option><option value={9}>9 months</option><option value={12}>12 months</option></select>
+            <ChartSwitch value={forecastChart} onChange={setForecastChart} options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]} />
           </div>
+          <div className="h-64">{chartReadyDemandData?.length ? (forecastChart === 'line' ? <Line data={forecastData} options={forecastChartOptions} /> : <Bar data={forecastData} options={forecastChartOptions} />) : <EmptyState message="No booking history is available for demand planning." />}</div>
+        </DashboardCard>
+        {demandSummary && (
+          <section className="xl:col-span-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-2 border-b border-emerald-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900"><Lightbulb className="text-emerald-600" size={18} /> 30-Day Forecast Interpretation</h3>
+                <p className="mt-1 text-xs text-gray-500">Expected request averages across the complete projection period.</p>
+              </div>
+              <span className="w-fit rounded-full border border-emerald-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-800">{demandSummary.forecastBasis}</span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-blue-100 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Van demand</p><p className="mt-1 text-2xl font-black text-blue-700">{formatExpected(demandSummary.vehicleTotal)}</p><p className="mt-1 text-xs text-gray-500">requests expected · {formatExpected(demandSummary.vehicleDailyAverage)} daily</p></div>
+              <div className="rounded-xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Facility demand</p><p className="mt-1 text-2xl font-black text-emerald-700">{formatExpected(demandSummary.facilityTotal)}</p><p className="mt-1 text-xs text-gray-500">requests expected · {formatExpected(demandSummary.facilityDailyAverage)} daily</p></div>
+              <div className="rounded-xl border border-gray-200 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Busiest weekday</p><p className="mt-1 text-lg font-black text-gray-900">{demandSummary.busiestWeekday}</p><p className="mt-1 text-xs text-gray-500">{formatExpected(demandSummary.busiestWeekdayAverage)} combined requests expected</p></div>
+              <div className="rounded-xl border border-gray-200 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Daily pattern</p><p className="mt-1 text-lg font-black text-gray-900">{formatExpected(demandSummary.weekdayDailyAverage)} weekdays</p><p className="mt-1 text-xs text-gray-500">{formatExpected(demandSummary.weekendDailyAverage)} combined requests on weekends</p></div>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-gray-700"><strong className="text-gray-900">Overall interpretation:</strong> Demand for {demandSummary.dominantDemand} is expected to be higher over the next {demandSummary.days} days. Plan for approximately {formatExpected(demandSummary.facilityTotal)} facility requests and {formatExpected(demandSummary.vehicleTotal)} van requests, with the strongest average demand occurring on {demandSummary.busiestWeekday}s.</p>
+          </section>
         )}
-        <div className="h-64">{chartReadyDemandData?.length ? (forecastChart === 'line' ? <Line data={forecastData} options={forecastChartOptions} /> : <Bar data={forecastData} options={forecastChartOptions} />) : <EmptyState message="No booking history is available for demand planning." />}</div>
-      </DashboardCard>
+      </Fragment>
     ),
     routing: card => (
       <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
@@ -325,9 +353,9 @@ export default function OperationalAnalyticsTab({
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 text-left">
+    <div className={`${analyticsScope === 'ict' ? 'max-w-none' : 'mx-auto max-w-7xl'} w-full space-y-6 text-left`}>
       <div className="flex flex-col justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 lg:flex-row lg:items-center">
-        <div><h2 className="text-2xl font-bold tracking-tight text-gray-900">Operational Analytics</h2><p className="mt-1 text-sm text-gray-500">Actionable administrative insights and resource planning.</p></div>
+        <div><h2 className="text-2xl font-bold tracking-tight text-gray-900">Operational Analytics</h2><p className="mt-1 text-sm text-gray-500">{analyticsScope === 'ict' ? 'Document flow, service traffic, and route performance across offices.' : 'Actionable administrative insights and resource planning.'}</p></div>
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
           <div className="flex w-full flex-col gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1.5 sm:w-auto sm:flex-row sm:items-center"><input type="date" value={auditStartDate} onChange={event => setAuditStartDate(event.target.value)} className="min-w-0 bg-transparent px-1 py-1 text-xs font-medium outline-none" /><span className="hidden text-xs text-gray-400 sm:inline">–</span><input type="date" value={auditEndDate} onChange={event => setAuditEndDate(event.target.value)} className="min-w-0 bg-transparent px-1 py-1 text-xs font-medium outline-none" /></div>
           <button type="button" onClick={() => setEditMode(value => !value)} className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-bold ${editMode ? 'border-red-200 bg-red-50 text-red-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>{editMode ? <Check size={15} /> : <Settings size={15} />}{editMode ? 'Done' : 'Customize layout'}</button>
@@ -339,9 +367,8 @@ export default function OperationalAnalyticsTab({
       {editMode && <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-900">Drag cards to reorder them. Use the resize button on each card to cycle through one-, two-, and three-column widths. Your layout is saved on this device.</div>}
 
       {isAnalyticsLoading ? <div className="flex h-96 items-center justify-center text-sm font-bold text-gray-500">Loading analytics…</div> : <>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <div className={`flex items-center justify-between rounded-2xl border border-t-4 bg-white p-5 shadow-sm ${isDbHealthy ? 'border-t-emerald-500' : 'border-t-red-600'}`}><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Database connection</p><p className={`mt-2 text-sm font-black ${isDbHealthy ? 'text-emerald-700' : 'text-red-700'}`}>{systemHealth?.database_connection || 'UNKNOWN'}</p></div><Database className={isDbHealthy ? 'text-emerald-600' : 'text-red-600'} size={24} /></div>
-          <div className="flex items-center justify-between rounded-2xl border border-t-4 border-t-blue-500 bg-white p-5 shadow-sm"><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Data integrity score</p><p className="mt-1 text-2xl font-black text-gray-900">{systemHealth?.data_quality_audit?.integrity_score_percentage || 0}%</p></div><ShieldCheck className="text-blue-600" size={24} /></div>
           <div className="flex items-center justify-between rounded-2xl border border-t-4 border-t-amber-500 bg-white p-5 shadow-sm"><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Records scanned</p><p className="mt-1 text-2xl font-black text-gray-900">{systemHealth?.data_quality_audit?.audit_details?.total_records_scanned || 0}</p></div><Search className="text-amber-600" size={24} /></div>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">{layout.map(card => contents[card.id]?.(card))}</div>

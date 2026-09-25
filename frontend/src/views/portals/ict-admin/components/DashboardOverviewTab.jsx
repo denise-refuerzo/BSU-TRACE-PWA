@@ -1,15 +1,9 @@
-import React from 'react';
-
 export default function DashboardOverviewTab({ data }) {
   return (
     <div className="space-y-6">
-      {/* HEADER */}
-      <div className="bg-white p-6 rounded-2xl border border-gray-300 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Operations Control Center</h2>
-          <p className="text-sm text-gray-500 mt-1">Real-time telemetry monitoring for data pipelines, traffic flows, and backlogs.</p>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 text-xs font-bold shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-gray-500">Real-time telemetry monitoring for data pipelines, traffic flows, and backlogs.</p>
+        <div className="flex w-fit shrink-0 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-sm">
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>

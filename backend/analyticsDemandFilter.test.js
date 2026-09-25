@@ -34,10 +34,10 @@ test('demand month filter uses the latest historical date and preserves forecast
     facility_demand: 3
   });
 
-  const historicalCounts = [3, 6, 9, 12].map(months => (
+  const historicalCounts = [2, 3, 6, 9, 12].map(months => (
     filterDemandByMonths(rows, months).filter(row => row.type === 'historical').length
   ));
-  assert.deepEqual(historicalCounts, [4, 7, 10, 13]);
+  assert.deepEqual(historicalCounts, [3, 4, 7, 10, 13]);
 
   const prepared = prepareDemandChart(rows, 3).chartReadyDemandData;
   assert.equal(prepared.at(-1).type, 'forecast');
@@ -56,4 +56,48 @@ test('ranked analytics metrics sort numerically in both directions', async () =>
   assert.deepEqual(sortMetricRows(rows, 'count', 'desc').map(row => row.name), ['Alpha', 'Beta', 'Gamma']);
   assert.deepEqual(sortMetricRows(rows, 'count', 'asc').map(row => row.name), ['Beta', 'Gamma', 'Alpha']);
   assert.deepEqual(rows.map(row => row.name), ['Gamma', 'Alpha', 'Beta'], 'sorting must not mutate API data');
+});
+
+test('forecast-only legend selection focuses the chart on projected dates', async () => {
+  const { getForecastFocusStart } = await import(pathToFileURL(path.join(
+    __dirname,
+    '..',
+    'frontend',
+    'src',
+    'views',
+    'portals',
+    'gso-admin',
+    'analyticsCharts.js'
+  )).href);
+  const datasets = [
+    { data: [2, 1, 0, null, null] },
+    { data: [1, 0, 3, null, null] },
+    { data: [null, null, 0, 0.5, 0.7] },
+    { data: [null, null, 3, 1.2, 1.4] }
+  ];
+
+  assert.equal(getForecastFocusStart(datasets, index => index >= 2), 2);
+  assert.equal(getForecastFocusStart(datasets, () => true), null);
+  assert.equal(getForecastFocusStart(datasets, () => false), null);
+});
+
+test('monthly forecast summary reports expected totals and daily patterns', async () => {
+  const { summarizeDemandForecast } = await import(analyticsModuleUrl);
+  const summary = summarizeDemandForecast([
+    { date: '2026-09-28', type: 'forecast', vehicle_demand: 1, facility_demand: 2, vehicle_seasonality_score: 0.1, facility_seasonality_score: 0.2 },
+    { date: '2026-09-29', type: 'forecast', vehicle_demand: 2, facility_demand: 3 },
+    { date: '2026-10-03', type: 'forecast', vehicle_demand: 0, facility_demand: 1 },
+    { date: '2026-09-27', type: 'historical', vehicle_demand: 10, facility_demand: 10 }
+  ]);
+
+  assert.equal(summary.days, 3);
+  assert.equal(summary.vehicleTotal, 3);
+  assert.equal(summary.facilityTotal, 6);
+  assert.equal(summary.vehicleDailyAverage, 1);
+  assert.equal(summary.facilityDailyAverage, 2);
+  assert.equal(summary.busiestWeekday, 'Tuesday');
+  assert.equal(summary.busiestWeekdayAverage, 5);
+  assert.equal(summary.weekendDailyAverage, 1);
+  assert.equal(summary.dominantDemand, 'facilities');
+  assert.equal(summary.forecastBasis, 'Conservative weekday baseline');
 });

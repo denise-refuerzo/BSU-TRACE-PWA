@@ -9,6 +9,7 @@
     "migrate:security": "node migrateSecurity.js",
     "migrate:bookings": "node migrateBookingWorkflow.js",
     "migrate:resources": "node migrateResourceAvailability.js",
+    "migrate:account-access": "node migrateAccountAccess.js",
     "migrate:encrypted-files": "node migrateEncryptedFiles.js",
     "verify:office-migration": "node verifyOfficeMigration.js"
   },

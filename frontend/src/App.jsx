@@ -1,10 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { PWAProvider } from './views/shared/context/PWAContext';
+import { endSession, fetchWithAuth } from './api';
 
 // Import Views
 import Login from './views/auth/Login';
+import RegistrationLinkSignup from './views/auth/RegistrationLinkSignup';
 import OriginatorDashboard from './views/portals/originator/OriginatorDashboard';
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
 import GSOAdminDashboard from './views/portals/gso-admin/GSOAdminDashboard';
@@ -16,12 +18,15 @@ const IdleTimer = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const timerRef = useRef(null);
+  const warningTimerRef = useRef(null);
+  const warningActiveRef = useRef(false);
+  const lastHeartbeatRef = useRef(0);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(async () => {
     // Only fire if the user actually has an active session
     if (localStorage.getItem('token')) {
-      localStorage.clear();
-      sessionStorage.removeItem('bsu_pwa_banner_dismissed');
+      warningActiveRef.current = false;
+      await endSession();
       
       Swal.fire({
         icon: 'warning',
@@ -33,18 +38,41 @@ const IdleTimer = ({ children }) => {
         navigate('/login', { replace: true });
       });
     }
-  };
+  }, [navigate]);
 
-  const resetTimer = () => {
+  const resetTimer = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    // 30 minutes = 30 * 60 * 1000 milliseconds = 1800000
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    if (warningActiveRef.current) {
+      warningActiveRef.current = false;
+      Swal.close();
+    }
+    const now = Date.now();
+    if (localStorage.getItem('token') && now - lastHeartbeatRef.current >= 5 * 60 * 1000) {
+      lastHeartbeatRef.current = now;
+      fetchWithAuth('/api/session/activity', { method: 'POST' }).catch(() => {});
+    }
+    warningTimerRef.current = setTimeout(() => {
+      if (!localStorage.getItem('token')) return;
+      warningActiveRef.current = true;
+      Swal.fire({
+        icon: 'warning',
+        title: 'Still there?',
+        text: 'You will be signed out in one minute due to inactivity. Move the mouse or press a key to stay signed in.',
+        showConfirmButton: false,
+        timer: 60000,
+        timerProgressBar: true,
+        allowOutsideClick: false
+      });
+    }, 29 * 60 * 1000);
     timerRef.current = setTimeout(handleLogout, 1800000);
-  };
+  }, [handleLogout]);
 
   useEffect(() => {
     // Do not run the idle timer on the login screen or companion scanner
     if (location.pathname === '/login' || location.pathname === '/companion') {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
       return;
     }
 
@@ -61,9 +89,11 @@ const IdleTimer = ({ children }) => {
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      if (warningActiveRef.current) Swal.close();
       events.forEach(event => document.removeEventListener(event, handleActivity));
     };
-  }, [location.pathname]);
+  }, [location.pathname, resetTimer]);
 
   return children;
 };
@@ -121,6 +151,8 @@ export default function App() {
                 </PublicRoute>
               } 
             />
+
+            <Route path="/register/:token" element={<RegistrationLinkSignup />} />
 
             <Route path="/companion" element={<ContinuousMobileScanner />} />
 

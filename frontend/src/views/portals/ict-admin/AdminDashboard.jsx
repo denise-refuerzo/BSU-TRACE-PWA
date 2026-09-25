@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { BarChart3, Building2, ChevronDown, FileText, GitBranch, Landmark, LayoutDashboard, LogOut, Menu, Network, Users, X } from 'lucide-react';
+import { endSession } from '../../../api';
+import { BarChart3, Building2, ChevronDown, FileText, GitBranch, Landmark, LayoutDashboard, Link2, LogOut, Menu, Network, UserPlus, Users, X } from 'lucide-react';
 
 // --- CUSTOM HOOKS ---
 import { useAdminDashboard } from './hooks/useAdminDashboard';
@@ -13,6 +14,7 @@ import DashboardOverviewTab from './components/DashboardOverviewTab';
 import AccountManagementTab from './components/AccountManagementTab';
 import SystemManagementTab from './components/SystemManagementTab';
 import OperationalAnalytics from './components/OperationalAnalyticsTab';
+import RegistrationManagementTab from './components/RegistrationManagementTab';
 
 // --- MODALS ---
 import ManageAccountModal from './modals/ManageAccountModal';
@@ -38,6 +40,7 @@ export default function AdminDashboard() {
   
   const [activeSidebar, setActiveSidebar] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isAccountsManagementOpen, setIsAccountsManagementOpen] = useState(false);
   const [isSystemManagementOpen, setIsSystemManagementOpen] = useState(false);
   const [systemManagementSection, setSystemManagementSection] = useState('offices');
 
@@ -45,12 +48,26 @@ export default function AdminDashboard() {
   const accountProps = useAccountManagement();
   const matrixProps = useRolesPermissions();
 
+  const accountSectionTitles = {
+    registry: 'Account Registry',
+    create: 'Create Account',
+    registration: 'Registration Management'
+  };
+
+  const systemSectionTitles = {
+    offices: 'Office Locations',
+    departments: 'Departments',
+    categories: 'Document Types',
+    workflows: 'Document Workflows',
+    requests: 'Additional Routing'
+  };
+
   const getHeaderTitle = () => {
     switch (activeSidebar) {
-      case 'accounts': return "";
-      case 'matrix': return "";
-      case 'analytics': return "";
-      default: return "";
+      case 'accounts': return accountSectionTitles[accountProps.activeTab] || 'Accounts Management';
+      case 'matrix': return systemSectionTitles[systemManagementSection] || 'System Management';
+      case 'analytics': return 'Operational Analytics';
+      default: return 'Operations Control Center';
     }
   };
 
@@ -68,6 +85,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAccountsManagementSelect = () => {
+    if (activeSidebar === 'accounts') {
+      setIsAccountsManagementOpen(open => !open);
+    } else {
+      setActiveSidebar('accounts');
+      accountProps.setActiveTab('registry');
+      setIsAccountsManagementOpen(true);
+    }
+  };
+
+  const handleAccountSectionSelect = section => {
+    accountProps.setActiveTab(section);
+    setActiveSidebar('accounts');
+    setIsAccountsManagementOpen(true);
+    setIsSidebarOpen(false);
+  };
+
   const handleSystemManagementSectionSelect = section => {
     setSystemManagementSection(section);
     setActiveSidebar('matrix');
@@ -82,10 +116,9 @@ export default function AdminDashboard() {
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Yes, Sign Out'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
-        localStorage.clear();
+        await endSession();
         navigate('/login');
       }
     });
@@ -135,13 +168,27 @@ export default function AdminDashboard() {
             >
               <LayoutDashboard size={18} /> Dashboard
             </button>
-            <button 
-              type="button" 
-              onClick={() => handleTabSelect('accounts')} 
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
-            >
-              <Users size={18} /> Accounts
-            </button>
+            <div>
+              <button
+                type="button"
+                onClick={handleAccountsManagementSelect}
+                aria-expanded={isAccountsManagementOpen}
+                aria-controls="accounts-management-navigation"
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs whitespace-nowrap transition-colors text-left ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+              >
+                <Users size={16} className="shrink-0" /> <span className="min-w-0 flex-1">Account Management</span><ChevronDown size={14} className={`shrink-0 transition-transform ${isAccountsManagementOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isAccountsManagementOpen && <div id="accounts-management-navigation" className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                {[
+                  { id: 'registry', label: 'Account Registry', icon: FileText },
+                  { id: 'create', label: 'Create Account', icon: UserPlus },
+                  { id: 'registration', label: 'Registration Management', icon: Link2 }
+                ].map(item => {
+                  const Icon = item.icon;
+                  return <button key={item.id} type="button" onClick={() => handleAccountSectionSelect(item.id)} className={`w-full flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition-colors ${activeSidebar === 'accounts' && accountProps.activeTab === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={13} className="shrink-0" /> {item.label}</button>;
+                })}
+              </div>}
+            </div>
             <div>
               <button 
                 type="button" 
@@ -193,8 +240,13 @@ export default function AdminDashboard() {
             >
               <Menu size={22} />
             </button>
-            <div className="text-neutral-900 font-black text-xs uppercase tracking-wider font-mono truncate">
-              {getHeaderTitle()}
+            <div className="min-w-0 text-left">
+              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+                {getHeaderTitle()}
+              </h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                ICT Administration
+              </p>
             </div>
           </div>
 
@@ -204,9 +256,10 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        <main className="p-4 md:p-8 max-w-5xl w-full mx-auto space-y-6 md:space-y-8">
+        <main className={`w-full space-y-6 p-4 md:p-8 md:space-y-8 ${activeSidebar === 'analytics' ? 'max-w-none' : 'mx-auto max-w-5xl'}`}>
           {activeSidebar === 'dashboard' && <DashboardOverviewTab data={dashboardData} />}
-          {activeSidebar === 'accounts' && <AccountManagementTab {...accountProps} />}
+          {activeSidebar === 'accounts' && accountProps.activeTab === 'registration' && <RegistrationManagementTab />}
+          {activeSidebar === 'accounts' && accountProps.activeTab !== 'registration' && <AccountManagementTab {...accountProps} />}
           
           {activeSidebar === 'matrix' && <SystemManagementTab key={systemManagementSection} matrixProps={matrixProps} section={systemManagementSection} />}
 
@@ -219,6 +272,8 @@ export default function AdminDashboard() {
         setSelectedUser={accountProps.setSelectedUser}
         handleUpdateAccount={accountProps.handleUpdateAccount}
         offices={accountProps.offices}
+        departments={accountProps.departments}
+        accounts={accountProps.accounts}
       />
       <OfficeEditModal
         office={matrixProps.editingOffice}

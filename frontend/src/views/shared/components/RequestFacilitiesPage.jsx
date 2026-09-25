@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Lock, Calendar, MapPin, Box, Search, Eye, ClipboardList, Truck, MonitorPlay, Users } from 'lucide-react';
-import { io } from 'socket.io-client';
-import { fetchWithAuth } from "../../../api";
+import { API_BASE_URL, fetchWithAuth } from "../../../api";
+import { createRealtimeClient } from '../../../utils/realtimeClient';
 import Swal from 'sweetalert2';
 import {blockOnDay,blockMatchesResource} from '../../../utils/resourceSchedule';
 import ResourceDayModal from './request-facilities/ResourceDayModal';
 import ResourceBookingModal from './request-facilities/ResourceBookingModal';
 import SubmittedRequestDetailsModal from './request-facilities/SubmittedRequestDetailsModal';
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 export default function RequestFacilitiesPage({ userId, officeName = '', facility = null, view = 'calendar' }) {
   const userName = localStorage.getItem('user') || 'Faculty User';
@@ -26,6 +24,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
   const [requestSearch, setRequestSearch] = useState('');
   const [requestStatus, setRequestStatus] = useState('All');
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [signatories, setSignatories] = useState(null);
   
   const todayObj = new Date();
   const todayString = todayObj.toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
@@ -34,7 +33,9 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
   const [form, setForm] = useState({
     reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {},
     startTime: '', endTime: '', expectedAttendees: '', assetName: '',
-    destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: ''
+    destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '',
+    recommendingApprovalOfficeId: '', recommendingApprovalUserId: '',
+    approvedByOfficeId: '', approvedByUserId: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: ''
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,35 +74,66 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
     } catch (err) { console.error('Could not load submitted facility requests:', err); }
   };
 
+  const fetchSignatories = async () => {
+    try {
+      const response = await fetchWithAuth('/api/account-access/me/booking-signatories');
+      const data = await response.json();
+      if (response.ok) {
+        setSignatories(data);
+        setForm(previous => ({
+          ...previous,
+          preparedByName: data.requestedBy?.name || '',
+          preparedByPosition: data.requestedBy?.position || data.requestedBy?.officeName || '',
+          recommendingApprovalOfficeId: data.offices?.some(office => String(office.officeId) === String(previous.recommendingApprovalOfficeId)) ? previous.recommendingApprovalOfficeId : '',
+          recommendingApprovalUserId: data.offices?.some(office => String(office.officeId) === String(previous.recommendingApprovalOfficeId) && office.recommenders.some(person => String(person.userId) === String(previous.recommendingApprovalUserId))) ? previous.recommendingApprovalUserId : '',
+          approvedByOfficeId: data.offices?.some(office => String(office.officeId) === String(previous.approvedByOfficeId)) ? previous.approvedByOfficeId : '',
+          approvedByUserId: data.offices?.some(office => String(office.officeId) === String(previous.approvedByOfficeId) && office.approvers.some(person => String(person.userId) === String(previous.approvedByUserId))) ? previous.approvedByUserId : '',
+          facilityDetails: {
+            ...previous.facilityDetails,
+            requestedByName: data.requestedBy?.name || '',
+            requestedByPosition: data.requestedBy?.officeName || ''
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Unable to load assigned approvers:', error);
+    }
+  };
+
   useEffect(() => {
     const refreshId = window.setTimeout(() => {
       fetchActiveReservations();
       fetchInventoryMetrics();
       fetchBlackouts();
       fetchMyRequests();
+      fetchSignatories();
     }, 0);
     return () => window.clearTimeout(refreshId);
   }, [activeFacility, view]);
 
   useEffect(() => {
     if (!userId || userId === 'undefined') return;
-    const socket = io(SOCKET_URL, { secure: true, reconnection: true });
+    const socket = createRealtimeClient(API_BASE_URL, { secure: true, reconnection: true });
     const refreshResources = () => {
       fetchActiveReservations();
       fetchInventoryMetrics();
       fetchBlackouts();
       fetchMyRequests();
     };
-    socket.on('connect', () => socket.emit('join-resource-room'));
+    socket.on('connect', () => {
+      socket.emit('join-resource-room');
+      socket.emit('join-user-room', userId);
+    });
     socket.on('resource-schedule-updated', refreshResources);
+    socket.on('account-access-updated', fetchSignatories);
     return () => socket.disconnect();
   }, [userId]);
 
+  const facilityScheduleReady = activeFacility !== 'Van' && !form.intendedDates.some(date => !date) &&
+    Boolean(form.startTime) && Boolean(form.endTime) && form.startTime < form.endTime;
+
   useEffect(() => {
-    if (activeFacility === 'Van' || form.intendedDates.some(date => !date) || !form.startTime || !form.endTime || form.startTime >= form.endTime) {
-      setFacilityOptions([]);
-      return;
-    }
+    if (!facilityScheduleReady) return undefined;
     let active = true;
     const timer = window.setTimeout(async () => {
       setFacilityOptionsLoading(true);
@@ -116,7 +148,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
       } finally { if (active) setFacilityOptionsLoading(false); }
     }, 250);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [activeFacility, form.intendedDates, form.startTime, form.endTime]);
+  }, [activeFacility, facilityScheduleReady, form.intendedDates, form.startTime, form.endTime]);
 
   const handleBookingSubmit = async (e) => {
     e.preventDefault();
@@ -128,8 +160,8 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
     }
 
     if (activeFacility === 'Van') {
-      if (![form.department, form.purpose, ...form.officialPassengers, form.preparedByName, form.preparedByPosition, form.recommendingApprovalName, form.recommendingApprovalPosition].every(value => value.trim())) {
-        return alert('Please complete the department, travel purpose, passenger names, and name/position fields.');
+      if (![form.department, form.purpose, ...form.officialPassengers].every(value => value.trim())) {
+        return alert('Please complete the requesting unit, travel purpose, and passenger names.');
       }
       if (form.pickUpTime >= form.dropOffTime) {
         return alert('Estimated arrival must be after estimated departure.');
@@ -164,7 +196,12 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
       });
       if (res.ok) {
         setShowFormModal(false);
-        setForm({ reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {}, startTime: '', endTime: '', expectedAttendees: '', assetName: '', destination: '', officialPassengers: [''], preparedByName: '', preparedByPosition: '', recommendingApprovalName: '', recommendingApprovalPosition: '', serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
+        setForm({ reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {
+          requestedByName: signatories?.requestedBy?.name || '', requestedByPosition: signatories?.requestedBy?.position || signatories?.requestedBy?.officeName || ''
+        }, startTime: '', endTime: '', expectedAttendees: '', assetName: '', destination: '', officialPassengers: [''],
+        preparedByName: signatories?.requestedBy?.name || '', preparedByPosition: signatories?.requestedBy?.position || signatories?.requestedBy?.officeName || '',
+        recommendingApprovalOfficeId: '', recommendingApprovalUserId: '', approvedByOfficeId: '', approvedByUserId: '',
+        serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
         fetchActiveReservations();
         await Swal.fire({
           icon: 'success',
@@ -524,8 +561,9 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
           currentTimeString={currentTimeString} 
           form={form} 
           setForm={setForm} 
-          facilityOptions={facilityOptions}
+          facilityOptions={facilityScheduleReady ? facilityOptions : []}
           facilityOptionsLoading={facilityOptionsLoading}
+          signatories={signatories}
         />
       )}
 

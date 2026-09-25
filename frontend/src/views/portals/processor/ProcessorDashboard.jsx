@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
-import { fetchWithAuth } from "../../../api";
+import { LayoutDashboard, FileText, History, User, Camera, Link2, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
+import { endSession, fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
 import { useProcessorData } from "./hooks/useProcessorData";
@@ -11,6 +11,7 @@ import { useProcessorData } from "./hooks/useProcessorData";
 import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
 import ProcessorPipelineTab from "./components/ProcessorPipelineTab";
 import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
+import RegistrationManagementPage from './components/RegistrationManagementPage';
 
 // --- EXTRACTED MODALS ---
 import ScannerModal from "./modals/ScannerModal";
@@ -26,6 +27,8 @@ import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
+import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -68,6 +71,8 @@ export default function ProcessorDashboard() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const processorData = useProcessorData(userId);
+  const submissionAccess = useSubmissionAccess(userId);
+  const documentTabs = ['documents', 'submissions', 'office-submissions', 'department-submissions'];
 
   useEffect(() => {
     if (!userId || userId === 'undefined') {
@@ -76,14 +81,22 @@ export default function ProcessorDashboard() {
     }
   }, [userId, navigate]);
 
+  useEffect(() => {
+    if (!submissionAccess.loading && !submissionAccess.canRequestRegistration && activeTab === 'registration-management') {
+      const timer = window.setTimeout(() => setActiveTab('dashboard'), 0);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [activeTab, submissionAccess.canRequestRegistration, submissionAccess.loading]);
+
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false);
   };
 
   const openDocumentsMenu = () => {
-    setDocumentsExpanded(current => activeTab === 'documents' || activeTab === 'submissions' ? !current : true);
-    if (activeTab !== 'documents' && activeTab !== 'submissions') setActiveTab('documents');
+    setDocumentsExpanded(current => documentTabs.includes(activeTab) ? !current : true);
+    if (!documentTabs.includes(activeTab)) setActiveTab('documents');
   };
 
   const openFacilitiesMenu = () => {
@@ -98,10 +111,9 @@ export default function ProcessorDashboard() {
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Yes, Sign Out'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
-        localStorage.clear();
+        await endSession();
         navigate('/login');
       }
     });
@@ -338,14 +350,16 @@ export default function ProcessorDashboard() {
               <LayoutDashboard size={18} /> Dashboard
             </button>
             <div>
-              <button onClick={openDocumentsMenu} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'documents' || activeTab === 'submissions' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+              <button onClick={openDocumentsMenu} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${documentTabs.includes(activeTab) ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
                 <span className="flex items-center gap-3"><FileText size={18} /> Documents</span>
                 <ChevronDown size={15} className={`transition-transform ${documentsExpanded ? 'rotate-180' : ''}`} />
               </button>
               {documentsExpanded && (
                 <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
                   <button onClick={() => { handleTabSelect('documents'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setPipelinePage(1); }} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'documents' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Active Documents</button>
-                  <button onClick={() => handleTabSelect('submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Office Submissions</button>
+                  <button onClick={() => handleTabSelect('submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Personal Submissions</button>
+                  {submissionAccess.offices.length > 0 && <button onClick={() => handleTabSelect('office-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'office-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Office Submissions</button>}
+                  {submissionAccess.departments.length > 0 && <button onClick={() => handleTabSelect('department-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'department-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Department Submissions</button>}
                 </div>
               )}
             </div>
@@ -369,6 +383,9 @@ export default function ProcessorDashboard() {
                 </div>
               )}
             </div>
+            {submissionAccess.canRequestRegistration && <button onClick={() => handleTabSelect('registration-management')} className={`w-full flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${activeTab === 'registration-management' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+              <Link2 size={16} className="shrink-0" /> Registration Management
+            </button>}
             <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <History size={18} /> History
             </button>
@@ -414,7 +431,7 @@ export default function ProcessorDashboard() {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Office Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
+                 {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
               </h2>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
             </div>
@@ -457,10 +474,13 @@ export default function ProcessorDashboard() {
             />
           )}
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} onProcessed={processorData.fetchProcessorMeta} />}
+          {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
+          {activeTab === 'department-submissions' && <SubmissionOverviewTab type="department" scopes={submissionAccess.departments} />}
           {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Gymnasium" />}
           {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Multimedia Room" />}
           {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Van" />}
           {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
+          {activeTab === 'registration-management' && <RegistrationManagementPage userId={userId} access={submissionAccess} />}
           {activeTab === 'history' && (
             <ProcessorHistoryTab 
               {...processorData} 

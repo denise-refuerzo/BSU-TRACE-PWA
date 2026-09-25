@@ -1,6 +1,4 @@
-import React from 'react';
-
-export default function FacilityRequestFields({ activeFacility, form, setForm, todayString, currentTimeString, facilityOptions = [], facilityOptionsLoading = false }) {
+export default function FacilityRequestFields({ activeFacility, form, setForm, todayString, currentTimeString, facilityOptions = [], facilityOptionsLoading = false, signatories }) {
   const details = form.facilityDetails || {};
   const dates = form.intendedDates || [''];
   const inputClass = 'w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs mt-1 bg-white';
@@ -27,7 +25,7 @@ export default function FacilityRequestFields({ activeFacility, form, setForm, t
     <div className="space-y-6">
       <h4 className="font-semibold text-neutral-800 border-b pb-3">Facility and schedule</h4>
       <label className="block text-xs text-neutral-600">Requesting Office/Unit/Organization
-        <input required value={form.department} onChange={e => setForm({...form, department: e.target.value})} className={inputClass} />
+        <input required readOnly value={form.department} className={`${inputClass} bg-neutral-50 text-neutral-600`} />
       </label>
       <fieldset className="space-y-2">
         <legend className="text-xs font-bold text-neutral-600">Intended Date of Use</legend>
@@ -58,23 +56,36 @@ export default function FacilityRequestFields({ activeFacility, form, setForm, t
       {choices('Purpose', 'purposes', ['Seminar/Training', 'Meeting', 'Special Class/Class Activity', 'Acquaintance', 'Presentation', 'Others'])}
       {choices('Participants who will Use the Facility', 'participants', ['Faculty', 'Student', 'External Partners', 'Staff', 'Parents', 'Others'])}
       <label className="block text-xs text-neutral-600">Expected Attendance
-        <input type="number" required min="1" step="1" value={form.expectedAttendees} onChange={e => setForm({...form, expectedAttendees: e.target.value})} className={inputClass} />
+        <input type="number" required min="1" max="99999" step="1" value={form.expectedAttendees} onChange={e => setForm({...form, expectedAttendees: e.target.value})} className={inputClass} />
       </label>
       <fieldset>
         <legend className="text-xs font-bold text-neutral-600 mb-2">Person in Charge during the Event</legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{textField('Name', 'personInChargeName')}{textField('Position', 'personInChargePosition')}</div>
       </fieldset>
       {choices('Miscellaneous requests (optional)', 'miscellaneous', ['Basic Sound System', 'Operator', 'Maintenance Personnel', 'Others'])}
-      <h4 className="font-semibold text-neutral-800 border-b pb-3">Names and positions</h4>
-      {['Requested', 'Reviewed', 'Approved'].map(role => (
-        <fieldset key={role} className="border-t border-neutral-200 pt-3">
-          <legend className="text-xs font-bold text-neutral-600">{role} by</legend>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {textField('Name', `${role.toLowerCase()}ByName`)}
-            {textField('Position', `${role.toLowerCase()}ByPosition`)}
+      <h4 className="font-semibold text-neutral-800 border-b pb-3">Approvals</h4>
+      <fieldset className="border-t border-neutral-200 pt-3">
+        <legend className="text-xs font-bold text-neutral-600">Prepared by</legend>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block text-xs text-neutral-600">Position / Office<input readOnly value={signatories?.requestedBy?.position || signatories?.requestedBy?.officeName || 'No office assigned'} className={`${inputClass} bg-neutral-50 text-neutral-600`} /></label>
+          <label className="block text-xs text-neutral-600">Name<input readOnly value={signatories?.requestedBy?.name || 'Account not found'} className={`${inputClass} bg-neutral-50 text-neutral-600`} /></label>
+        </div>
+      </fieldset>
+      {[
+        { label: 'Recommending Approval', officeKey: 'recommendingApprovalOfficeId', userKey: 'recommendingApprovalUserId', peopleKey: 'recommenders' },
+        { label: 'Approved by', officeKey: 'approvedByOfficeId', userKey: 'approvedByUserId', peopleKey: 'approvers' }
+      ].map(role => {
+        const eligibleOffices = (signatories?.offices || []).filter(office => office[role.peopleKey]?.length);
+        const selectedOffice = eligibleOffices.find(office => String(office.officeId) === String(form[role.officeKey]));
+        return <fieldset key={role.userKey} className="border-t border-neutral-200 pt-3">
+          <legend className="text-xs font-bold text-neutral-600">{role.label}</legend>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block text-xs text-neutral-600">Office<select required value={form[role.officeKey] || ''} onChange={e => setForm({...form, [role.officeKey]: e.target.value, [role.userKey]: ''})} className={inputClass}><option value="">Choose an office</option>{eligibleOffices.map(office => <option key={office.officeId} value={office.officeId}>{office.officeName}</option>)}</select></label>
+            <label className="block text-xs text-neutral-600">Name<select required disabled={!selectedOffice} value={form[role.userKey] || ''} onChange={e => setForm({...form, [role.userKey]: e.target.value})} className={`${inputClass} disabled:bg-neutral-100 disabled:text-neutral-400`}><option value="">{selectedOffice ? 'Choose a person' : 'Choose an office first'}</option>{(selectedOffice?.[role.peopleKey] || []).map(person => <option key={person.userId} value={person.userId}>{person.name}{person.position ? ` — ${person.position}` : ''}</option>)}</select></label>
           </div>
-        </fieldset>
-      ))}
+        </fieldset>;
+      })}
+      {!(signatories?.offices || []).some(office => office.recommenders.length) || !(signatories?.offices || []).some(office => office.approvers.length) ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">Available recommending and final signatories must be assigned by ICT Admin before this request can be submitted.</p> : null}
       <label className="block text-xs text-neutral-600">Remarks (optional)
         <textarea rows={3} value={details.remarks || ''} onChange={e => update('remarks', e.target.value)} className={inputClass} />
       </label>
