@@ -52,7 +52,7 @@ export default function SubmissionOverviewTab({ type, scopes }) {
   const title = `${isOffice ? 'Office' : 'Department'} Submissions`;
   const Icon = isOffice ? Building2 : Landmark;
 
-  return <div className="mx-auto max-w-7xl space-y-5 text-left animate-in fade-in duration-200">
+  return <div className="mx-auto max-w-8xl space-y-5 text-left animate-in fade-in duration-200">
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
       <h2 className="flex items-center gap-2 text-2xl font-black text-gray-900"><Icon className="text-red-700" size={23} /> {title}</h2>
       <p className="mt-1 text-sm text-gray-500">View documents submitted by staff in the {isOffice ? 'offices' : 'departments'} assigned to you.</p>
