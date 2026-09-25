@@ -39,7 +39,7 @@ export default function OriginatorOverviewTab({
   const currentLedgerDocs = filteredLedger.slice((matrixPage - 1) * itemsPerPage, matrixPage * itemsPerPage);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto animate-in fade-in duration-200">
       
       {/* KPI STATS SECTION */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">

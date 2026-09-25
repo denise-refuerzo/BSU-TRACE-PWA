@@ -39,7 +39,7 @@ export default function ProcessorOverviewTab({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200 pb-12 sm:pb-6">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200 pb-12 sm:pb-6">
       
       {/* PROFILE + KPI SECTION */}
       <div className="flex flex-col xl:flex-row gap-4">

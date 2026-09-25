@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, Search, X } from 'lucide-react';
-import { fetchWithAuth } from '../../../../api';
+import { API_BASE_URL, fetchWithAuth } from '../../../../api';
+import { createRealtimeClient } from '../../../../utils/realtimeClient';
 
 const PAGE_SIZE = 8;
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_BASE_URL;
 const statusLabels = { custom: 'Pending review', official: 'Approved', declined: 'Kept private' };
 
 function RouteRequestModal({ request, onClose, onReview, busy }) {
@@ -30,7 +30,6 @@ export default function CustomRouteReview({ onChanged }) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
-  const socketRef = useRef(null);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -48,10 +47,11 @@ export default function CustomRouteReview({ onChanged }) {
     return () => window.clearTimeout(loadTimer);
   }, [load]);
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL, { secure: true, reconnection: true });
-    socketRef.current.on('connect', () => socketRef.current.emit('join-ict-admin-room'));
-    socketRef.current.on('admin-configuration-updated', load);
-    return () => socketRef.current?.disconnect();
+    const socket = createRealtimeClient(SOCKET_URL, { secure: true, reconnection: true });
+    const subscribe = () => socket.emit('join-ict-admin-room');
+    socket.on('connect', subscribe);
+    socket.on('admin-configuration-updated', load);
+    return () => socket.disconnect();
   }, [load]);
 
   const visibleRoutes = useMemo(() => routes.filter(route => {

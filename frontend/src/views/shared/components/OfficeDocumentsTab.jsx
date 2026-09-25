@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Filter, Search, Inbox, FileText } from 'lucide-react';
 
-export default function ProcessorPipelineTab({
+export default function OfficeDocumentsTab({
   resolveOfficeStatus,
   search,
   setSearch,
@@ -33,7 +33,7 @@ export default function ProcessorPipelineTab({
       }
       if (onClearTargetDocId) onClearTargetDocId();
     }
-  }, [targetDocId, pipelineDocs]);
+  }, [targetDocId, pipelineDocs, handleOpenPipelineDetails, onClearTargetDocId]);
 
   const handleFilterChange = (val) => {
     if (val === 'Incoming') {
@@ -46,7 +46,7 @@ export default function ProcessorPipelineTab({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER SECTION */}
       <div>

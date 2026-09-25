@@ -8,7 +8,7 @@ const emptyAccountForm = {
   isAssignatory: false, positionTitle: '', authorityMode: 'office', authorityOfficeIds: [], authorityDepartmentId: ''
 };
 
-export function useAccountManagement() {
+export function useAccountManagement(enabled = true) {
   // Tab control state: toggles view smoothly between registry table and creation form
   const [activeTab, setActiveTab] = useState('registry');
 
@@ -80,21 +80,23 @@ export function useAccountManagement() {
 
   // Sync baseline lookup catalogs upon initial component mount
   useEffect(() => {
+    if (!enabled) return undefined;
     const refreshId = window.setTimeout(() => {
       fetchOffices();
       fetchDepartments();
       fetchAccounts();
     }, 0);
     return () => window.clearTimeout(refreshId);
-  }, [fetchAccounts]);
+  }, [enabled, fetchAccounts]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const socket = createRealtimeClient(API_BASE_URL, { secure: true, reconnection: true });
     const subscribe = () => socket.emit('join-ict-admin-room');
     socket.on('connect', subscribe);
     socket.on('account-registry-updated', fetchAccounts);
     return () => socket.disconnect();
-  }, [fetchAccounts]);
+  }, [enabled, fetchAccounts]);
 
   // --- ACCOUNT CREATION SUBMISSION ---
   const handleCreateAccount = async (e) => {

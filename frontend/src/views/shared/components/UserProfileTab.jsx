@@ -132,7 +132,7 @@ export default function UserProfileTab({
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
+    <div className="max-w-7xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
       
       {/* 2FA MODAL OVERLAY */}
       {show2FAModal && (

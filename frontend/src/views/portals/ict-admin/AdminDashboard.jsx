@@ -44,9 +44,9 @@ export default function AdminDashboard() {
   const [isSystemManagementOpen, setIsSystemManagementOpen] = useState(false);
   const [systemManagementSection, setSystemManagementSection] = useState('offices');
 
-  const { data: dashboardData } = useAdminDashboard();
-  const accountProps = useAccountManagement();
-  const matrixProps = useRolesPermissions();
+  const { data: dashboardData } = useAdminDashboard(activeSidebar === 'dashboard');
+  const accountProps = useAccountManagement(activeSidebar === 'accounts');
+  const matrixProps = useRolesPermissions(activeSidebar === 'matrix');
 
   const accountSectionTitles = {
     registry: 'Account Registry',
@@ -256,7 +256,7 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        <main className={`w-full space-y-6 p-4 md:p-8 md:space-y-8 ${activeSidebar === 'analytics' ? 'max-w-none' : 'mx-auto max-w-5xl'}`}>
+        <main className={`w-full space-y-6 p-4 md:p-8 md:space-y-8 ${activeSidebar === 'analytics' ? 'max-w-none' : 'mx-auto max-w-8xl'}`}>
           {activeSidebar === 'dashboard' && <DashboardOverviewTab data={dashboardData} />}
           {activeSidebar === 'accounts' && accountProps.activeTab === 'registration' && <RegistrationManagementTab />}
           {activeSidebar === 'accounts' && accountProps.activeTab !== 'registration' && <AccountManagementTab {...accountProps} />}
