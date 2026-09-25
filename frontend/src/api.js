@@ -7,6 +7,8 @@ const API = axios.create({
   baseURL: API_BASE_URL,
 });
 let logoutPromptActive = false;
+let rateLimitPromptActive = false;
+let rateLimitNoticeUntil = 0;
 const inFlightGets = new Map();
 
 export default API;
@@ -48,6 +50,27 @@ const performAuthenticatedFetch = async (url, options = {}) => {
         allowOutsideClick: false
       }).then(() => {
         window.location.href = '/login';
+      });
+    }
+  }
+
+  if (response.status === 429) {
+    const retryAfterHeader = Number.parseInt(response.headers.get('Retry-After') || '', 10);
+    const retryAfterSeconds = Math.max(1, Number(data?.retryAfterSeconds) || retryAfterHeader || 60);
+    const now = Date.now();
+    const shouldNotify = !rateLimitPromptActive && now >= rateLimitNoticeUntil;
+    rateLimitNoticeUntil = Math.max(rateLimitNoticeUntil, now + retryAfterSeconds * 1000);
+
+    if (shouldNotify) {
+      rateLimitPromptActive = true;
+      Swal.fire({
+        title: 'Please slow down',
+        text: data?.error || `Too many requests were sent. Please try again in ${retryAfterSeconds} seconds.`,
+        icon: 'warning',
+        confirmButtonText: 'Okay',
+        confirmButtonColor: '#800000'
+      }).finally(() => {
+        rateLimitPromptActive = false;
       });
     }
   }

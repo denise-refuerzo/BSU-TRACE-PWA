@@ -43,7 +43,11 @@ app.use(cors({
     'http://localhost:5173',     
     'http://localhost:3000'
   ],
-  credentials: true
+  credentials: true,
+  // Authorization headers require a CORS preflight. Let browsers reuse a
+  // successful check briefly instead of sending a new OPTIONS request for
+  // every authenticated API call.
+  maxAge: 600
 }));
 
 app.use(express.json());
@@ -56,6 +60,21 @@ const requestKey = req => {
   return `ip:${ipKeyGenerator(req.ip)}`;
 };
 
+const rateLimitHandler = (req, res, _next, options) => {
+  const resetAt = req.rateLimit?.resetTime instanceof Date
+    ? req.rateLimit.resetTime.getTime()
+    : Date.now() + (options.windowMs || 60 * 1000);
+  const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+  const configuredMessage = options.message;
+  const baseMessage = typeof configuredMessage === 'object'
+    ? configuredMessage.error
+    : configuredMessage;
+  const error = `${baseMessage || 'Too many requests.'} Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`;
+
+  res.set('Retry-After', String(retryAfterSeconds));
+  return res.status(options.statusCode || 429).json({ error, retryAfterSeconds });
+};
+
 // Normal signed-in screens make several parallel reads and receive real-time
 // refresh events. Use a generous per-session ceiling while still containing
 // runaway clients and unauthenticated request floods.
@@ -64,6 +83,7 @@ const globalLimiter = rateLimit({
   limit: 1200,
   keyGenerator: requestKey,
   message: { error: 'This session is sending requests too quickly. Please wait a moment and try again.' },
+  handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -73,6 +93,7 @@ const writeLimiter = rateLimit({
   limit: 180,
   keyGenerator: requestKey,
   message: { error: 'Too many changes were submitted in a short time. Please wait before trying again.' },
+  handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -82,6 +103,7 @@ const chatLimiter = rateLimit({
   limit: 30,
   keyGenerator: requestKey,
   message: { error: 'Messages are being sent too quickly. Please wait a moment.' },
+  handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -93,6 +115,7 @@ const authLimiter = rateLimit({
   keyGenerator: req => `auth:${ipKeyGenerator(req.ip)}`,
   skipSuccessfulRequests: true,
   message: { error: 'Too many authentication attempts, please try again later.' },
+  handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -416,6 +439,7 @@ const publicRegistrationReadLimiter = rateLimit({
   limit: 120,
   keyGenerator: req => `registration:${ipKeyGenerator(req.ip)}`,
   message: { error: 'Too many registration requests were received. Please wait before trying again.' },
+  handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -425,6 +449,7 @@ const publicRegistrationWriteLimiter = rateLimit({
   limit: 10,
   keyGenerator: req => `registration-write:${ipKeyGenerator(req.ip)}`,
   message: { error: 'Too many account registrations were attempted. Please wait before trying again.' },
+  handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -434,6 +459,7 @@ const registrationRequestLimiter = rateLimit({
   limit: 20,
   keyGenerator: requestKey,
   message: { error: 'Too many registration links were requested. Please wait before submitting another request.' },
+  handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -1626,8 +1652,20 @@ app.post('/api/chat/messages', requireAuth, chatLimiter, async (req, res) => {
     // Broadcast instantly to anyone viewing this chat room
     io.to(`chat_room_${roomId}`).emit('new-chat-message', fullMessage);
 
-    // Notify all participants to update unread badges
-    io.emit('chat-badge-updated');
+    // Refresh unread state only for people who can participate in this document
+    // instead of making every connected account query its chat directory.
+    const participantUsers = await pool.query(`
+      SELECT DISTINCT u.public_id
+      FROM public."User" u
+      JOIN public.initial_document idoc ON idoc.ini_id=$1
+      WHERE u.u_id=idoc.u_id OR EXISTS (
+        SELECT 1 FROM public.document_collaborators dc
+        WHERE dc.ini_id=idoc.ini_id AND dc.user_id=u.u_id
+      )
+    `, [room.ini_id]);
+    let chatAudience = io.to(`office_${room.o_id}`);
+    participantUsers.rows.forEach(participant => { chatAudience = chatAudience.to(`user_${participant.public_id}`); });
+    chatAudience.emit('chat-badge-updated');
 
     res.status(201).json(fullMessage);
   } catch (err) {

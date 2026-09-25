@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
-import { fetchWithAuth } from "../../../../api";
+import { useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL, fetchWithAuth } from "../../../../api";
+import { createRealtimeClient } from '../../../../utils/realtimeClient';
 
-const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_BASE_URL;
 
-export function useAdminDashboard() {
+export function useAdminDashboard(enabled = true) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
     counters: { activeTracks: 0, systemUsers: 0, workflowBlueprints: 0 },
@@ -12,33 +12,7 @@ export function useAdminDashboard() {
     stalledBottlenecks: []
   });
   
-  const socketRef = useRef(null);
-
-  useEffect(() => {
-    fetchDashboardMetrics();
-
-    // REAL-TIME: Connect to WebSocket for live ICT metrics
-    socketRef.current = io(SOCKET_URL, {
-      secure: true,
-      reconnection: true
-    });
-
-    socketRef.current.on('connect', () => {
-      // Join the global ICT admin room
-      socketRef.current.emit('join-ict-admin-room');
-    });
-
-    // Listen for system-wide updates broadcasted by the backend
-    socketRef.current.on('system-metrics-updated', () => {
-      fetchDashboardMetrics();
-    });
-
-    return () => {
-      if (socketRef.current) socketRef.current.disconnect();
-    };
-  }, []);
-
-  const fetchDashboardMetrics = async () => {
+  const fetchDashboardMetrics = useCallback(async () => {
     try {
       const res = await fetchWithAuth('/api/admin/dashboard-metrics');
       const payload = await res.json();
@@ -48,7 +22,17 @@ export function useAdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const initial = window.setTimeout(fetchDashboardMetrics, 0);
+    const socket = createRealtimeClient(SOCKET_URL, { secure: true, reconnection: true });
+    const subscribe = () => socket.emit('join-ict-admin-room');
+    socket.on('connect', subscribe);
+    socket.on('system-metrics-updated', fetchDashboardMetrics);
+    return () => { window.clearTimeout(initial); socket.disconnect(); };
+  }, [enabled, fetchDashboardMetrics]);
 
   return { loading, data };
 }

@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { io } from 'socket.io-client';
+import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { fetchWithAuth } from "../../../../api";
+import { API_BASE_URL, fetchWithAuth } from "../../../../api";
+import { createRealtimeClient } from '../../../../utils/realtimeClient';
 
-export function useRolesPermissions() {
+export function useRolesPermissions(enabled = true) {
   // --- CATALOG INDICES STATES ---
   const [offices, setOffices] = useState([]);
   const [routeGroups, setRouteGroups] = useState([]);
@@ -27,7 +27,6 @@ export function useRolesPermissions() {
   const [officeCategoryEnabled, setOfficeCategoryEnabled] = useState(false);
   const [editingOffice, setEditingOffice] = useState(null);
   const [workflowEditorOpen, setWorkflowEditorOpen] = useState(false);
-  const socketRef = useRef(null);
 
   const fetchBaselineCatalogs = useCallback(async () => {
     try {
@@ -90,17 +89,20 @@ export function useRolesPermissions() {
   };
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const refreshTimer = window.setTimeout(fetchBaselineCatalogs, 0);
     return () => window.clearTimeout(refreshTimer);
-  }, [fetchBaselineCatalogs]);
+  }, [enabled, fetchBaselineCatalogs]);
 
   useEffect(() => {
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
-    socketRef.current = io(socketUrl, { secure: true, reconnection: true });
-    socketRef.current.on('connect', () => socketRef.current.emit('join-ict-admin-room'));
-    socketRef.current.on('admin-configuration-updated', fetchBaselineCatalogs);
-    return () => socketRef.current?.disconnect();
-  }, [fetchBaselineCatalogs]);
+    if (!enabled) return undefined;
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || API_BASE_URL;
+    const socket = createRealtimeClient(socketUrl, { secure: true, reconnection: true });
+    const subscribe = () => socket.emit('join-ict-admin-room');
+    socket.on('connect', subscribe);
+    socket.on('admin-configuration-updated', fetchBaselineCatalogs);
+    return () => socket.disconnect();
+  }, [enabled, fetchBaselineCatalogs]);
 
   const handleStopKindChange = (index, kind) => {
     const updated = [...selectedStops];

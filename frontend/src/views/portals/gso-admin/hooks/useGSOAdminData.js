@@ -221,8 +221,6 @@ export function useGSOAdminData() {
     fetchWorkflowTemplates();
     fetchOfficesList();
     fetchProcurementData();
-    fetchInventoryMetrics();
-    fetchSystemAnalyticsData(); 
   }, [userId, navigate]);
 
   // --- REAL-TIME WEBSOCKET EFFECT ---
@@ -235,6 +233,8 @@ export function useGSOAdminData() {
       reconnection: true
     });
 
+    let connectedOnce = false;
+
     socketRef.current.on('connect', () => {
       // 1. Join global GSO room for system-wide updates
       socketRef.current.emit('join-gso-admin-room');
@@ -244,7 +244,8 @@ export function useGSOAdminData() {
       socketRef.current.emit('join-user-room', userId);
       // Resource assignments, availability, and booking status changes.
       socketRef.current.emit('join-resource-room');
-      checkChatBadgeStatus();
+      if (connectedOnce) checkChatBadgeStatus();
+      connectedOnce = true;
     });
 
     const checkChatBadgeStatus = async () => {

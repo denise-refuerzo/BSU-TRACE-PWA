@@ -476,7 +476,7 @@ export default function ProcessorDashboard() {
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
           )}
-          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} onProcessed={processorData.fetchProcessorMeta} onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} processTypes={processorData.processTypes} onProcessed={processorData.fetchProcessorMeta} onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
           {activeTab === 'shared-submissions' && <CollaborativeSubmissionsTab mode="shared" onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
           {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
           {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}

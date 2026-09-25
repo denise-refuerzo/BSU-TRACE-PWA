@@ -171,9 +171,13 @@ export function useProcessorData(userId) {
       reconnection: true
     });
 
+    let connectedOnce = false;
+
     socketRef.current.on('connect', () => {
       socketRef.current.emit('join-office-room', processorOfficeId);
-      checkChatBadgeStatus();
+      socketRef.current.emit('join-user-room', userId);
+      if (connectedOnce) checkChatBadgeStatus();
+      connectedOnce = true;
     });
 
     const refreshOfficeFeed = () => {

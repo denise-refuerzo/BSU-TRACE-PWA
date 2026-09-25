@@ -165,10 +165,12 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
   useEffect(() => {
     const socket = io(SOCKET_URL, { reconnection: true });
     socketRef.current = socket;
+    let connectedOnce = false;
     const connect = () => {
       if (userId) socket.emit('join-user-room', userId);
       if (officeId) socket.emit('join-office-room', officeId);
-      refreshDirectory();
+      if (connectedOnce) refreshDirectory();
+      connectedOnce = true;
     };
     const refresh = () => refreshDirectory();
     socket.on('connect', connect);

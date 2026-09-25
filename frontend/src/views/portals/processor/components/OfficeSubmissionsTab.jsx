@@ -8,13 +8,13 @@ import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Filter, MoreV
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
-export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {}, onOpenChat }) {
+export default function OfficeSubmissionsTab({ officeId, processTypes: providedProcessTypes = [], onProcessed = () => {}, onOpenChat }) {
   const userId = localStorage.getItem('userId');
 
   // --- STATE ---
   const [estimateBase, setEstimateBase] = useState(() => Date.now());
   const [documents, setDocuments] = useState([]);
-  const [processTypes, setProcessTypes] = useState([]);
+  const [processTypes, setProcessTypes] = useState(providedProcessTypes);
   const [loading, setLoading] = useState(true);
   const [isDocsLoading, setIsDocsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,16 +45,30 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {},
     const data = await res.json(); if (!res.ok) throw new Error(data.error); return data;
   }).then(data => { setDocuments(data); setError(''); }).catch(err => setError(err.message)).finally(() => setIsDocsLoading(false)), [userId]);
 
-  const workflows = useCallback(() => fetchWithAuth('/api/process-types').then(async res => {
+  const workflows = useCallback(() => {
+    if (providedProcessTypes.length) {
+      setProcessTypes(providedProcessTypes);
+      setLoading(false);
+      return Promise.resolve();
+    }
+    return fetchWithAuth('/api/process-types').then(async res => {
     const data = await res.json(); if (!res.ok) throw new Error(data.error); return data;
-  }).then(data => { setProcessTypes(data); setWorkflowError(''); }).catch(err => setWorkflowError(err.message)).finally(() => setLoading(false)), []);
+    }).then(data => { setProcessTypes(data); setWorkflowError(''); }).catch(err => setWorkflowError(err.message)).finally(() => setLoading(false));
+  }, [providedProcessTypes]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(workflows, 0);
+    return () => window.clearTimeout(timer);
+  }, [workflows]);
 
   // --- REAL-TIME WEBSOCKET EFFECT (Replaces setInterval) ---
-  useEffect(() => { 
-    load(); 
-    workflows(); 
-    
-    if (!officeId) return;
+  useEffect(() => {
+    if (!officeId) return undefined;
 
     const socket = io(SOCKET_URL, { 
       secure: true, 
@@ -75,7 +89,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {},
     return () => {
       socket.disconnect();
     };
-  }, [officeId, userId, load, workflows]);
+  }, [officeId, userId, load]);
 
   useEffect(() => { 
     let cancelled = false; 

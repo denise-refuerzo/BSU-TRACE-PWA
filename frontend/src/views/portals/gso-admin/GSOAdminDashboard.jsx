@@ -771,7 +771,7 @@ export default function GSOAdminDashboard() {
             />
           )}
 
-          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} onOpenChat={handleNavigateToChat} />}
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} processTypes={processTypes} onOpenChat={handleNavigateToChat} />}
           {activeTab === 'shared-submissions' && <CollaborativeSubmissionsTab mode="shared" onOpenChat={handleNavigateToChat} />}
           {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={handleNavigateToChat} />}
           {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
