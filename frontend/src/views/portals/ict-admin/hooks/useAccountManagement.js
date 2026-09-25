@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { fetchWithAuth } from "../../../../api";
+import { API_BASE_URL, fetchWithAuth } from "../../../../api";
+import { createRealtimeClient } from '../../../../utils/realtimeClient';
+
+const emptyAccountForm = {
+  username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: '',
+  isAssignatory: false, positionTitle: '', authorityMode: 'office', authorityOfficeIds: [], authorityDepartmentId: ''
+};
 
 export function useAccountManagement() {
   // Tab control state: toggles view smoothly between registry table and creation form
   const [activeTab, setActiveTab] = useState('registry');
 
   // --- REGISTRATION FORM STATES ---
-  const [form, setForm] = useState({
-    username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: ''
-  });
+  const [form, setForm] = useState(emptyAccountForm);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [emailAvailability, setEmailAvailability] = useState({ checking: false, available: null, message: '' });
   const [offices, setOffices] = useState([]);
@@ -19,6 +23,12 @@ export function useAccountManagement() {
   const [accounts, setAccounts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [officeFilter, setOfficeFilter] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [originFilter, setOriginFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [authorityFilter, setAuthorityFilter] = useState('');
+  const [sponsorFilter, setSponsorFilter] = useState('');
   const [selectedUser, setSelectedUser] = useState(null); // Tracks account loaded into editing modal
  
   const fetchOffices = async () => {
@@ -31,7 +41,7 @@ export function useAccountManagement() {
     }
   };
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const res = await fetchWithAuth('/api/accounts');
       const data = await res.json();
@@ -39,7 +49,7 @@ export function useAccountManagement() {
     } catch (err) {
       console.error("Error fetching institutional accounts catalog ledger:", err);
     }
-  };
+  }, []);
 
   const fetchDepartments = async () => {
     try {
@@ -76,7 +86,15 @@ export function useAccountManagement() {
       fetchAccounts();
     }, 0);
     return () => window.clearTimeout(refreshId);
-  }, []);
+  }, [fetchAccounts]);
+
+  useEffect(() => {
+    const socket = createRealtimeClient(API_BASE_URL, { secure: true, reconnection: true });
+    const subscribe = () => socket.emit('join-ict-admin-room');
+    socket.on('connect', subscribe);
+    socket.on('account-registry-updated', fetchAccounts);
+    return () => socket.disconnect();
+  }, [fetchAccounts]);
 
   // --- ACCOUNT CREATION SUBMISSION ---
   const handleCreateAccount = async (e) => {
@@ -124,7 +142,7 @@ export function useAccountManagement() {
 
       setMessage({ type: 'success', text: data.message });
       setEmailAvailability({ checking: false, available: null, message: '' });
-      setForm({ username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: '' });
+      setForm(emptyAccountForm);
       fetchAccounts(); // Silent refresh of registry data cache
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
@@ -187,9 +205,16 @@ export function useAccountManagement() {
   const filteredAccounts = accounts.filter(acc => {
     const matchesSearch = acc.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           acc.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          acc.uni_email.toLowerCase().includes(searchTerm.toLowerCase());
+                          acc.uni_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          String(acc.sponsored_by || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === '' || acc.a_id === parseInt(roleFilter);
-    return matchesSearch && matchesRole;
+    const matchesOffice = officeFilter === '' || String(acc.o_id || '') === officeFilter;
+    const matchesDepartment = departmentFilter === '' || String(acc.d_id || '') === departmentFilter;
+    const matchesOrigin = originFilter === '' || acc.account_origin === originFilter;
+    const matchesStatus = statusFilter === '' || (statusFilter === 'active' ? acc.is_active !== false : acc.is_active === false);
+    const matchesAuthority = authorityFilter === '' || (authorityFilter === 'assignatory' ? acc.is_assignatory === true : acc.is_assignatory !== true);
+    const matchesSponsor = sponsorFilter === '' || String(acc.sponsor_id || '') === sponsorFilter;
+    return matchesSearch && matchesRole && matchesOffice && matchesDepartment && matchesOrigin && matchesStatus && matchesAuthority && matchesSponsor;
   });
 
   return {
@@ -200,6 +225,12 @@ export function useAccountManagement() {
     accounts, offices, departments,
     searchTerm, setSearchTerm,
     roleFilter, setRoleFilter,
+    officeFilter, setOfficeFilter,
+    departmentFilter, setDepartmentFilter,
+    originFilter, setOriginFilter,
+    statusFilter, setStatusFilter,
+    authorityFilter, setAuthorityFilter,
+    sponsorFilter, setSponsorFilter,
     selectedUser, setSelectedUser,
     filteredAccounts,
     handleCreateAccount,

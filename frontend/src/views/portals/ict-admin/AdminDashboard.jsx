@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { endSession } from '../../../api';
-import { BarChart3, Building2, ChevronDown, FileText, GitBranch, Landmark, LayoutDashboard, LogOut, Menu, Network, ShieldCheck, UserPlus, Users, X } from 'lucide-react';
+import { BarChart3, Building2, ChevronDown, FileText, GitBranch, Landmark, LayoutDashboard, Link2, LogOut, Menu, Network, UserPlus, Users, X } from 'lucide-react';
 
 // --- CUSTOM HOOKS ---
 import { useAdminDashboard } from './hooks/useAdminDashboard';
@@ -14,6 +14,7 @@ import DashboardOverviewTab from './components/DashboardOverviewTab';
 import AccountManagementTab from './components/AccountManagementTab';
 import SystemManagementTab from './components/SystemManagementTab';
 import OperationalAnalytics from './components/OperationalAnalyticsTab';
+import RegistrationManagementTab from './components/RegistrationManagementTab';
 
 // --- MODALS ---
 import ManageAccountModal from './modals/ManageAccountModal';
@@ -50,7 +51,7 @@ export default function AdminDashboard() {
   const accountSectionTitles = {
     registry: 'Account Registry',
     create: 'Create Account',
-    access: 'Access & Responsibilities'
+    registration: 'Registration Management'
   };
 
   const systemSectionTitles = {
@@ -173,18 +174,18 @@ export default function AdminDashboard() {
                 onClick={handleAccountsManagementSelect}
                 aria-expanded={isAccountsManagementOpen}
                 aria-controls="accounts-management-navigation"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs whitespace-nowrap transition-colors text-left ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
               >
-                <Users size={18} /> <span className="flex-1">Accounts Management</span><ChevronDown size={16} className={`transition-transform ${isAccountsManagementOpen ? 'rotate-180' : ''}`} />
+                <Users size={16} className="shrink-0" /> <span className="min-w-0 flex-1">Account Management</span><ChevronDown size={14} className={`shrink-0 transition-transform ${isAccountsManagementOpen ? 'rotate-180' : ''}`} />
               </button>
               {isAccountsManagementOpen && <div id="accounts-management-navigation" className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
                 {[
                   { id: 'registry', label: 'Account Registry', icon: FileText },
                   { id: 'create', label: 'Create Account', icon: UserPlus },
-                  { id: 'access', label: 'Access & Responsibilities', icon: ShieldCheck }
+                  { id: 'registration', label: 'Registration Management', icon: Link2 }
                 ].map(item => {
                   const Icon = item.icon;
-                  return <button key={item.id} type="button" onClick={() => handleAccountSectionSelect(item.id)} className={`w-full flex items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-semibold transition-colors ${activeSidebar === 'accounts' && accountProps.activeTab === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={14} /> {item.label}</button>;
+                  return <button key={item.id} type="button" onClick={() => handleAccountSectionSelect(item.id)} className={`w-full flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition-colors ${activeSidebar === 'accounts' && accountProps.activeTab === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={13} className="shrink-0" /> {item.label}</button>;
                 })}
               </div>}
             </div>
@@ -257,7 +258,8 @@ export default function AdminDashboard() {
 
         <main className={`w-full space-y-6 p-4 md:p-8 md:space-y-8 ${activeSidebar === 'analytics' ? 'max-w-none' : 'mx-auto max-w-5xl'}`}>
           {activeSidebar === 'dashboard' && <DashboardOverviewTab data={dashboardData} />}
-          {activeSidebar === 'accounts' && <AccountManagementTab {...accountProps} />}
+          {activeSidebar === 'accounts' && accountProps.activeTab === 'registration' && <RegistrationManagementTab />}
+          {activeSidebar === 'accounts' && accountProps.activeTab !== 'registration' && <AccountManagementTab {...accountProps} />}
           
           {activeSidebar === 'matrix' && <SystemManagementTab key={systemManagementSection} matrixProps={matrixProps} section={systemManagementSection} />}
 
@@ -271,6 +273,7 @@ export default function AdminDashboard() {
         handleUpdateAccount={accountProps.handleUpdateAccount}
         offices={accountProps.offices}
         departments={accountProps.departments}
+        accounts={accountProps.accounts}
       />
       <OfficeEditModal
         office={matrixProps.editingOffice}

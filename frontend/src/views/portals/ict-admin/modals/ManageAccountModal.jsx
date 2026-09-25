@@ -1,7 +1,8 @@
 import { publicReference } from '../../../../utils/publicReference';
+import AccessManagementTab from '../components/AccessManagementTab';
 
 export default function ManageAccountModal({ 
-  selectedUser, setSelectedUser, handleUpdateAccount, offices, departments
+  selectedUser, setSelectedUser, handleUpdateAccount, offices, departments, accounts
 }) {
   // Mirrors the original conditional rendering: {selectedUser && (...)}
   if (!selectedUser) return null;
@@ -13,7 +14,7 @@ export default function ManageAccountModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white border border-neutral-200 max-w-lg w-full rounded-2xl p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
         <div className="flex justify-between items-center border-b border-neutral-100 pb-3 mb-4">
           <div>
             <h3 className="text-base font-black text-neutral-900">Manage Operational Profile</h3>
@@ -145,6 +146,18 @@ export default function ManageAccountModal({
             >
               {selectedUser.is_active || selectedUser.is_active === undefined ? "🟢 Active" : "🔴 Suspended"}
             </button>
+          </div>
+
+          <div className="border-t border-neutral-200 pt-5">
+            <h4 className="text-sm font-black text-neutral-900">Access &amp; Responsibilities</h4>
+            <p className="mt-1 mb-4 text-[11px] font-normal text-neutral-500">Override submission visibility, signatory responsibilities, position titles, and registration-link authority.</p>
+            <AccessManagementTab
+              accounts={accounts}
+              offices={offices}
+              departments={departments}
+              fixedUserId={selectedUser.u_id}
+              embedded
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">

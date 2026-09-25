@@ -6,7 +6,11 @@ const activeAssignmentSql = `
 
 async function getBookingSignatoryOptions(db, userId) {
   const requesterResult = await db.query(`
-    SELECT u.u_id,u.public_id,u.full_name,u.o_id,o.office_name
+    SELECT u.u_id,u.public_id,u.full_name,u.o_id,o.office_name,
+           (SELECT aa.position_title FROM public.account_access_assignments aa
+            WHERE aa.u_id=u.u_id AND aa.scope_type='office' AND aa.office_id=u.o_id
+              AND ${activeAssignmentSql}
+            ORDER BY aa.assignment_id LIMIT 1) AS position_title
     FROM public."User" u
     LEFT JOIN public.offices o ON o.o_id=u.o_id
     WHERE u.u_id=$1 AND u.is_active IS TRUE
@@ -15,7 +19,7 @@ async function getBookingSignatoryOptions(db, userId) {
   if (!requester) return null;
 
   const candidates = await db.query(`
-    SELECT signer.u_id,signer.public_id,signer.full_name,aa.office_id,o.office_name,
+    SELECT signer.u_id,signer.public_id,signer.full_name,aa.office_id,o.office_name,aa.position_title,
            aa.can_recommend,aa.can_approve
     FROM public.account_access_assignments aa
     JOIN public."User" signer ON signer.u_id=aa.u_id AND signer.is_active IS TRUE
@@ -30,7 +34,7 @@ async function getBookingSignatoryOptions(db, userId) {
     const office = officeMap.get(Number(row.office_id)) || {
       officeId: Number(row.office_id), officeName: row.office_name, recommenders: [], approvers: []
     };
-    const person = { userId: Number(row.u_id), publicId: row.public_id, name: row.full_name };
+    const person = { userId: Number(row.u_id), publicId: row.public_id, name: row.full_name, position: row.position_title || row.office_name };
     if (row.can_recommend) office.recommenders.push(person);
     if (row.can_approve) office.approvers.push(person);
     officeMap.set(Number(row.office_id), office);
@@ -41,6 +45,7 @@ async function getBookingSignatoryOptions(db, userId) {
       userId: Number(requester.u_id),
       publicId: requester.public_id,
       name: requester.full_name,
+      position: requester.position_title || requester.office_name || 'Staff member',
       officeId: requester.o_id ? Number(requester.o_id) : null,
       officeName: requester.office_name || 'No office assigned'
     },
@@ -83,7 +88,7 @@ module.exports = function registerAccountAccessRoutes(app, pool, requireAuth) {
       const result = await pool.query(`
         SELECT aa.assignment_id,aa.scope_type,aa.office_id,aa.department_id,
                aa.can_view_submissions,aa.can_recommend,aa.can_approve,
-               aa.position_title,aa.starts_on,aa.ends_on,aa.is_active,
+               aa.can_request_registration,aa.position_title,aa.starts_on,aa.ends_on,aa.is_active,
                o.office_name,d.department_name
         FROM public.account_access_assignments aa
         LEFT JOIN public.offices o ON o.o_id=aa.office_id
@@ -111,17 +116,18 @@ module.exports = function registerAccountAccessRoutes(app, pool, requireAuth) {
       const canView = Boolean(item.canViewSubmissions);
       const canRecommend = Boolean(item.canRecommend);
       const canApprove = Boolean(item.canApprove);
+      const canRequestRegistration = Boolean(item.canRequestRegistration);
       const positionTitle = typeof item.positionTitle === 'string' ? item.positionTitle.trim() : '';
       const startsOn = item.startsOn || null;
       const endsOn = item.endsOn || null;
       const key = `${scopeType}:${targetId}`;
-      if (!scopeType || !Number.isInteger(targetId) || targetId < 1 || (!canView && !canRecommend && !canApprove)) {
+      if (!scopeType || !Number.isInteger(targetId) || targetId < 1 || (!canView && !canRecommend && !canApprove && !canRequestRegistration)) {
         return res.status(400).json({ error: 'Each assignment needs an office or department and at least one responsibility.' });
       }
       if (seen.has(key)) return res.status(400).json({ error: 'The same office or department can only be added once for a staff member.' });
       if (startsOn && endsOn && startsOn > endsOn) return res.status(400).json({ error: 'The end date cannot be earlier than the start date.' });
       seen.add(key);
-      cleaned.push({ scopeType, targetId, canView, canRecommend, canApprove, positionTitle, startsOn, endsOn, isActive: item.isActive !== false });
+      cleaned.push({ scopeType, targetId, canView, canRecommend, canApprove, canRequestRegistration, positionTitle, startsOn, endsOn, isActive: item.isActive !== false });
     }
 
     const client = await pool.connect();
@@ -136,16 +142,22 @@ module.exports = function registerAccountAccessRoutes(app, pool, requireAuth) {
       for (const item of cleaned) {
         await client.query(`
           INSERT INTO public.account_access_assignments
-            (u_id,scope_type,office_id,department_id,can_view_submissions,can_recommend,can_approve,position_title,starts_on,ends_on,is_active)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            (u_id,scope_type,office_id,department_id,can_view_submissions,can_recommend,can_approve,can_request_registration,position_title,starts_on,ends_on,is_active)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
         `, [user.rows[0].u_id, item.scopeType, item.scopeType === 'office' ? item.targetId : null,
           item.scopeType === 'department' ? item.targetId : null, item.canView, item.canRecommend,
-          item.canApprove, item.positionTitle || null, item.startsOn, item.endsOn, item.isActive]);
+          item.canApprove, item.canRequestRegistration, item.positionTitle || null, item.startsOn, item.endsOn, item.isActive]);
       }
+      await client.query(`
+        INSERT INTO public.account_administration_audit (actor_user_id,target_user_id,action,details)
+        VALUES ($1,$2,'account_access_overridden',$3::jsonb)
+      `, [req.user.u_id, user.rows[0].u_id, JSON.stringify({ assignments: cleaned })]);
       await client.query('COMMIT');
       const io = req.app.get('io');
       io?.to(`user_${user.rows[0].public_id}`).emit('account-access-updated');
+      io?.to('resource_updates_room').emit('account-access-updated');
       io?.to('ict_admin_room').emit('admin-configuration-updated');
+      io?.to('ict_admin_room').emit('account-registry-updated');
       res.json({ message: 'Approval and submission access saved.' });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -161,7 +173,8 @@ module.exports = function registerAccountAccessRoutes(app, pool, requireAuth) {
     try {
       const result = await pool.query(`
         SELECT aa.scope_type,aa.office_id,aa.department_id,aa.can_view_submissions,
-               aa.can_recommend,aa.can_approve,aa.position_title,o.office_name,d.department_name
+               aa.can_recommend,aa.can_approve,aa.can_request_registration,
+               aa.position_title,o.office_name,d.department_name
         FROM public.account_access_assignments aa
         LEFT JOIN public.offices o ON o.o_id=aa.office_id
         LEFT JOIN public.department d ON d.d_id=aa.department_id
@@ -170,7 +183,8 @@ module.exports = function registerAccountAccessRoutes(app, pool, requireAuth) {
       `, [req.user.u_id]);
       res.json({
         offices: result.rows.filter(row => row.scope_type === 'office'),
-        departments: result.rows.filter(row => row.scope_type === 'department')
+        departments: result.rows.filter(row => row.scope_type === 'department'),
+        canRequestRegistration: result.rows.some(row => row.can_request_registration)
       });
     } catch (error) {
       console.error('Unable to load account access summary:', error);

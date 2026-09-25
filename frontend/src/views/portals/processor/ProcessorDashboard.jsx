@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, Link2, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
 import { endSession, fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -11,6 +11,7 @@ import { useProcessorData } from "./hooks/useProcessorData";
 import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
 import ProcessorPipelineTab from "./components/ProcessorPipelineTab";
 import ProcessorHistoryTab from "./components/ProcessorHistoryTab";
+import RegistrationManagementPage from './components/RegistrationManagementPage';
 
 // --- EXTRACTED MODALS ---
 import ScannerModal from "./modals/ScannerModal";
@@ -79,6 +80,14 @@ export default function ProcessorDashboard() {
       navigate('/login');
     }
   }, [userId, navigate]);
+
+  useEffect(() => {
+    if (!submissionAccess.loading && !submissionAccess.canRequestRegistration && activeTab === 'registration-management') {
+      const timer = window.setTimeout(() => setActiveTab('dashboard'), 0);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [activeTab, submissionAccess.canRequestRegistration, submissionAccess.loading]);
 
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
@@ -374,6 +383,9 @@ export default function ProcessorDashboard() {
                 </div>
               )}
             </div>
+            {submissionAccess.canRequestRegistration && <button onClick={() => handleTabSelect('registration-management')} className={`w-full flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${activeTab === 'registration-management' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+              <Link2 size={16} className="shrink-0" /> Registration Management
+            </button>}
             <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <History size={18} /> History
             </button>
@@ -419,7 +431,7 @@ export default function ProcessorDashboard() {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                 {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
+                 {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'Office Transaction History' : 'Office Dashboard'}
               </h2>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
             </div>
@@ -468,6 +480,7 @@ export default function ProcessorDashboard() {
           {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Multimedia Room" />}
           {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Van" />}
           {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
+          {activeTab === 'registration-management' && <RegistrationManagementPage userId={userId} access={submissionAccess} />}
           {activeTab === 'history' && (
             <ProcessorHistoryTab 
               {...processorData} 
