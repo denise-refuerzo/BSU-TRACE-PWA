@@ -28,7 +28,7 @@ export default function GSOResourcesTab({
   const mappedAsset = tabToAssetMap[activeCalendarTab];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
+    <div className="max-w-8xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
       
       {/* HEADER SECTION */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">

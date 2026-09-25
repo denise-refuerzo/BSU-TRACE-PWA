@@ -69,7 +69,7 @@ export default function GSODashboardTab({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* TOP CARDS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

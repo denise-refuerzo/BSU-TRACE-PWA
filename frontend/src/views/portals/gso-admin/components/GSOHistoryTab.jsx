@@ -15,7 +15,7 @@ export default function GSOHistoryTab({
   handleOpenDetails
 }) {
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER SECTION */}
       <div className="px-2">

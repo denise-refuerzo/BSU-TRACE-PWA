@@ -122,7 +122,7 @@ export default function GSOProcurementTab({
   ];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">

@@ -71,7 +71,7 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
+    <div className="max-w-8xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
       
       {/* HEADER */}
       <header className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs flex items-center gap-4">

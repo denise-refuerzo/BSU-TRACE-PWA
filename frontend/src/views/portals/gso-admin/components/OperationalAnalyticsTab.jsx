@@ -353,7 +353,7 @@ export default function OperationalAnalyticsTab({
   };
 
   return (
-    <div className={`${analyticsScope === 'ict' ? 'max-w-none' : 'mx-auto max-w-7xl'} w-full space-y-6 text-left`}>
+    <div className={`${analyticsScope === 'ict' ? 'max-w-none' : 'mx-auto max-w-8xl'} w-full space-y-6 text-left`}>
       <div className="flex flex-col justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 lg:flex-row lg:items-center">
         <div><h2 className="text-2xl font-bold tracking-tight text-gray-900">Operational Analytics</h2><p className="mt-1 text-sm text-gray-500">{analyticsScope === 'ict' ? 'Document flow, service traffic, and route performance across offices.' : 'Actionable administrative insights and resource planning.'}</p></div>
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">

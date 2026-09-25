@@ -153,7 +153,7 @@ export default function RegistrationManagementPage({ userId, access }) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
+    <div className="mx-auto max-w-8xl space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-black text-neutral-900">Registration Management</h2>

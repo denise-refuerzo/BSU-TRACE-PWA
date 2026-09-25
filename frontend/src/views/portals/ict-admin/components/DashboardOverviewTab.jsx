@@ -57,7 +57,7 @@ export default function DashboardOverviewTab({ data }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* LEFT COLUMN: LIVE STREAM AUDIT LOG FEED */}
-        <div className="lg:col-span-2 bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[500px]">
+        <div className="lg:col-span-2 bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[600px]">
           <div className="p-5 border-b border-gray-200 bg-gray-50/80">
             <h3 className="text-sm font-black text-gray-900 flex items-center gap-2 uppercase tracking-wide">
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -120,7 +120,7 @@ export default function DashboardOverviewTab({ data }) {
         </div>
 
         {/* RIGHT COLUMN: DELAY CONGESTION ALERTS PANEL */}
-        <div className="bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[500px]">
+        <div className="bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[600px]">
           <div className="p-5 border-b border-gray-200 bg-red-50/50">
             <h4 className="text-sm font-black text-gray-900 flex items-center gap-2 uppercase tracking-wide">
               <svg className="w-5 h-5 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
