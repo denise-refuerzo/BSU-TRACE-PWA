@@ -5,11 +5,12 @@ import { fetchWithAuth } from '../../../../api';
 
 const emptyDraft = {
   scopeType: 'office', targetId: '', positionTitle: '', canViewSubmissions: true,
-  canRecommend: false, canApprove: false, startsOn: '', endsOn: '', isActive: true
+  canRecommend: false, canApprove: false, canRequestRegistration: false,
+  startsOn: '', endsOn: '', isActive: true
 };
 
-export default function AccessManagementTab({ accounts, offices, departments }) {
-  const [userId, setUserId] = useState('');
+export default function AccessManagementTab({ accounts, offices, departments, fixedUserId = '', embedded = false }) {
+  const [userId, setUserId] = useState(fixedUserId);
   const [officeFilter, setOfficeFilter] = useState('');
   const [personQuery, setPersonQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -62,6 +63,7 @@ export default function AccessManagementTab({ accounts, offices, departments }) 
           canViewSubmissions: item.can_view_submissions,
           canRecommend: item.can_recommend,
           canApprove: item.can_approve,
+          canRequestRegistration: item.can_request_registration,
           startsOn: item.starts_on?.slice(0, 10) || '',
           endsOn: item.ends_on?.slice(0, 10) || '',
           isActive: item.is_active,
@@ -76,7 +78,7 @@ export default function AccessManagementTab({ accounts, offices, departments }) 
 
   const addAssignment = () => {
     if (!draft.targetId) return Swal.fire('Choose an area', `Choose an ${draft.scopeType} first.`, 'warning');
-    if (!draft.canViewSubmissions && !draft.canRecommend && !draft.canApprove) {
+    if (!draft.canViewSubmissions && !draft.canRecommend && !draft.canApprove && !draft.canRequestRegistration) {
       return Swal.fire('Choose a responsibility', 'Select at least one thing this person can do.', 'warning');
     }
     if (assignments.some(item => item.scopeType === draft.scopeType && String(item.targetId) === String(draft.targetId))) {
@@ -101,6 +103,7 @@ export default function AccessManagementTab({ accounts, offices, departments }) 
           canViewSubmissions: item.canViewSubmissions,
           canRecommend: item.canRecommend,
           canApprove: item.canApprove,
+          canRequestRegistration: item.canRequestRegistration,
           startsOn: item.startsOn || null,
           endsOn: item.endsOn || null,
           isActive: item.isActive
@@ -118,12 +121,12 @@ export default function AccessManagementTab({ accounts, offices, departments }) 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      <div>
+      {!embedded && <div>
         <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-gray-900"><ShieldCheck className="text-red-700" /> Access & Responsibilities</h2>
         <p className="mt-1 text-sm text-gray-500">Choose who can view submissions or handle requests for an office or department.</p>
-      </div>
+      </div>}
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      {!fixedUserId && <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-[minmax(220px,0.4fr)_minmax(320px,1fr)]">
           <label className="block text-xs font-bold uppercase tracking-wide text-gray-700">Office filter
             <select value={officeFilter} onChange={event => changeOfficeFilter(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal normal-case outline-none focus:border-red-700">
@@ -171,7 +174,7 @@ export default function AccessManagementTab({ accounts, offices, departments }) 
           </div>
         </div>
         {selectedUser && <p className="mt-3 text-xs text-gray-500">Assigned area: {selectedUser.office_name || selectedUser.department_name || 'Not assigned'}</p>}
-      </section>
+      </section>}
 
       {userId && <>
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -191,8 +194,8 @@ export default function AccessManagementTab({ accounts, offices, departments }) 
               <input value={draft.positionTitle} onChange={event => setDraft({ ...draft, positionTitle: event.target.value })} placeholder="e.g. Department Chair or Office Head" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-normal" />
             </label>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {[['canViewSubmissions', 'See submissions'], ['canRecommend', 'Recommend requests'], ['canApprove', 'Approve requests']].map(([key, label]) => (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {[['canViewSubmissions', 'See submissions'], ['canRecommend', 'Recommend requests'], ['canApprove', 'Approve requests'], ['canRequestRegistration', 'Request registration links']].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm font-semibold text-gray-700"><input type="checkbox" checked={draft[key]} onChange={event => setDraft({ ...draft, [key]: event.target.checked })} /> {label}</label>
             ))}
           </div>
@@ -207,7 +210,7 @@ export default function AccessManagementTab({ accounts, offices, departments }) 
           <div className="border-b border-gray-100 p-5"><h3 className="font-bold text-gray-900">Assigned access</h3><p className="mt-1 text-xs text-gray-500">These changes take effect after you select Save changes.</p></div>
           {loading ? <p className="p-8 text-center text-sm text-gray-500">Loading access...</p> : assignments.length === 0 ? <p className="p-8 text-center text-sm text-gray-500">No additional access or responsibilities assigned.</p> : <div className="divide-y divide-gray-100">
             {assignments.map((item, index) => <div key={`${item.scopeType}-${item.targetId}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex gap-3">{item.scopeType === 'office' ? <Building2 className="mt-0.5 text-blue-600" size={18} /> : <Landmark className="mt-0.5 text-emerald-600" size={18} />}<div><p className="font-bold text-gray-900">{item.name}</p><p className="text-xs text-gray-500">{[item.canViewSubmissions && 'See submissions', item.canRecommend && 'Recommend requests', item.canApprove && 'Approve requests'].filter(Boolean).join(' · ')}</p>{item.positionTitle && <p className="mt-1 text-xs font-semibold text-gray-700">{item.positionTitle}</p>}</div></div>
+              <div className="flex gap-3">{item.scopeType === 'office' ? <Building2 className="mt-0.5 text-blue-600" size={18} /> : <Landmark className="mt-0.5 text-emerald-600" size={18} />}<div><p className="font-bold text-gray-900">{item.name}</p><p className="text-xs text-gray-500">{[item.canViewSubmissions && 'See submissions', item.canRecommend && 'Recommend requests', item.canApprove && 'Approve requests', item.canRequestRegistration && 'Request registration links'].filter(Boolean).join(' · ')}</p>{item.positionTitle && <p className="mt-1 text-xs font-semibold text-gray-700">{item.positionTitle}</p>}</div></div>
               <button type="button" onClick={() => setAssignments(current => current.filter((_, rowIndex) => rowIndex !== index))} className="inline-flex items-center gap-1 self-start rounded-lg px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50"><Trash2 size={14} /> Remove</button>
             </div>)}
           </div>}

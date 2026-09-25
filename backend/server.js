@@ -142,6 +142,13 @@ const broadcastIctConfiguration = req => {
   socketServer?.to('ict_admin_room').emit('admin-configuration-updated');
 };
 
+const broadcastAccountRegistry = req => {
+  const socketServer = req.app.get('io');
+  socketServer?.to('ict_admin_room').emit('account-registry-updated');
+  socketServer?.to('ict_admin_room').emit('system-metrics-updated');
+  socketServer?.to('resource_updates_room').emit('account-access-updated');
+};
+
 const broadcastResourceUpdate = req => {
   const socketServer = req.app.get('io');
   socketServer?.to('resource_updates_room').emit('resource-schedule-updated');
@@ -402,6 +409,33 @@ app.post('/api/logout', requireAuth, async (req, res) => {
     console.error('Logout failed:', error);
     res.status(500).json({ error: 'Unable to end the session.' });
   }
+});
+
+const publicRegistrationReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  keyGenerator: req => `registration:${ipKeyGenerator(req.ip)}`,
+  message: { error: 'Too many registration requests were received. Please wait before trying again.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const publicRegistrationWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  keyGenerator: req => `registration-write:${ipKeyGenerator(req.ip)}`,
+  message: { error: 'Too many account registrations were attempted. Please wait before trying again.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const registrationRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  keyGenerator: requestKey,
+  message: { error: 'Too many registration links were requested. Please wait before submitting another request.' },
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
 app.post('/api/session/activity', requireAuth, (_req, res) => res.status(204).end());
@@ -687,11 +721,25 @@ app.get('/api/accounts', requireAuth, async (req, res) => {
                   SELECT u.public_id AS u_id, u.username, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.a_id, u.d_id, u.o_id, u.is_active,
                         a.account_type as role_name,
                         d.department_name,
-                        off.office_name
+                        off.office_name,
+                        CASE WHEN origin.origin_id IS NULL THEN 'ict' ELSE 'registration_link' END AS account_origin,
+                        sponsor.full_name AS sponsored_by,
+                        sponsor.public_id AS sponsor_id,
+                        rl.public_id AS registration_link_id,
+                        EXISTS (
+                          SELECT 1 FROM public.account_access_assignments aa
+                          WHERE aa.u_id=u.u_id AND aa.is_active IS TRUE
+                            AND (aa.starts_on IS NULL OR aa.starts_on <= CURRENT_DATE)
+                            AND (aa.ends_on IS NULL OR aa.ends_on >= CURRENT_DATE)
+                            AND (aa.can_recommend IS TRUE OR aa.can_approve IS TRUE OR aa.can_request_registration IS TRUE)
+                        ) AS is_assignatory
                   FROM public."User" u
                   JOIN public.account a ON u.a_id = a.a_id
                   LEFT JOIN public.department d ON u.d_id = d.d_id
                   LEFT JOIN public.offices off ON u.o_id = off.o_id
+                  LEFT JOIN public.account_registration_origins origin ON origin.u_id=u.u_id
+                  LEFT JOIN public.registration_links rl ON rl.link_id=origin.link_id
+                  LEFT JOIN public."User" sponsor ON sponsor.u_id=rl.requested_by
                   ORDER BY u.u_id DESC;
                 `;
     const result = await pool.query(query);
@@ -740,6 +788,11 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
   const { username, password, fullName, departmentId, officeId } = req.body;
   const email = normalizeUniversityEmail(req.body.email);
   const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
+  const isAssignatory = req.body.isAssignatory === true;
+  const positionTitle = String(req.body.positionTitle || '').trim().slice(0, 120) || null;
+  const authorityMode = ['office', 'department', 'multiple'].includes(req.body.authorityMode) ? req.body.authorityMode : 'office';
+  const authorityOfficeIds = [...new Set((Array.isArray(req.body.authorityOfficeIds) ? req.body.authorityOfficeIds : []).map(Number).filter(id => Number.isInteger(id) && id > 0))];
+  const authorityDepartmentId = Number(req.body.authorityDepartmentId);
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});
   
   if (!password || password.length < 6) {
@@ -756,13 +809,19 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
   if (accountType === 2 && !isPositiveId(officeId)) {
     return res.status(400).json({ error: 'Choose an office for Office Staff.' });
   }
+  if (isAssignatory && accountType !== 2) return res.status(400).json({ error: 'Assignatory responsibilities can only be added to an Office Staff account here.' });
+  if (isAssignatory && authorityMode === 'department' && !isPositiveId(authorityDepartmentId)) return res.status(400).json({ error: 'Choose the department this assignatory oversees.' });
+  if (isAssignatory && authorityMode === 'multiple' && authorityOfficeIds.length === 0) return res.status(400).json({ error: 'Choose at least one office this assignatory oversees.' });
   
+  const client = await pool.connect();
   try {
-    const userCheck = await pool.query(
+    await client.query('BEGIN');
+    const userCheck = await client.query(
       'SELECT username,uni_email FROM public."User" WHERE LOWER(username) = LOWER($1) OR LOWER(BTRIM(uni_email)) = $2',
       [String(username || '').trim(), email]
     );
     if (userCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Rejection: Username or email already registered.' });
     }
 
@@ -772,34 +831,63 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
     let assignedOfficeId = ([2, 3, 4].includes(accountType) && officeId) ? parseInt(officeId) : null;
 
     if (accountType === 4) {
-      const gsoOfficeId = await findGsoOfficeId(pool);
-      if (!gsoOfficeId) return res.status(409).json({ error: 'The General Services office must be registered before creating its administrator account.' });
-      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 LIMIT 1');
-      if (existingGso.rowCount) return res.status(409).json({ error: 'A GSO Admin account already exists. Manage that account instead of creating another one.' });
+      const gsoOfficeId = await findGsoOfficeId(client);
+      if (!gsoOfficeId) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'The General Services office must be registered before creating its administrator account.' }); }
+      const existingGso = await client.query('SELECT u_id FROM public."User" WHERE a_id = 4 LIMIT 1');
+      if (existingGso.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'A GSO Admin account already exists. Manage that account instead of creating another one.' }); }
       assignedOfficeId = gsoOfficeId;
     } else if (assignedOfficeId) {
-      const gsoOfficeId = await findGsoOfficeId(pool);
+      const gsoOfficeId = await findGsoOfficeId(client);
       if (gsoOfficeId && assignedOfficeId === gsoOfficeId) {
+        await client.query('ROLLBACK');
         return res.status(400).json({ error: 'The General Services Office is reserved for the single GSO Admin account.' });
       }
     }
 
-    const assignedDepartmentId = departmentId ? parseInt(departmentId) : null;
+    const assignedDepartmentId = departmentId
+      ? parseInt(departmentId)
+      : isAssignatory && authorityMode === 'department' ? authorityDepartmentId : null;
 
-    await pool.query(
+    const created = await client.query(
       `INSERT INTO public."User" (a_id, d_id, username, password, full_name, uni_email, o_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`, 
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING u_id,public_id`,
        [parseInt(accountType), assignedDepartmentId, String(username).trim(), hashedPassword, String(fullName).trim(), email, assignedOfficeId]
     );
 
+    if (isAssignatory) {
+      const assignments = authorityMode === 'department'
+        ? [{ scopeType: 'office', targetId: assignedOfficeId }, { scopeType: 'department', targetId: authorityDepartmentId }]
+        : authorityMode === 'multiple'
+          ? [...new Set([assignedOfficeId, ...authorityOfficeIds])].map(targetId => ({ scopeType: 'office', targetId }))
+          : [{ scopeType: 'office', targetId: assignedOfficeId }];
+      for (const assignment of assignments) {
+        await client.query(`
+          INSERT INTO public.account_access_assignments
+            (u_id,scope_type,office_id,department_id,can_view_submissions,can_recommend,can_approve,can_request_registration,position_title)
+          VALUES ($1,$2,$3,$4,true,true,true,true,$5)
+        `, [created.rows[0].u_id, assignment.scopeType,
+          assignment.scopeType === 'office' ? assignment.targetId : null,
+          assignment.scopeType === 'department' ? assignment.targetId : null,
+          positionTitle]);
+      }
+    }
+    await client.query(`
+      INSERT INTO public.account_administration_audit (actor_user_id,target_user_id,action,details)
+      VALUES ($1,$2,'account_created_by_ict',$3::jsonb)
+    `, [req.user.u_id, created.rows[0].u_id, JSON.stringify({ accountType, isAssignatory, authorityMode })]);
+    await client.query('COMMIT');
+
     broadcastIctConfiguration(req);
-    res.status(201).json({ message: 'Success: Account architecture generated and synchronized successfully!' });
+    broadcastAccountRegistry(req);
+    res.status(201).json({ message: 'Success: Account architecture generated and synchronized successfully!', userId: created.rows[0].public_id });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error("Account registration script processing breakdown:", err);
     if (err.code === '23505') return res.status(409).json({ error: 'That username or university email is already in use.' });
     if (err.code === '23514') return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
     res.status(500).json({ error: 'The account could not be created. Please try again.' });
-  }
+  } finally { client.release(); }
 });
 
 // ==========================================
@@ -816,7 +904,7 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
   if (accountType === 1 && !isPositiveId(departmentId)) return res.status(400).json({ error: 'Choose a department for Faculty Staff.' });
   if (accountType === 2 && !isPositiveId(officeId)) return res.status(400).json({ error: 'Choose an office for Office Staff.' });
   try {
-    const currentAccount = await pool.query('SELECT uni_email FROM public."User" WHERE public_id=$1', [userId]);
+    const currentAccount = await pool.query('SELECT u_id,uni_email,username,full_name,a_id,d_id,o_id,is_active FROM public."User" WHERE public_id=$1', [userId]);
     if (!currentAccount.rowCount) return res.status(404).json({ error: 'Account not found.' });
     const savedEmail = currentAccount.rows[0].uni_email;
     const emailChanged = normalizeUniversityEmail(savedEmail) !== email;
@@ -858,11 +946,28 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
       WHERE public_id = $8
     `;
     
-    await pool.query(query, [
-      String(username).trim(), String(fullName).trim(), emailToStore, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, userId
-    ]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(query, [
+        String(username).trim(), String(fullName).trim(), emailToStore, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, userId
+      ]);
+      await client.query(`
+        INSERT INTO public.account_administration_audit (actor_user_id,target_user_id,action,details)
+        VALUES ($1,$2,'account_profile_overridden',$3::jsonb)
+      `, [req.user.u_id, currentAccount.rows[0].u_id, JSON.stringify({
+        before: currentAccount.rows[0],
+        after: { username: String(username).trim(), fullName: String(fullName).trim(), accountType, departmentId: assignedDepartmentId, officeId: assignedOfficeId, isActive }
+      })]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
 
     broadcastIctConfiguration(req);
+    broadcastAccountRegistry(req);
+    req.app.get('io')?.to(`user_${userId}`).emit('account-access-updated');
     res.json({ message: 'Personnel access profile parameters re-indexed and synchronized cleanly!' });
   } catch (err) {
     console.error("Account update failure:", err);
@@ -873,6 +978,12 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
 });
 
 require('./accountAccessRoutes')(app, pool, requireAuth);
+
+require('./registrationLinkRoutes')(app, pool, requireAuth, {
+  request: registrationRequestLimiter,
+  publicRead: publicRegistrationReadLimiter,
+  publicWrite: publicRegistrationWriteLimiter
+});
 
 require('./profilePictureRoutes')(app, pool, requireAuth);
 
@@ -1961,13 +2072,13 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
       details[key] = facilityDetails[key].trim();
     }
     details.requestedByName = assignedSignatories.requestedBy.name;
-    details.requestedByPosition = assignedSignatories.requestedBy.officeName;
+    details.requestedByPosition = assignedSignatories.requestedBy.position;
     details.requestedByUserId = assignedSignatories.requestedBy.userId;
     details.reviewedByName = assignedSignatories.recommendingApproval.name;
-    details.reviewedByPosition = assignedSignatories.recommendingApproval.officeName;
+    details.reviewedByPosition = assignedSignatories.recommendingApproval.position;
     details.reviewedByUserId = assignedSignatories.recommendingApproval.userId;
     details.approvedByName = assignedSignatories.approvedBy.name;
-    details.approvedByPosition = assignedSignatories.approvedBy.officeName;
+    details.approvedByPosition = assignedSignatories.approvedBy.position;
     details.approvedByUserId = assignedSignatories.approvedBy.userId;
     if (facilityDetails.remarks != null && typeof facilityDetails.remarks !== 'string') {
       return res.status(400).json({error: 'Remarks must be text.'});
@@ -2012,8 +2123,8 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
           prepared_by_user_id,recommending_approval_user_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [asdId, parseInt(serviceTypeId) || 3, bookingId, destination, passengerNames.length, finalizedPickUp, finalizedDropOff,
-          passengerNames, assignedSignatories.requestedBy.name, assignedSignatories.requestedBy.officeName,
-          assignedSignatories.recommendingApproval.name, assignedSignatories.recommendingApproval.officeName,
+          passengerNames, assignedSignatories.requestedBy.name, assignedSignatories.requestedBy.position,
+          assignedSignatories.recommendingApproval.name, assignedSignatories.recommendingApproval.position,
           assignedSignatories.requestedBy.userId, assignedSignatories.recommendingApproval.userId]
       );
     }

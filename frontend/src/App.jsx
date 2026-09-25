@@ -6,6 +6,7 @@ import { endSession, fetchWithAuth } from './api';
 
 // Import Views
 import Login from './views/auth/Login';
+import RegistrationLinkSignup from './views/auth/RegistrationLinkSignup';
 import OriginatorDashboard from './views/portals/originator/OriginatorDashboard';
 import ProcessorDashboard from './views/portals/processor/ProcessorDashboard';
 import GSOAdminDashboard from './views/portals/gso-admin/GSOAdminDashboard';
@@ -150,6 +151,8 @@ export default function App() {
                 </PublicRoute>
               } 
             />
+
+            <Route path="/register/:token" element={<RegistrationLinkSignup />} />
 
             <Route path="/companion" element={<ContinuousMobileScanner />} />
 

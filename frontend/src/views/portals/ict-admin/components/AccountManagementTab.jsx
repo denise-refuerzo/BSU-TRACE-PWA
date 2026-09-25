@@ -1,12 +1,12 @@
-import AccessManagementTab from './AccessManagementTab';
-
 export default function AccountManagementTab({
   activeTab, searchTerm, setSearchTerm, roleFilter, setRoleFilter,
+  officeFilter, setOfficeFilter, departmentFilter, setDepartmentFilter,
+  originFilter, setOriginFilter, statusFilter, setStatusFilter,
+  authorityFilter, setAuthorityFilter,
+  sponsorFilter, setSponsorFilter,
   accounts, filteredAccounts, setSelectedUser, message, emailAvailability, checkEmailAvailability,
   form, setForm, handleCreateAccount, offices, departments
 }) {
-  if (activeTab === 'access') return <AccessManagementTab accounts={accounts} offices={offices} departments={departments} />;
-
   return (
     <div className="w-full">
       <div className="w-full">
@@ -19,8 +19,8 @@ export default function AccountManagementTab({
         {activeTab === 'registry' && (
           <div className="space-y-5 animate-in fade-in duration-200">
             {/* Search & Filter Bar */}
-            <div className="flex flex-col sm:flex-row gap-3 bg-white p-4 border border-gray-200 rounded-xl shadow-sm">
-              <div className="relative flex-1">
+            <div className="grid gap-3 bg-white p-4 border border-gray-200 rounded-xl shadow-sm sm:grid-cols-2 lg:grid-cols-3">
+              <div className="relative sm:col-span-2 lg:col-span-3">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
@@ -32,7 +32,7 @@ export default function AccountManagementTab({
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] bg-gray-50 focus:bg-white transition-colors"
                 />
               </div>
-              <div className="relative sm:w-64">
+              <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
                 </div>
@@ -48,6 +48,33 @@ export default function AccountManagementTab({
                   <option value="5">ICT Admin</option>
                 </select>
               </div>
+              <select value={officeFilter} onChange={e => setOfficeFilter(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#D32F2F]">
+                <option value="">All Offices</option>
+                {offices.map(office => <option key={office.id} value={String(office.id)}>{office.name}</option>)}
+              </select>
+              <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#D32F2F]">
+                <option value="">All Departments</option>
+                {departments.map(department => <option key={department.id} value={String(department.id)}>{department.name}</option>)}
+              </select>
+              <select value={originFilter} onChange={e => setOriginFilter(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#D32F2F]">
+                <option value="">All Account Origins</option>
+                <option value="ict">Created by ICT</option>
+                <option value="registration_link">Registration Link</option>
+              </select>
+              <select value={authorityFilter} onChange={e => setAuthorityFilter(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#D32F2F]">
+                <option value="">All Authority Levels</option>
+                <option value="assignatory">Assignatories / Heads</option>
+                <option value="regular">Regular Accounts</option>
+              </select>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#D32F2F]">
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Suspended</option>
+              </select>
+              <select value={sponsorFilter} onChange={e => setSponsorFilter(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#D32F2F]">
+                <option value="">All Registration Sponsors</option>
+                {[...new Map(accounts.filter(account => account.sponsor_id).map(account => [account.sponsor_id, account.sponsored_by])).entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
             </div>
 
             {/* Scrollable Table Container */}
@@ -78,6 +105,7 @@ export default function AccountManagementTab({
                                 )}
                               </p>
                               <p className="text-xs text-gray-500 whitespace-nowrap">@{user.username} &bull; {user.uni_email}</p>
+                              {user.sponsored_by && <p className="mt-1 text-[10px] font-semibold text-amber-700">Registered under {user.sponsored_by}</p>}
                             </div>
                           </div>
                         </td>
@@ -91,6 +119,7 @@ export default function AccountManagementTab({
                           }`}>
                             {Number(user.a_id) === 1 ? 'Faculty Staff' : user.role_name}
                           </span>
+                          {user.is_assignatory && <span className="ml-2 inline-block rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-700">Assignatory</span>}
                         </td>
                         <td className="p-4">
                           {user.office_name ? (
@@ -190,7 +219,7 @@ export default function AccountManagementTab({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Role</label>
-                  <select required value={form.accountType} onChange={e => setForm({...form, accountType: parseInt(e.target.value)})}
+                  <select required value={form.accountType} onChange={e => { const accountType = parseInt(e.target.value); setForm({...form, accountType, isAssignatory: accountType === 2 ? form.isAssignatory : false}); }}
                           className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors appearance-none cursor-pointer">
                     <option value="">Select assigned role...</option>
                     <option value="1">Faculty Staff</option>
@@ -241,10 +270,47 @@ export default function AccountManagementTab({
                 </div>
               )}
 
+              {form.accountType === 2 && (
+                <section className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
+                  <label className="flex items-start gap-3 text-sm font-bold text-gray-900">
+                    <input type="checkbox" className="mt-1" checked={form.isAssignatory} onChange={e => setForm({...form, isAssignatory: e.target.checked})} />
+                    <span>Leadership / assignatory account
+                      <span className="mt-1 block text-xs font-normal text-gray-600">Automatically grants submission visibility, signatory eligibility, and permission to request registration links for the selected scope.</span>
+                    </span>
+                  </label>
+                  {form.isAssignatory && <div className="mt-5 space-y-4">
+                    <label className="block text-xs font-bold text-gray-700">Position title <span className="font-normal text-gray-400">(optional)</span>
+                      <input value={form.positionTitle} maxLength={120} onChange={e => setForm({...form, positionTitle: e.target.value})} placeholder="e.g. Dean of CICS" className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal" />
+                    </label>
+                    <label className="block text-xs font-bold text-gray-700">Authority scope
+                      <select value={form.authorityMode} onChange={e => setForm({...form, authorityMode: e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal">
+                        <option value="office">Primary office</option>
+                        <option value="department">Department</option>
+                        <option value="multiple">Multiple offices</option>
+                      </select>
+                    </label>
+                    {form.authorityMode === 'department' && <label className="block text-xs font-bold text-gray-700">Department overseen
+                      <select required value={form.authorityDepartmentId} onChange={e => setForm({...form, authorityDepartmentId: e.target.value ? Number(e.target.value) : ''})} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal">
+                        <option value="">Choose a department...</option>
+                        {departments.map(department => <option key={department.id} value={department.id}>{department.name}</option>)}
+                      </select>
+                    </label>}
+                    {form.authorityMode === 'multiple' && <div>
+                      <p className="text-xs font-bold text-gray-700">Offices overseen</p>
+                      <div className="mt-2 grid max-h-48 gap-2 overflow-y-auto rounded-lg border border-gray-200 bg-white p-3 sm:grid-cols-2">
+                        {offices.filter(off => !/general services|\bgso\b/i.test(off.name)).map(office => <label key={office.id} className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                          <input type="checkbox" checked={form.authorityOfficeIds.includes(Number(office.id))} onChange={e => setForm({...form, authorityOfficeIds: e.target.checked ? [...form.authorityOfficeIds, Number(office.id)] : form.authorityOfficeIds.filter(id => id !== Number(office.id))})} /> {office.name}
+                        </label>)}
+                      </div>
+                    </div>}
+                  </div>}
+                </section>
+              )}
+
               <div className="flex justify-end gap-3 pt-6 mt-2 border-t border-gray-100">
                 <button 
                   type="button" 
-                  onClick={() => setForm({ username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: '' })}
+                  onClick={() => setForm({ username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: '', isAssignatory: false, positionTitle: '', authorityMode: 'office', authorityOfficeIds: [], authorityDepartmentId: '' })}
                   className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors shadow-sm cursor-pointer"
                 >
                   Reset Form

@@ -67,7 +67,7 @@ export default function FacilityRequestFields({ activeFacility, form, setForm, t
       <fieldset className="border-t border-neutral-200 pt-3">
         <legend className="text-xs font-bold text-neutral-600">Prepared by</legend>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label className="block text-xs text-neutral-600">Office<input readOnly value={signatories?.requestedBy?.officeName || 'No office assigned'} className={`${inputClass} bg-neutral-50 text-neutral-600`} /></label>
+          <label className="block text-xs text-neutral-600">Position / Office<input readOnly value={signatories?.requestedBy?.position || signatories?.requestedBy?.officeName || 'No office assigned'} className={`${inputClass} bg-neutral-50 text-neutral-600`} /></label>
           <label className="block text-xs text-neutral-600">Name<input readOnly value={signatories?.requestedBy?.name || 'Account not found'} className={`${inputClass} bg-neutral-50 text-neutral-600`} /></label>
         </div>
       </fieldset>
@@ -81,7 +81,7 @@ export default function FacilityRequestFields({ activeFacility, form, setForm, t
           <legend className="text-xs font-bold text-neutral-600">{role.label}</legend>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="block text-xs text-neutral-600">Office<select required value={form[role.officeKey] || ''} onChange={e => setForm({...form, [role.officeKey]: e.target.value, [role.userKey]: ''})} className={inputClass}><option value="">Choose an office</option>{eligibleOffices.map(office => <option key={office.officeId} value={office.officeId}>{office.officeName}</option>)}</select></label>
-            <label className="block text-xs text-neutral-600">Name<select required disabled={!selectedOffice} value={form[role.userKey] || ''} onChange={e => setForm({...form, [role.userKey]: e.target.value})} className={`${inputClass} disabled:bg-neutral-100 disabled:text-neutral-400`}><option value="">{selectedOffice ? 'Choose a person' : 'Choose an office first'}</option>{(selectedOffice?.[role.peopleKey] || []).map(person => <option key={person.userId} value={person.userId}>{person.name}</option>)}</select></label>
+            <label className="block text-xs text-neutral-600">Name<select required disabled={!selectedOffice} value={form[role.userKey] || ''} onChange={e => setForm({...form, [role.userKey]: e.target.value})} className={`${inputClass} disabled:bg-neutral-100 disabled:text-neutral-400`}><option value="">{selectedOffice ? 'Choose a person' : 'Choose an office first'}</option>{(selectedOffice?.[role.peopleKey] || []).map(person => <option key={person.userId} value={person.userId}>{person.name}{person.position ? ` — ${person.position}` : ''}</option>)}</select></label>
           </div>
         </fieldset>;
       })}

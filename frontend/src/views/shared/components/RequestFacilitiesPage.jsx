@@ -83,7 +83,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
         setForm(previous => ({
           ...previous,
           preparedByName: data.requestedBy?.name || '',
-          preparedByPosition: data.requestedBy?.officeName || '',
+          preparedByPosition: data.requestedBy?.position || data.requestedBy?.officeName || '',
           recommendingApprovalOfficeId: data.offices?.some(office => String(office.officeId) === String(previous.recommendingApprovalOfficeId)) ? previous.recommendingApprovalOfficeId : '',
           recommendingApprovalUserId: data.offices?.some(office => String(office.officeId) === String(previous.recommendingApprovalOfficeId) && office.recommenders.some(person => String(person.userId) === String(previous.recommendingApprovalUserId))) ? previous.recommendingApprovalUserId : '',
           approvedByOfficeId: data.offices?.some(office => String(office.officeId) === String(previous.approvedByOfficeId)) ? previous.approvedByOfficeId : '',
@@ -197,9 +197,9 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
       if (res.ok) {
         setShowFormModal(false);
         setForm({ reservationDate: '', purpose: '', department: officeName, intendedDates: [''], facilityDetails: {
-          requestedByName: signatories?.requestedBy?.name || '', requestedByPosition: signatories?.requestedBy?.officeName || ''
+          requestedByName: signatories?.requestedBy?.name || '', requestedByPosition: signatories?.requestedBy?.position || signatories?.requestedBy?.officeName || ''
         }, startTime: '', endTime: '', expectedAttendees: '', assetName: '', destination: '', officialPassengers: [''],
-        preparedByName: signatories?.requestedBy?.name || '', preparedByPosition: signatories?.requestedBy?.officeName || '',
+        preparedByName: signatories?.requestedBy?.name || '', preparedByPosition: signatories?.requestedBy?.position || signatories?.requestedBy?.officeName || '',
         recommendingApprovalOfficeId: '', recommendingApprovalUserId: '', approvedByOfficeId: '', approvedByUserId: '',
         serviceTypeId: '3', pickUpTime: '', dropOffTime: '' });
         fetchActiveReservations();

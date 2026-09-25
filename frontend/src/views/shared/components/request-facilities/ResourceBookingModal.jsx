@@ -113,7 +113,7 @@ export default function ResourceBookingModal({
               <fieldset>
                 <legend className="mb-2 text-xs font-semibold text-gray-600">Prepared/Requested by:</legend>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <label className="text-xs text-neutral-600">Office<input type="text" readOnly value={form.preparedByPosition || 'No office assigned'} className={`${inputClass} mt-1 bg-neutral-50 text-neutral-600`} /></label>
+                  <label className="text-xs text-neutral-600">Position / Office<input type="text" readOnly value={form.preparedByPosition || 'No office assigned'} className={`${inputClass} mt-1 bg-neutral-50 text-neutral-600`} /></label>
                   <label className="text-xs text-neutral-600">Name<input type="text" readOnly value={form.preparedByName || 'Account not found'} className={`${inputClass} mt-1 bg-neutral-50 text-neutral-600`} /></label>
                 </div>
               </fieldset>
@@ -124,7 +124,7 @@ export default function ResourceBookingModal({
                   const selectedOffice = offices.find(office => String(office.officeId) === String(form.recommendingApprovalOfficeId));
                   return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <label className="text-xs text-neutral-600">Office<select required value={form.recommendingApprovalOfficeId || ''} onChange={e => setForm({...form, recommendingApprovalOfficeId: e.target.value, recommendingApprovalUserId: ''})} className={`${inputClass} mt-1`}><option value="">Choose an office</option>{offices.map(office => <option key={office.officeId} value={office.officeId}>{office.officeName}</option>)}</select></label>
-                    <label className="text-xs text-neutral-600">Name<select required disabled={!selectedOffice} value={form.recommendingApprovalUserId || ''} onChange={e => setForm({...form, recommendingApprovalUserId: e.target.value})} className={`${inputClass} mt-1 disabled:bg-neutral-100 disabled:text-neutral-400`}><option value="">{selectedOffice ? 'Choose a person' : 'Choose an office first'}</option>{(selectedOffice?.recommenders || []).map(person => <option key={person.userId} value={person.userId}>{person.name}</option>)}</select></label>
+                    <label className="text-xs text-neutral-600">Name<select required disabled={!selectedOffice} value={form.recommendingApprovalUserId || ''} onChange={e => setForm({...form, recommendingApprovalUserId: e.target.value})} className={`${inputClass} mt-1 disabled:bg-neutral-100 disabled:text-neutral-400`}><option value="">{selectedOffice ? 'Choose a person' : 'Choose an office first'}</option>{(selectedOffice?.recommenders || []).map(person => <option key={person.userId} value={person.userId}>{person.name}{person.position ? ` — ${person.position}` : ''}</option>)}</select></label>
                   </div>;
                 })()}
               </fieldset>
