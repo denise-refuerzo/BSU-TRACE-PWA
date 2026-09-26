@@ -1,0 +1,378 @@
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import {
+  Activity, BarChart2, Check, Database, Download, Lightbulb, Maximize2,
+  Move, Package, RotateCcw, Search, Settings, Truck, Zap
+} from 'lucide-react';
+import { Bar, Doughnut, Line, Pie } from 'react-chartjs-2';
+import { baseChartOptions, buildForecastChartData, forecastChartOptions } from '../analyticsCharts';
+import { sortMetricRows, summarizeDemandForecast } from '../demandAnalytics';
+
+const COLORS = ['#991b1b', '#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4b5563'];
+const GSO_LAYOUT = [
+  { id: 'bottleneck', size: 2 },
+  { id: 'inventory', size: 1 },
+  { id: 'traffic', size: 2 },
+  { id: 'frequency', size: 1 },
+  { id: 'forecast', size: 3 },
+  { id: 'routing', size: 2 },
+  { id: 'vehicles', size: 1 }
+];
+
+const ICT_LAYOUT = [
+  { id: 'bottleneck', size: 2 },
+  { id: 'traffic', size: 1 },
+  { id: 'frequency', size: 1 },
+  { id: 'routing', size: 2 }
+];
+
+const getLayoutConfig = scope => scope === 'ict'
+  ? { key: 'ict-operational-analytics-layout-v1', defaultLayout: ICT_LAYOUT }
+  : { key: 'gso-operational-analytics-layout-v2', defaultLayout: GSO_LAYOUT };
+
+function readLayout(scope) {
+  const { key, defaultLayout } = getLayoutConfig(scope);
+  try {
+    const stored = JSON.parse(localStorage.getItem(key));
+    if (!Array.isArray(stored)) return defaultLayout;
+    const validIds = new Set(defaultLayout.map(item => item.id));
+    const valid = stored.filter(item => validIds.has(item.id) && [1, 2, 3].includes(item.size));
+    const missing = defaultLayout.filter(item => !valid.some(saved => saved.id === item.id));
+    return [...valid, ...missing];
+  } catch {
+    return defaultLayout;
+  }
+}
+
+function ChartSwitch({ value, onChange, options }) {
+  return (
+    <div className="inline-flex items-center rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] p-1" aria-label="Chart type">
+      {options.map(option => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={`rounded-md px-2.5 py-1 text-[10px] font-bold transition-colors ${
+            value === option.value ? 'bg-white dark:bg-[#2b1317] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+          }`}
+          aria-pressed={value === option.value}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ message }) {
+  return <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-gray-400 dark:text-gray-500">{message}</div>;
+}
+
+function SortSelect({ value, onChange, highestLabel = 'Highest first', lowestLabel = 'Lowest first' }) {
+  return (
+    <select
+      value={value}
+      onChange={event => onChange(event.target.value)}
+      aria-label="Sort metric"
+      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 sm:w-auto"
+    >
+      <option value="desc">{highestLabel}</option>
+      <option value="asc">{lowestLabel}</option>
+    </select>
+  );
+}
+
+function DashboardCard({ card, editMode, onResize, onDragStart, onDrop, children, title, subtitle, icon, accent = 'border-t-gray-400' }) {
+  const span = card.size === 3 ? 'xl:col-span-3' : card.size === 2 ? 'xl:col-span-2' : 'xl:col-span-1';
+  return (
+    <section
+      draggable={editMode}
+      onDragStart={() => onDragStart(card.id)}
+      onDragOver={event => editMode && event.preventDefault()}
+      onDrop={() => onDrop(card.id)}
+      className={`${span} min-h-[360px] rounded-2xl border-x border-b border-t-4 ${accent} bg-white dark:bg-[#180e10] p-4 shadow-sm transition-all sm:min-h-[390px] sm:p-6 ${
+        editMode ? 'cursor-move border-dashed ring-1 ring-gray-200 dark:ring-gray-700 hover:shadow-md' : 'border-gray-200 dark:border-[#42292f]'
+      }`}
+    >
+      <div className="mb-5 flex min-h-14 flex-col items-start justify-between gap-3 border-b border-gray-100 dark:border-[#42292f] pb-4 sm:flex-row">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">{icon}{title}</h3>
+          <p className="mt-1 text-xs font-medium leading-relaxed text-gray-500 dark:text-gray-400">{subtitle}</p>
+        </div>
+        {editMode && (
+          <div className="flex shrink-0 items-center gap-1">
+            <Move size={16} className="text-gray-400" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={event => { event.stopPropagation(); onResize(card.id); }}
+              className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#2b1317] hover:text-gray-900 dark:hover:text-white"
+              title="Resize card"
+            >
+              <Maximize2 size={15} />
+            </button>
+          </div>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function RankedChart({ rows, labelKey, valueKey, chartType, datasetLabel, unit = '' }) {
+  const data = {
+    labels: rows.map(row => row[labelKey]),
+    datasets: [{
+      label: datasetLabel,
+      data: rows.map(row => Number(row[valueKey] || 0)),
+      backgroundColor: chartType === 'bar' ? '#991b1b' : rows.map((_, index) => COLORS[index % COLORS.length]),
+      borderColor: chartType === 'bar' ? '#7f1d1d' : '#180e10',
+      borderWidth: chartType === 'bar' ? 0 : 2,
+      borderRadius: chartType === 'bar' ? 6 : 0
+    }]
+  };
+  const options = chartType === 'bar' ? {
+    ...baseChartOptions,
+    indexAxis: 'y',
+    plugins: { ...baseChartOptions.plugins, legend: { display: false } },
+    scales: {
+      x: { beginAtZero: true, grid: { color: 'rgba(150,150,150,0.1)' }, ticks: { callback: value => `${value}${unit}`, font: { size: 10 } } },
+      y: { grid: { display: false }, ticks: { font: { size: 10, weight: 600 } } }
+    }
+  } : baseChartOptions;
+  if (chartType === 'pie') return <Pie data={data} options={options} />;
+  if (chartType === 'doughnut') return <Doughnut data={data} options={{ ...options, cutout: '58%' }} />;
+  return <Bar data={data} options={options} />;
+}
+
+export default function OperationalAnalyticsTab({
+  auditStartDate, setAuditStartDate, auditEndDate, setAuditEndDate,
+  handleGenerateAuditReport, isAnalyticsLoading, bottleneckSearch,
+  setBottleneckSearch, bottleneckSort, setBottleneckSort,
+  processedBottleneckData, equipmentInventory, demandTimeFilter,
+  setDemandTimeFilter, chartReadyDemandData, systemHealth, routePerf,
+  administrativeInsights, analyticsScope = 'gso'
+}) {
+  const { key: layoutKey, defaultLayout } = getLayoutConfig(analyticsScope);
+  const [editMode, setEditMode] = useState(false);
+  const [layout, setLayout] = useState(() => readLayout(analyticsScope));
+  const [draggedId, setDraggedId] = useState(null);
+  const [bottleneckMode, setBottleneckMode] = useState('office');
+  const [bottleneckChart, setBottleneckChart] = useState('bar');
+  const [inventoryChart, setInventoryChart] = useState('doughnut');
+  const [trafficChart, setTrafficChart] = useState('line');
+  const [trafficRange, setTrafficRange] = useState(12);
+  const [frequencyMode, setFrequencyMode] = useState('documents');
+  const [frequencyChart, setFrequencyChart] = useState('bar');
+  const [forecastChart, setForecastChart] = useState('line');
+  const [routingView, setRoutingView] = useState('bar');
+  const [inventorySort, setInventorySort] = useState('desc');
+  const [frequencySort, setFrequencySort] = useState('desc');
+  const [routingSort, setRoutingSort] = useState('desc');
+  const [vehicleSort, setVehicleSort] = useState('desc');
+
+  useEffect(() => {
+    localStorage.setItem(layoutKey, JSON.stringify(layout));
+  }, [layout, layoutKey]);
+
+  const processBottlenecks = useMemo(() => (routePerf?.document_routes || [])
+    .map(route => ({ office_name: route.route_name, dwell_time_hours: Number(route.avg_completion_hours || 0) }))
+    .filter(item => item.office_name.toLowerCase().includes((bottleneckSearch || '').toLowerCase()))
+    .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
+    .slice(0, 5), [routePerf, bottleneckSearch, bottleneckSort]);
+
+  const bottleneckRows = bottleneckMode === 'office' ? processedBottleneckData : processBottlenecks;
+  const trafficRows = (administrativeInsights?.peak_traffic || []).slice(-trafficRange);
+  const rawFrequencyRows = frequencyMode === 'documents'
+    ? (administrativeInsights?.frequent_documents || [])
+    : (administrativeInsights?.utilized_assets || []);
+  const frequencyValueKey = frequencyMode === 'documents' ? 'request_count' : 'usage_count';
+  const frequencyRows = sortMetricRows(rawFrequencyRows, frequencyValueKey, frequencySort).slice(0, 8);
+  const inventoryRows = sortMetricRows(equipmentInventory || [], 'current_stock', inventorySort).slice(0, 8);
+  const routes = sortMetricRows(routePerf?.document_routes || [], 'avg_completion_hours', routingSort);
+  const vehicles = sortMetricRows(routePerf?.vehicle_scheduling || [], 'avg_turnaround_hours', vehicleSort);
+  const isDbHealthy = systemHealth?.database_connection === 'HEALTHY';
+
+  const moveCard = targetId => {
+    if (!editMode || !draggedId || draggedId === targetId) return;
+    setLayout(current => {
+      const next = [...current];
+      const from = next.findIndex(item => item.id === draggedId);
+      const to = next.findIndex(item => item.id === targetId);
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setDraggedId(null);
+  };
+
+  const cycleCardSize = id => setLayout(current => current.map(item => (
+    item.id === id ? { ...item, size: item.size === 3 ? 1 : item.size + 1 } : item
+  )));
+
+  const resetLayout = () => setLayout(defaultLayout.map(item => ({ ...item })));
+
+  const trafficData = {
+    labels: trafficRows.map(item => item.month),
+    datasets: [{
+      label: 'Document requests',
+      data: trafficRows.map(item => Number(item.request_count || 0)),
+      borderColor: '#2563eb', backgroundColor: trafficChart === 'line' ? 'rgba(37, 99, 235, .12)' : '#2563eb',
+      fill: trafficChart === 'line', tension: 0.32, borderRadius: 5
+    }]
+  };
+
+  const trafficOptions = {
+    ...baseChartOptions,
+    plugins: { ...baseChartOptions.plugins, legend: { display: false } },
+    scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { beginAtZero: true, grid: { color: 'rgba(150,150,150,0.1)' }, ticks: { precision: 0 } } }
+  };
+
+  const forecastData = buildForecastChartData(chartReadyDemandData || [], forecastChart === 'line');
+  const demandSummary = summarizeDemandForecast(chartReadyDemandData || []);
+  const formatExpected = value => Number(value || 0).toFixed(1);
+
+  const contents = {
+    bottleneck: card => (
+      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+        title="Processing Delay Analysis"
+        subtitle={bottleneckMode === 'office' ? 'Average processing time for completed documents at each office.' : 'End-to-end completion time by document process.'}
+        icon={<BarChart2 className="text-red-700 dark:text-red-400" size={18} />} accent="border-t-red-700">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="inline-flex rounded-lg bg-gray-100 dark:bg-gray-800 p-1">
+            {[['office', 'By office'], ['process', 'By process']].map(([value, label]) => (
+              <button key={value} type="button" onClick={() => setBottleneckMode(value)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${bottleneckMode === value ? 'bg-white dark:bg-[#2b1317] text-red-800 dark:text-red-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>{label}</button>
+            ))}
+          </div>
+          <ChartSwitch value={bottleneckChart} onChange={setBottleneckChart} options={[{ value: 'bar', label: 'Bar' }, { value: 'pie', label: 'Pie' }]} />
+        </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <label className="relative min-w-44 flex-1">
+            <Search className="absolute left-2.5 top-2.5 text-gray-400" size={14} />
+            <input value={bottleneckSearch} onChange={event => setBottleneckSearch(event.target.value)} placeholder={`Search ${bottleneckMode}...`} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] py-2 pl-8 pr-3 text-xs text-gray-900 dark:text-white outline-none focus:border-red-400" />
+          </label>
+          <select value={bottleneckSort} onChange={event => setBottleneckSort(event.target.value)} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300">
+            <option value="desc">Highest delay</option><option value="asc">Lowest delay</option>
+          </select>
+        </div>
+        <div className="h-56">{bottleneckRows.length ? <RankedChart rows={bottleneckRows} labelKey="office_name" valueKey="dwell_time_hours" chartType={bottleneckChart} datasetLabel={bottleneckMode === 'office' ? 'Average processing time (hours)' : 'Average completion time (hours)'} unit="h" /> : <EmptyState message={`No ${bottleneckMode} data matches the current search.`} />}</div>
+      </DashboardCard>
+    ),
+    inventory: card => (
+      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+        title="Prescriptive Analytics" subtitle="Current equipment availability and allocation signal."
+        icon={<Package className="text-red-700 dark:text-red-400" size={18} />} accent="border-t-red-700">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <SortSelect value={inventorySort} onChange={setInventorySort} highestLabel="Most stock" lowestLabel="Least stock" />
+          <ChartSwitch value={inventoryChart} onChange={setInventoryChart} options={[{ value: 'bar', label: 'Bar' }, { value: 'doughnut', label: 'Doughnut' }]} />
+        </div>
+        <div className="h-48">{inventoryRows.length ? <RankedChart rows={inventoryRows} labelKey="asset_name" valueKey="current_stock" chartType={inventoryChart} datasetLabel="Available units" /> : <EmptyState message="No equipment inventory data available." />}</div>
+        <div className="mt-4 rounded-xl border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-3">
+          <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-red-800 dark:text-red-400"><Lightbulb size={13} /> System insight</p>
+          <p className="mt-1 text-xs leading-relaxed text-red-900 dark:text-red-300">Prioritize restocking assets with low availability and sustained historical use.</p>
+        </div>
+      </DashboardCard>
+    ),
+    traffic: card => (
+      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+        title="Peak Traffic Periods" subtitle="Document request volume across academic months."
+        icon={<Activity className="text-blue-600 dark:text-blue-400" size={18} />} accent="border-t-blue-500">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <select value={trafficRange} onChange={event => setTrafficRange(Number(event.target.value))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 sm:w-auto"><option value={6}>6 months</option><option value={12}>12 months</option><option value={24}>24 months</option></select>
+          <ChartSwitch value={trafficChart} onChange={setTrafficChart} options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]} />
+        </div>
+        <div className="h-64">{trafficRows.length ? (trafficChart === 'line' ? <Line data={trafficData} options={trafficOptions} /> : <Bar data={trafficData} options={trafficOptions} />) : <EmptyState message="No document traffic data available." />}</div>
+      </DashboardCard>
+    ),
+    frequency: card => (
+      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+        title={analyticsScope === 'ict' ? 'Frequently Requested Documents' : 'Frequently Requested'} subtitle={frequencyMode === 'documents' ? 'Most transacted document processes.' : 'Most utilized school resources.'}
+        icon={<Package className="text-amber-600 dark:text-amber-400" size={18} />} accent="border-t-amber-500">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          {analyticsScope !== 'ict' && <div className="inline-flex rounded-lg bg-gray-100 dark:bg-gray-800 p-1">
+            {[['documents', 'Documents'], ['assets', 'Assets']].map(([value, label]) => <button key={value} type="button" onClick={() => setFrequencyMode(value)} className={`rounded-md px-2.5 py-1 text-[10px] font-bold ${frequencyMode === value ? 'bg-white dark:bg-[#2b1317] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>{label}</button>)}
+          </div>}
+          <ChartSwitch value={frequencyChart} onChange={setFrequencyChart} options={[{ value: 'bar', label: 'Bar' }, { value: 'doughnut', label: 'Doughnut' }]} />
+        </div>
+        <div className="mb-3 flex justify-stretch sm:justify-end"><SortSelect value={frequencySort} onChange={setFrequencySort} highestLabel="Most requested" lowestLabel="Least requested" /></div>
+        <div className="h-64">{frequencyRows.length ? <RankedChart rows={frequencyRows} labelKey="name" valueKey={frequencyValueKey} chartType={frequencyChart} datasetLabel={frequencyMode === 'documents' ? 'Requests' : 'Recorded uses'} /> : <EmptyState message={`No ${frequencyMode} usage data available.`} />}</div>
+      </DashboardCard>
+    ),
+    forecast: card => (
+      <Fragment key={card.id}>
+        <DashboardCard card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+          title="Demand Planning: Vans & Facilities" subtitle="Historical usage with a 30-day demand forecast shown as dashed lines."
+          icon={<Activity className="text-emerald-600 dark:text-emerald-400" size={18} />} accent="border-t-emerald-500">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <select value={demandTimeFilter} onChange={event => setDemandTimeFilter(Number(event.target.value))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 sm:w-auto"><option value={2}>2 months</option><option value={3}>3 months</option><option value={6}>6 months</option><option value={9}>9 months</option><option value={12}>12 months</option></select>
+            <ChartSwitch value={forecastChart} onChange={setForecastChart} options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]} />
+          </div>
+          <div className="h-64">{chartReadyDemandData?.length ? (forecastChart === 'line' ? <Line data={forecastData} options={forecastChartOptions} /> : <Bar data={forecastData} options={forecastChartOptions} />) : <EmptyState message="No booking history is available for demand planning." />}</div>
+        </DashboardCard>
+        {demandSummary && (
+          <section className="xl:col-span-3 rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-900/10 p-4 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-2 border-b border-emerald-100 dark:border-emerald-900/50 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white"><Lightbulb className="text-emerald-600 dark:text-emerald-400" size={18} /> 30-Day Forecast Interpretation</h3>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Expected request averages across the complete projection period.</p>
+              </div>
+              <span className="w-fit rounded-full border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-[#180e10] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-400">{demandSummary.forecastBasis}</span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-blue-100 dark:border-blue-900 bg-white dark:bg-[#1c1113] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Van demand</p><p className="mt-1 text-2xl font-black text-blue-700 dark:text-blue-400">{formatExpected(demandSummary.vehicleTotal)}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">requests expected · {formatExpected(demandSummary.vehicleDailyAverage)} daily</p></div>
+              <div className="rounded-xl border border-emerald-100 dark:border-emerald-900 bg-white dark:bg-[#1c1113] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Facility demand</p><p className="mt-1 text-2xl font-black text-emerald-700 dark:text-emerald-400">{formatExpected(demandSummary.facilityTotal)}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">requests expected · {formatExpected(demandSummary.facilityDailyAverage)} daily</p></div>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Busiest weekday</p><p className="mt-1 text-lg font-black text-gray-900 dark:text-white">{demandSummary.busiestWeekday}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{formatExpected(demandSummary.busiestWeekdayAverage)} combined requests expected</p></div>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Daily pattern</p><p className="mt-1 text-lg font-black text-gray-900 dark:text-white">{formatExpected(demandSummary.weekdayDailyAverage)} weekdays</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{formatExpected(demandSummary.weekendDailyAverage)} combined requests on weekends</p></div>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-gray-700 dark:text-gray-300"><strong className="text-gray-900 dark:text-white">Overall interpretation:</strong> Demand for {demandSummary.dominantDemand} is expected to be higher over the next {demandSummary.days} days. Plan for approximately {formatExpected(demandSummary.facilityTotal)} facility requests and {formatExpected(demandSummary.vehicleTotal)} van requests, with the strongest average demand occurring on {demandSummary.busiestWeekday}s.</p>
+          </section>
+        )}
+      </Fragment>
+    ),
+    routing: card => (
+      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+        title="Document Routing Efficiency" subtitle="End-to-end turnaround, active processing, and route complexity by process."
+        icon={<Zap className="text-violet-600 dark:text-violet-400" size={18} />} accent="border-t-violet-500">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <SortSelect value={routingSort} onChange={setRoutingSort} highestLabel="Longest first" lowestLabel="Shortest first" />
+          <ChartSwitch value={routingView} onChange={setRoutingView} options={[{ value: 'bar', label: 'Bar' }, { value: 'table', label: 'Table' }]} />
+        </div>
+        <div className="h-64 overflow-auto">
+          {!routes.length ? <EmptyState message="No completed document routes available." /> : routingView === 'bar' ? <RankedChart rows={routes.slice(0, 8)} labelKey="route_name" valueKey="avg_completion_hours" chartType="bar" datasetLabel="End-to-end hours" unit="h" /> : (
+            <table className="w-full text-left text-xs"><thead className="sticky top-0 bg-gray-50 dark:bg-[#1c1113] text-[10px] uppercase text-gray-500 dark:text-gray-400"><tr><th className="p-2">Process</th><th className="p-2 text-right">Total</th><th className="p-2 text-right">Active</th><th className="p-2 text-right">Stops</th></tr></thead><tbody>{routes.map(route => <tr key={route.route_name} className="border-t border-gray-100 dark:border-gray-800"><td className="p-2 font-semibold text-gray-800 dark:text-gray-200">{route.route_name}</td><td className="p-2 text-right">{route.avg_completion_hours}h</td><td className="p-2 text-right">{route.avg_active_processing_hours}h</td><td className="p-2 text-right">{route.avg_stops}</td></tr>)}</tbody></table>
+          )}
+        </div>
+      </DashboardCard>
+    ),
+    vehicles: card => (
+      <DashboardCard key={card.id} card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
+        title="Van Turnaround" subtitle="Trip volume and average vehicle turnaround."
+        icon={<Truck className="text-cyan-700 dark:text-cyan-400" size={18} />} accent="border-t-cyan-600">
+        <div className="mb-3 flex justify-stretch sm:justify-end"><SortSelect value={vehicleSort} onChange={setVehicleSort} highestLabel="Longest first" lowestLabel="Shortest first" /></div>
+        <div className="h-64 space-y-2 overflow-auto pr-1">{vehicles.length ? vehicles.map(item => <div key={item.asset_name} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-[#1c1113] p-3"><div className="min-w-0"><p className="truncate text-xs font-bold text-gray-900 dark:text-white">{item.asset_name}</p><p className="mt-1 text-[10px] uppercase text-gray-500 dark:text-gray-400">{item.total_trips} trips</p></div><span className="shrink-0 rounded-lg bg-white dark:bg-[#180e10] px-2.5 py-1 text-xs font-black text-cyan-800 dark:text-cyan-400 shadow-sm">{item.avg_turnaround_hours}h</span></div>) : <EmptyState message="No completed van trips available." />}</div>
+      </DashboardCard>
+    )
+  };
+
+  return (
+    <div className={`${analyticsScope === 'ict' ? 'max-w-none' : 'mx-auto max-w-8xl'} w-full space-y-6 text-left`}>
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-4 shadow-sm sm:p-6 lg:flex-row lg:items-center">
+        <p className="text-sm text-gray-500 dark:text-gray-400">{analyticsScope === 'ict' ? 'Document flow, service traffic, and route performance across offices.' : 'Actionable administrative insights and resource planning.'}</p>
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+          <div className="flex w-full flex-col gap-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] p-1.5 sm:w-auto sm:flex-row sm:items-center"><input type="date" value={auditStartDate} onChange={event => setAuditStartDate(event.target.value)} className="min-w-0 bg-transparent px-1 py-1 text-xs font-medium text-gray-900 dark:text-white outline-none" /><span className="hidden text-xs text-gray-400 sm:inline">–</span><input type="date" value={auditEndDate} onChange={event => setAuditEndDate(event.target.value)} className="min-w-0 bg-transparent px-1 py-1 text-xs font-medium text-gray-900 dark:text-white outline-none" /></div>
+          <button type="button" onClick={() => setEditMode(value => !value)} className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-bold ${editMode ? 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2b1317]'}`}>{editMode ? <Check size={15} /> : <Settings size={15} />}{editMode ? 'Done' : 'Customize layout'}</button>
+          {editMode && <button type="button" onClick={resetLayout} className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2b1317]"><RotateCcw size={14} /> Reset</button>}
+          <button type="button" onClick={handleGenerateAuditReport} className="flex items-center gap-2 rounded-lg bg-red-700 dark:bg-red-800 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-red-800 dark:hover:bg-red-700"><Download size={15} /> Generate report</button>
+        </div>
+      </div>
+
+      {editMode && <div className="rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-xs font-medium text-blue-900 dark:text-blue-300">Drag cards to reorder them. Use the resize button on each card to cycle through one-, two-, and three-column widths. Your layout is saved on this device.</div>}
+
+      {isAnalyticsLoading ? <div className="flex h-96 items-center justify-center text-sm font-bold text-gray-500 dark:text-gray-400">Loading analytics…</div> : <>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className={`flex items-center justify-between rounded-2xl border border-t-4 bg-white dark:bg-[#180e10] p-5 shadow-sm ${isDbHealthy ? 'border-t-emerald-500' : 'border-t-red-600'}`}><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Database connection</p><p className={`mt-2 text-sm font-black ${isDbHealthy ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>{systemHealth?.database_connection || 'UNKNOWN'}</p></div><Database className={isDbHealthy ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} size={24} /></div>
+          <div className="flex items-center justify-between rounded-2xl border border-t-4 border-t-amber-500 bg-white dark:bg-[#180e10] p-5 shadow-sm"><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Records scanned</p><p className="mt-1 text-2xl font-black text-gray-900 dark:text-white">{systemHealth?.data_quality_audit?.audit_details?.total_records_scanned || 0}</p></div><Search className="text-amber-600 dark:text-amber-400" size={24} /></div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">{layout.map(card => contents[card.id]?.(card))}</div>
+      </>}
+    </div>
+  );
+}

@@ -1,0 +1,967 @@
+import OfficeSubmissionsTab from '../processor/components/OfficeSubmissionsTab';
+import { lazy, Suspense, useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import { 
+  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X,
+  ChevronDown, Boxes, CalendarClock
+} from 'lucide-react';
+import { endSession, fetchWithAuth } from '../../../api';
+import { prepareDemandChart } from './demandAnalytics';
+import { Smartphone } from 'lucide-react';
+import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
+
+// Custom Hook
+import { useGSOAdminData } from './hooks/useGSOAdminData';
+
+// Tab Components
+import GSODashboardTab from './components/GSODashboardTab';
+import ResourceManagementTab from './components/ResourceManagementTab';
+import VehicleAssignmentModal from './modals/VehicleAssignmentModal';
+import {confirmResourceAction, resourceSuccess, resourceError} from './resourceActions';
+import GSOProcurementTab from './components/GSOProcurementTab';
+import ManageBookingsTab from './components/ManageBookingsTab';
+const OperationalAnalyticsTab = lazy(() => import('./components/OperationalAnalyticsTab'));
+
+// Shared Components
+import UserProfileTab from '../../shared/components/UserProfileTab';
+import FloatingChat from '../../shared/components/FloatingChat';
+import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import { formatOfficeLabel } from '../../../utils/officeLabel';
+import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
+import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import AnalyticsReportModal from '../../shared/components/AnalyticsReportModal';
+import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
+import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
+import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
+
+// NEW: Theme Toggle
+import ThemeToggle from '../../shared/components/ThemeToggle';
+
+// Modals
+import QRScannerModal from './modals/QRScannerModal';
+import AddAssetModal from './modals/AddAssetModal';
+import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
+import MasterChecklistModal from './modals/MasterChecklistModal';
+import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
+import EditAssetModal from './modals/EditAssetModal';
+import ExportLogsModal from './modals/ExportLogsModal';
+import FacilityBlackoutModal from './modals/FacilityBlackoutModal';
+import InventoryActionModal from './modals/InventoryActionModal';
+import BookingRequirementsModal from './modals/BookingRequirementsModal';
+
+const minimalSwal = Swal.mixin({
+  customClass: {
+    confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
+    cancelButton: 'px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-neutral-600 border border-neutral-200 bg-white hover:bg-neutral-50 mx-2',
+    popup: 'rounded-3xl border border-neutral-100 shadow-2xl dark:bg-[#180e10] dark:border-[#42292f]',
+    title: 'text-lg font-black text-neutral-900 dark:text-white',
+    htmlContainer: 'text-sm font-medium text-neutral-500 dark:text-gray-400'
+  },
+  buttonsStyling: false
+});
+
+export default function GSOAdminDashboard() {
+  const navigate = useNavigate();
+  const notificationRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [previousTab, setPreviousTab] = useState('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [resourcesExpanded, setResourcesExpanded] = useState(true);
+  const [documentsExpanded, setDocumentsExpanded] = useState(false);
+  const [manageRefreshKey, setManageRefreshKey] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [procurementTargetSection, setProcurementTargetSection] = useState(null);
+  const [chatTargetDoc, setChatTargetDoc] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [showCompanionModal, setShowCompanionModal] = useState(false);
+
+  const handleNavigateToChat = (doc) => {
+    setShowDetailsModal(false);
+    setChatTargetDoc(doc);
+    setIsChatOpen(true);
+    setIsSidebarOpen(false);
+  };
+
+  const [showIncomingModal, setShowIncomingModal] = useState(false);
+  const [incomingDocsList, setIncomingDocsList] = useState([]);
+  const [isIncomingLoading, setIsIncomingLoading] = useState(false);
+  
+  const handleOpenIncomingModal = async () => {
+    if (!gsoOfficeId) return;
+    setShowIncomingModal(true);
+    setIsIncomingLoading(true);
+    try {
+      const res = await fetchWithAuth(`/api/processor/documents/expected-list/${gsoOfficeId}`);
+      if (res.ok) {
+        setIncomingDocsList(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch incoming documents list:", err);
+    } finally {
+      setIsIncomingLoading(false);
+    }
+  };
+
+  // Initialize Custom Hook Data
+  const {
+    userId, userName, gsoOfficeName, gsoOfficeId, profileName, setProfileName, profileEmail, setProfileEmail,
+    facultyId, departmentName, twoFaEnabled, setTwoFaEnabled, twoFaCode,
+    notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
+    pipelineDocs, processTypes, officesList, expectedIncomingCount,
+    assetsList, equipmentInventory, assetBlackouts,
+    reservationsList, logisticsList, resourceRevision,
+    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
+    fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
+  } = useGSOAdminData();
+
+  const submissionAccess = useSubmissionAccess(userId);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard') {
+      fetchOperationalAnalytics();
+      fetchInventoryMetrics();
+    } else if (activeTab === 'analytics') {
+      fetchOperationalAnalytics();
+      fetchSystemAnalyticsData();
+    } else if (activeTab === 'resources') {
+      fetchMasterAssets();
+      fetchBlackouts();
+      fetchInventoryMetrics();
+    } else if (activeTab === 'procurement' || activeTab === 'manage-bookings') {
+      fetchProcurementData();
+    }
+  }, [activeTab]);
+
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('All'); 
+  const [dashboardPage, setDashboardPage] = useState(1);
+  const [documentPage, setDocumentPage] = useState(1);
+  const [documentSearch, setDocumentSearch] = useState('');
+  const [documentFilter, setDocumentFilter] = useState('All');
+  const [isHistoryDetails, setIsHistoryDetails] = useState(false);
+  const itemsPerPage = 5;
+
+  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showAdHocForm, setShowAdHocForm] = useState(false);
+  const [showSendBackForm, setShowSendBackForm] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [selectedAdHocOffice, setSelectedAdHocOffice] = useState('');
+  const [isActionProcessing, setIsActionProcessing] = useState(false);
+
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [scanMode, setScanMode] = useState('time-in');
+  const [simulatedQrInput, setSimulatedQrPayload] = useState('');
+  const [showPassModal, setShowPassModal] = useState(false);
+
+  const todayObj = new Date();
+  const todayString = todayObj.toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+
+  const [showAddAssetModal, setShowAddAssetModal] = useState(false);
+  const [assetForm, setAssetForm] = useState({ assetName: '', assetTypeId: '1', quantity: 1, isConfirmed: false });
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [inventoryModalMode, setInventoryModalMode] = useState('LEND');
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+  const [showBlackoutModal, setShowBlackoutModal] = useState(false);
+  const [showEditAssetModal, setShowEditAssetModal] = useState(false);
+  const [selectedEditAsset, setSelectedEditAsset] = useState(null);
+  const [assetSchedule, setAssetSchedule] = useState([]);
+  const [activeCalendarTab, setActiveCalendarTab] = useState('Gymnasium');
+  const [blackoutForm, setBlackoutForm] = useState({ asd_id: '', start_time: '', end_time: '', reason: '' });
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+
+  const [showChecklistMakerModal, setShowChecklistMakerModal] = useState(false);
+  const [activeChecklistTab, setActiveChecklistTab] = useState('Vehicle');
+
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printTargetTab, setPrintTargetTab] = useState('Vehicle'); 
+  const [printStartDate, setPrintStartDate] = useState('');
+  const [printEndDate, setPrintEndDate] = useState('');
+
+  const [procSearch, setProcSearch] = useState({ vehicle: '', multimedia: '', gym: '', logistics: '' });
+  const [procFilter, setProcFilter] = useState({ vehicle: 'All', multimedia: 'All', gym: 'All', logistics: 'All' });
+  const [procPage, setProcPage] = useState({ vehicle: 1, multimedia: 1, gym: 1, logistics: 1 });
+  const itemsPerProcPage = 5;
+
+  const [bottleneckSort, setBottleneckSort] = useState('desc');
+  const [bottleneckSearch, setBottleneckSearch] = useState('');
+  const [demandTimeFilter, setDemandTimeFilter] = useState(3);
+  const [auditStartDate, setAuditStartDate] = useState('');
+  const [auditEndDate, setAuditEndDate] = useState('');
+  const [showAnalyticsReport, setShowAnalyticsReport] = useState(false);
+  const [inventoryForm, setInventoryForm] = useState({
+    requestorName: '', department: '', purpose: '', duration: '', quantityNeeded: '', returnDate: '', returnTime: '', isDamaged: false, damageNotes: ''
+  });
+
+  const [showActiveChecklistModal, setShowActiveChecklistModal] = useState(false);
+  const [activeChecklistBooking, setActiveChecklistBooking] = useState(null);
+  const [assignmentRequest, setAssignmentRequest] = useState(null);
+  const [checklistBusy, setChecklistBusy] = useState(false);
+  const [activeChecklistItems, setActiveChecklistItems] = useState([]);
+  const [masterChecklistItems, setMasterChecklistItems] = useState([]);
+  const [newChecklistName, setNewChecklistName] = useState('');
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const handleTabSelect = (tab) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false);
+  };
+
+  const tabTitles = {
+    dashboard: 'GSO Dashboard',
+    documents: 'Active Documents',
+    submissions: 'Personal Submissions',
+    'shared-submissions': 'Shared With Me',
+    'archived-submissions': 'Archived Submissions',
+    'office-submissions': 'Office Submissions',
+    'department-submissions': 'Department Submissions',
+    resources: 'Resource Inventory',
+    procurement: 'List of Requests',
+    'manage-bookings': 'Manage Bookings',
+    analytics: 'Operational Analytics',
+    history: 'History',
+    profile: 'Profile Management'
+  };
+
+  const handleNavigateToProcurement = (sectionKey) => {
+    setProcurementTargetSection(sectionKey);
+    setActiveTab('procurement');
+    setIsSidebarOpen(false);
+  };
+
+  const pendingDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'pending' && d.time_in !== null && !d.time_out);
+  const archivedDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'action required');
+  const completedDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'signed' || d.status?.toLowerCase() === 'completed' || d.time_out !== null);
+
+  const resolveOfficeStatus = doc => {
+    if (Number(doc.office_status_id) === 4 || doc.status?.toLowerCase() === 'action required') return 'Action Required';
+    if (doc.time_out) return 'Completed';
+    if (Number(doc.office_status_id) === 2 || doc.status?.toLowerCase() === 'in verification') return 'In Verification';
+    if (Number(doc.office_status_id) === 3 || doc.status?.toLowerCase() === 'signed') return 'Signed';
+    if (!doc.time_in) return 'Awaiting Scan-In';
+    return 'Pending';
+  };
+
+  const filteredOfficeDocuments = pipelineDocs.filter(doc => {
+    const matchesSearch = `${doc.title || ''} ${doc.qr_code || ''}`.toLowerCase().includes(documentSearch.toLowerCase());
+    return matchesSearch && (documentFilter === 'All' || resolveOfficeStatus(doc) === documentFilter);
+  });
+  const currentOfficeDocuments = filteredOfficeDocuments.slice((documentPage - 1) * itemsPerPage, documentPage * itemsPerPage);
+  const totalOfficeDocumentPages = Math.max(1, Math.ceil(filteredOfficeDocuments.length / itemsPerPage));
+
+  const filteredMasterDocs = pipelineDocs.filter(doc => {
+    const matchesSearch = doc.title?.toLowerCase().includes(search.toLowerCase()) || doc.qr_code?.toLowerCase().includes(search.toLowerCase());
+    if (filterStatus === 'Incoming') return matchesSearch && doc.time_in === null && !doc.time_out;
+    if (filterStatus === 'Pending') return matchesSearch && doc.status?.toLowerCase() === 'pending' && doc.time_in !== null && !doc.time_out;
+    if (filterStatus === 'Archived') return matchesSearch && doc.status?.toLowerCase() === 'action required';
+    if (filterStatus === 'Completed') return matchesSearch && (doc.time_out !== null || doc.status?.toLowerCase() === 'signed' || doc.status?.toLowerCase() === 'completed');
+    return matchesSearch;
+  });
+  const currentDashDocs = filteredMasterDocs.slice((dashboardPage - 1) * itemsPerPage, dashboardPage * itemsPerPage);
+  const totalDashPages = Math.ceil(filteredMasterDocs.length / itemsPerPage);
+
+  const processProcurementData = (type, dataArray, searchKey, filterKey, pageKey) => {
+    let filtered = type !== 'Logistics' ? dataArray.filter(item => item.booking_type === type) : dataArray;
+    if (procSearch[searchKey]) {
+      const lowerSearch = procSearch[searchKey].toLowerCase();
+      filtered = filtered.filter(item => 
+        (item.requestor?.toLowerCase().includes(lowerSearch)) ||
+        (item.requestor_name?.toLowerCase().includes(lowerSearch)) ||
+        (item.asset_name?.toLowerCase().includes(lowerSearch))
+      );
+    }
+    if (procFilter[filterKey] !== 'All') filtered = filtered.filter(item => item.status === procFilter[filterKey]);
+    const totalPages = Math.ceil(filtered.length / itemsPerProcPage) || 1;
+    const currentPage = procPage[pageKey];
+    const paginatedData = filtered.slice((currentPage - 1) * itemsPerProcPage, currentPage * itemsPerProcPage);
+    return { filteredData: filtered, paginatedData, totalPages };
+  };
+
+  const vehicleData = processProcurementData('Vehicle', reservationsList, 'vehicle', 'vehicle', 'vehicle');
+  const multimediaData = processProcurementData('Room', reservationsList, 'multimedia', 'multimedia', 'multimedia');
+  const gymData = processProcurementData('Gymnasium', reservationsList, 'gym', 'gym', 'gym');
+  const logData = processProcurementData('Logistics', logisticsList, 'logistics', 'logistics', 'logistics');
+
+  const processedBottleneckData = [...(bottleneckData || [])]
+    .filter(d => (d.office_name || '').toLowerCase().includes((bottleneckSearch || '').toLowerCase()))
+    .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
+    .slice(0, 5);
+  const { chartReadyDemandData } = prepareDemandChart(peakDemandData, demandTimeFilter);
+
+  const isAwaitingScanIn = selectedDoc && !selectedDoc.time_in;
+  const isInVerification = selectedDoc?.status?.toLowerCase() === 'in verification' || ((selectedDoc?.current_step_is_adhoc || selectedDoc?.is_adhoc) && selectedDoc?.current_office !== gsoOfficeName);
+  const isActionAltered = selectedDoc && (selectedDoc.status?.toLowerCase() === 'signed' || selectedDoc.status?.toLowerCase() === 'completed' || selectedDoc.status?.toLowerCase() === 'action required' || selectedDoc.time_out);
+
+  useEffect(() => {
+    if (showChecklistMakerModal) {
+      const fetchTemplates = async () => {
+        const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+        const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
+        try {
+          const res = await fetchWithAuth(`/api/procurement/templates/${targetType}`);
+          if (res.ok) setMasterChecklistItems(await res.json());
+        } catch (err) { console.error("Error fetching templates:", err); }
+      };
+      fetchTemplates();
+    }
+  }, [showChecklistMakerModal, activeChecklistTab]);
+
+  const handleAddMasterChecklistItem = async (e) => {
+    e.preventDefault();
+    if (!newChecklistName.trim()) return;
+    if (!await confirmResourceAction('Add this requirement?', newChecklistName.trim())) return;
+    const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+    const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
+    try {
+      const res = await fetchWithAuth('/api/procurement/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingType: targetType, itemName: newChecklistName.trim() })
+      });
+      if (res.ok) {
+        setNewChecklistName('');
+        const updated = await fetchWithAuth(`/api/procurement/templates/${targetType}`);
+        if (updated.ok) setMasterChecklistItems(await updated.json());
+        await resourceSuccess('Requirement added.');
+      } else {
+        await resourceError(new Error((await res.json()).error || 'Could not add requirement.'));
+      }
+    } catch (err) { console.error("Error adding template item:", err); }
+  };
+
+  const handleDeleteMasterChecklistItem = async (templateId) => {
+    if (!await confirmResourceAction('Delete this requirement?', 'This will remove the requirement from the master checklist.')) return;
+    try {
+      const res = await fetchWithAuth(`/api/procurement/templates/${templateId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setMasterChecklistItems(prev => prev.filter(item => item.template_id !== templateId));
+        await resourceSuccess('Requirement deleted.');
+      } else {
+        await resourceError(new Error((await res.json()).error || 'Could not delete requirement.'));
+      }
+    } catch (err) { console.error("Error deleting template item:", err); }
+  };
+
+  const handleViewChecklist = async (booking) => {
+    setActiveChecklistBooking(booking);
+    try {
+      const res = await fetchWithAuth(`/api/procurement/checklists/${booking.booking_id}/${booking.booking_type}`);
+      if (res.ok) {
+        setActiveChecklistItems(await res.json());
+        setShowActiveChecklistModal(true);
+      }
+      else await resourceError(new Error((await res.json()).error || 'Could not load request requirements.'));
+    } catch (err) { await resourceError(err); }
+  };
+
+  const handleToggleChecklistItem = async (checkId, currentStatus) => {
+    if (checklistBusy) return;
+    setChecklistBusy(true);
+    try {
+      const willConfirm = !currentStatus && activeChecklistItems.every(item => item.check_id === checkId || item.is_checked);
+      if (!await confirmResourceAction(willConfirm ? 'Confirm this request?' : 'Update this requirement?', willConfirm ? 'All documents will be marked received. The system will check availability before confirming the request.' : currentStatus ? 'Unchecking a requirement returns this request to Pending.' : 'Confirm that this document has been received and verified.')) return;
+      const res = await fetchWithAuth(`/api/procurement/checklists/${checkId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isChecked: !currentStatus, bookingId: activeChecklistBooking.booking_id })
+      });
+      if (res.ok) {
+        setActiveChecklistItems(prev => prev.map(item => 
+          item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
+        ));
+        const result = await res.json();
+        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Approved' : 'Pending'}));
+        fetchProcurementData();
+        await resourceSuccess(result.allChecked ? 'Request approved.' : 'Requirement updated. Request is pending.');
+      } else {
+        const result = await res.json();
+        await minimalSwal.fire({icon:'warning',title:'Request could not be confirmed',text:result.error || 'Please review the assignment and schedule.'});
+      }
+    } catch (err) { await resourceError(err); }
+    finally { setChecklistBusy(false); }
+  };
+
+  const handleGeneratePDF = () => {
+    let dataToPrint = [];
+    if (printTargetTab === 'Logistics History') {
+      dataToPrint = logisticsList.filter(log => {
+        const logDate = new Date(log.borrowed_at).toISOString().split('T')[0];
+        const afterStart = printStartDate ? logDate >= printStartDate : true;
+        const beforeEnd = printEndDate ? logDate <= printEndDate : true;
+        return afterStart && beforeEnd;
+      });
+    } else {
+      const typeMap = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+      dataToPrint = reservationsList.filter(res => {
+        const isCorrectType = res.booking_type === typeMap[printTargetTab];
+        const resDate = new Date(res.reservation_date).toISOString().split('T')[0];
+        const afterStart = printStartDate ? resDate >= printStartDate : true;
+        const beforeEnd = printEndDate ? resDate <= printEndDate : true;
+        return isCorrectType && afterStart && beforeEnd;
+      });
+    }
+
+    if (dataToPrint.length === 0) {
+      return minimalSwal.fire({ icon: 'warning', title: 'No Records', text: 'No records found for the selected date range.' });
+    }
+
+    const printWindow = window.open('', '_blank');
+    let tableHeaders = '';
+    let tableRows = '';
+
+    if (printTargetTab === 'Logistics History') {
+      tableHeaders = `
+        <tr>
+          <th>Asset</th>
+          <th>Requestor</th>
+          <th>Qty</th>
+          <th>Lending Time</th>
+          <th>Return Time</th>
+          <th>Condition / Notes</th>
+        </tr>`;
+      tableRows = dataToPrint.map(log => `
+        <tr>
+          <td><strong>${log.asset_name}</strong></td>
+          <td>${log.requestor_name}</td>
+          <td>${log.qty_borrowed}</td>
+          <td>${log.borrowed_at ? new Date(log.borrowed_at).toLocaleString() : 'N/A'}</td>
+          <td>${log.returned_at ? new Date(log.returned_at).toLocaleString() : 'Pending'}</td>
+          <td>${log.status === 'Returned' ? (log.condition_on_return === 'Damaged' ? `<span style="color:red; font-weight:bold;">Damaged:</span> ${log.damage_notes || 'No notes'}` : 'Good Condition') : 'Out / Borrowed'}</td>
+        </tr>`).join('');
+    } else {
+      tableHeaders = `
+        <tr>
+          <th>Requestor</th>
+          <th>Purpose</th>
+          <th>Target Date & Time</th>
+          <th>System Request Made</th>
+          <th>Confirmed At</th>
+          <th>Status</th>
+        </tr>`;
+      tableRows = dataToPrint.map(res => `
+        <tr>
+          <td><strong>${res.requestor || res.requestor_name || 'N/A'}</strong></td>
+          <td>${res.purpose}</td>
+          <td>${new Date(res.reservation_date).toLocaleDateString()} <br> <small>${res.start_time?.substring(0,5)} - ${res.end_time?.substring(0,5)}</small></td>
+          <td>${res.created_at ? new Date(res.created_at).toLocaleString() : 'N/A'}</td>
+          <td>${res.updated_at ? new Date(res.updated_at).toLocaleString() : 'Pending'}</td>
+          <td style="font-weight:bold; color: ${res.status === 'Confirmed' ? 'green' : '#d97706'}">${res.status}</td>
+        </tr>`).join('');
+    }
+
+    const htmlContent = `
+      <html>
+        <head>
+          <title>Exported Logs - ${printTargetTab}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
+            .header { border-bottom: 2px solid #991b1b; padding-bottom: 10px; margin-bottom: 20px; }
+            .header h1 { margin: 0; color: #991b1b; font-size: 24px; }
+            .header p { margin: 5px 0 0 0; color: #666; font-size: 12px; }
+            table { border-collapse: collapse; margin-top: 10px; font-size: 12px; width: 100%; }
+            th { background-color: #f87171; color: white; text-align: left; padding: 10px; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+            td { padding: 10px; border-bottom: 1px solid #e5e5e5; }
+            tr:nth-child(even) { background-color: #f9fafb; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>BSU GSO Procurement Logs</h1>
+            <p><strong>Category:</strong> ${printTargetTab}</p>
+            <p><strong>Date Filter:</strong> ${printStartDate || 'Beginning of records'} to ${printEndDate || 'Present'}</p>
+            <p><strong>Generated On:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          <table>
+            <thead>${tableHeaders}</thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 250);
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) setShowNotifications(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    minimalSwal.fire({
+      title: 'Sign Out?',
+      text: 'Are you sure you want to securely end your session?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Sign Out'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        await endSession();
+        navigate('/login');
+      }
+    });
+  };
+
+  const handleOpenDetails = (doc, fromHistory = false) => {
+    setSelectedDoc(doc);
+    setIsHistoryDetails(fromHistory);
+    setShowSendBackForm(false);
+    setShowAdHocForm(false);
+    setReturnReason('');
+    setSelectedAdHocOffice('');
+    setShowDetailsModal(true);
+  };
+
+  const formatRelativeTime = (timestamp) => {
+    if (!timestamp) return 'Just now';
+    const localizedString = String(timestamp).replace(/(\+00:00|\+00|Z)$/i, '');
+    const now = new Date();
+    const past = new Date(localizedString);
+    const elapsed = now - past;
+    if (elapsed < 60000) return 'Just now';
+    else if (elapsed < 3600000) return `${Math.round(elapsed / 60000)} minutes ago`;   
+    else if (elapsed < 86400000) return `${Math.round(elapsed / 3600000)} hours ago`;   
+    else return `${Math.round(elapsed / 86400000)} days ago`; 
+  };
+
+  const handleGenerateAuditReport = () => setShowAnalyticsReport(true);
+
+  const handleInventorySubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedInventoryItem || isActionProcessing) return;
+    setIsActionProcessing(true);
+    
+    try {
+      const isLend = inventoryModalMode === 'LEND';
+      const endpoint = isLend ? '/api/procurement/logistics/borrow' : '/api/procurement/logistics/return';
+      
+      const payload = isLend ? {
+        asdId: selectedInventoryItem.asd_id,
+        requestorName: inventoryForm.requestorName,
+        department: inventoryForm.department,
+        purpose: inventoryForm.purpose,
+        durationHours: inventoryForm.duration,
+        quantityNeeded: Number(inventoryForm.quantityNeeded)
+      } : {
+        asdId: selectedInventoryItem.asd_id,
+        requestorName: inventoryForm.requestorName,
+        returnedQuantity: Number(inventoryForm.quantityNeeded),
+        returnDate: inventoryForm.returnDate,
+        returnTime: inventoryForm.returnTime,
+        isDamaged: inventoryForm.isDamaged,
+        damageNotes: inventoryForm.damageNotes
+      };
+
+      const res = await fetchWithAuth(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      
+      if (!res.ok) throw new Error(result.error || 'Action failed.');
+      setShowInventoryModal(false);
+      fetchInventoryMetrics();
+      fetchProcurementData();
+      await resourceSuccess(isLend ? 'Item lent successfully.' : 'Item returned successfully.');
+    } catch (err) {
+      await resourceError(err);
+    } finally {
+      setIsActionProcessing(false);
+    }
+  };
+
+  return (
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] dark:bg-[#120b0c] text-neutral-800 dark:text-gray-200 font-sans overflow-hidden relative">
+      <PWAInstallBanner />
+
+      {/* Mobile Backdrop */}
+      {isSidebarOpen && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)} 
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden transition-opacity"
+        />
+      )}
+
+      {/* SIDEBAR */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+        <div>
+          <div className="flex items-center justify-between border-b border-neutral-700 pb-4 mb-6">
+            <div className="flex items-center gap-3">
+              <img 
+                src="/bsu-logo.png" 
+                alt="Batangas State University Logo" 
+                className="h-10 w-auto object-contain drop-shadow-sm" 
+              />
+              <div>
+                <h1 className="font-bold text-white text-sm">BSU - Trace</h1>
+                <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-black">GSO Office</span>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          
+          <nav className="space-y-1 text-sm">
+            <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+              <LayoutDashboard size={18} /> GSO Dashboard
+            </button>
+
+            <div>
+              <button onClick={() => setDocumentsExpanded(value => !value)} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['documents','submissions','office-submissions','department-submissions','shared-submissions','archived-submissions'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+                <span className="flex items-center gap-3"><Archive size={18}/> Documents</span><ChevronDown size={15} className={`transition-transform ${documentsExpanded ? 'rotate-180' : ''}`}/>
+              </button>
+              {documentsExpanded&&<div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                <button onClick={() => handleTabSelect('documents')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='documents'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Active Documents</button>
+                <button onClick={() => handleTabSelect('submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Personal Submissions</button>
+                {submissionAccess.offices.length > 0&&<button onClick={() => handleTabSelect('office-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='office-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Office Submissions</button>}
+                {submissionAccess.departments.length > 0&&<button onClick={() => handleTabSelect('department-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='department-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Department Submissions</button>}
+                <button onClick={() => handleTabSelect('shared-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='shared-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Shared With Me</button>
+                <button onClick={() => handleTabSelect('archived-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='archived-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Archived</button>
+              </div>}
+            </div>
+
+            <div>
+              <button onClick={() => setResourcesExpanded(value => !value)} aria-expanded={resourcesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['resources','procurement','manage-bookings'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+                <span className="flex items-center gap-3"><Archive size={18} /> School Resources</span>
+                <ChevronDown size={15} className={`transition-transform ${resourcesExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              {resourcesExpanded && (
+                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                  <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'resources' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><Boxes size={14}/>Resource Inventory</button>
+                  <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'procurement' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><ShoppingCart size={14}/>List of Requests</button>
+                  <button onClick={() => handleTabSelect('manage-bookings')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'manage-bookings' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><CalendarClock size={14}/>Manage Bookings</button>
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+              <BarChart3 size={18} /> Operational Analytics
+            </button>
+            <button onClick={() => handleTabSelect('history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'history' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+              <History size={18} /> History
+            </button>
+          </nav>
+        </div>
+
+        <div className="space-y-3">
+          {/* COMPANION SCANNER BUTTON */}
+          <button 
+            onClick={() => { setShowCompanionModal(true); setIsSidebarOpen(false); }}
+            className="w-full py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider cursor-pointer"
+          >
+            <Smartphone size={16} /> Mobile Scanner
+          </button>
+
+          <div className="border-t border-neutral-700 pt-3">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+        
+        {/* HEADER */}
+        <header className="h-16 border-b border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#1c1113] px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
+          <div className="flex min-w-0 items-center gap-3 text-left">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 -ml-2 rounded-lg text-neutral-600 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-[#2b1317] md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-black text-neutral-900 dark:text-white md:text-lg">
+                {tabTitles[activeTab] || 'GSO Admin Portal'}
+              </h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400 dark:text-gray-400">
+                {formatOfficeLabel(gsoOfficeName, 'General Services Office')}
+              </p>
+            </div>
+          </div>
+
+          <div className="ml-auto flex items-center gap-2 text-neutral-600 dark:text-gray-300 md:gap-4">
+            <ThemeToggle />
+            
+            <div className="relative" ref={notificationRef}>
+              <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] relative transition-colors">
+                <Bell size={20} />
+                {notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></span>}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white dark:bg-[#180e10] border border-neutral-200 dark:border-[#42292f] rounded-2xl shadow-xl z-50 overflow-hidden text-left">
+                  <div className="p-4 border-b border-neutral-100 dark:border-[#42292f] bg-[#FDFBF9] dark:bg-[#1c1113] font-bold text-xs uppercase text-neutral-900 dark:text-white tracking-wide">Notifications</div>
+                  <div className="max-h-64 overflow-y-auto divide-y divide-neutral-100 dark:divide-gray-800">
+                    {notifications.map(n => (
+                      <div key={n.id} className="p-4 text-xs border-b last:border-b-0 hover:bg-neutral-50/50 dark:hover:bg-[#2b1317]/50 transition-colors">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <p className="font-bold text-neutral-900 dark:text-white">{n.title}</p>
+                            <span className="text-[8px] bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-400 border border-red-100 dark:border-red-800 px-1 rounded uppercase font-black tracking-tight mt-0.5 inline-block">{n.roleSource || 'System'}</span>
+                          </div>
+                          <span className="text-[10px] text-neutral-400 whitespace-nowrap">{formatRelativeTime(n.time)}</span>
+                        </div>
+                        <p className="text-neutral-500 dark:text-gray-400 mt-1.5 font-medium leading-relaxed">{n.message}</p>
+                      </div>
+                    ))}
+                    {notifications.length === 0 && <div className="p-6 text-center text-neutral-400 font-bold text-xs"> No active system notifications.</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => { setPreviousTab(activeTab); setActiveTab('profile'); }} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] transition-colors border dark:border-gray-700 text-xs font-bold text-neutral-800 dark:text-gray-300">
+              <User size={16} />
+              <span className="hidden sm:inline">GSO Admin Portal</span>
+            </button>
+          </div>
+        </header>
+
+        {/* MAIN WORKSPACE TABS */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          {activeTab === 'dashboard' && (
+            <GSODashboardTab
+              userName={userName}
+              gsoOfficeName={gsoOfficeName}
+              pipelineDocs={pipelineDocs}
+              expectedIncomingCount={expectedIncomingCount}
+              pendingDocsList={pendingDocsList}
+              archivedDocsList={archivedDocsList}
+              completedDocsList={completedDocsList}
+              reservationsList={reservationsList}
+              equipmentInventory={equipmentInventory}
+              search={search} setSearch={setSearch}
+              filterStatus={filterStatus} setFilterStatus={setFilterStatus}
+              dashboardPage={dashboardPage} setDashboardPage={setDashboardPage}
+              filteredMasterDocs={filteredMasterDocs} currentDashDocs={currentDashDocs} totalDashPages={totalDashPages}
+              handleOpenDetails={handleOpenDetails} setActiveTab={setActiveTab}
+              handleNavigateToProcurement={handleNavigateToProcurement}
+              handleOpenIncomingModal={handleOpenIncomingModal}
+              processedBottleneckData={processedBottleneckData}
+              bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
+              demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
+              chartReadyDemandData={chartReadyDemandData}
+            />
+          )}
+
+          {activeTab === 'documents' && (
+            <OfficeDocumentsTab
+              resolveOfficeStatus={resolveOfficeStatus}
+              search={documentSearch}
+              setSearch={setDocumentSearch}
+              setPipelinePage={setDocumentPage}
+              filterStatus={documentFilter}
+              setFilterStatus={setDocumentFilter}
+              currentPipeDocs={currentOfficeDocuments}
+              filteredPipelineDocs={filteredOfficeDocuments}
+              pipelineDocs={pipelineDocs}
+              pipelinePage={documentPage}
+              totalPipePages={totalOfficeDocumentPages}
+              handleOpenPipelineDetails={handleOpenDetails}
+              setActiveTab={setActiveTab}
+              setIsIncomingModalOpen={handleOpenIncomingModal}
+            />
+          )}
+
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} processTypes={processTypes} onOpenChat={handleNavigateToChat} />}
+          {activeTab === 'shared-submissions' && <CollaborativeSubmissionsTab mode="shared" onOpenChat={handleNavigateToChat} />}
+          {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={handleNavigateToChat} />}
+          {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
+          {activeTab === 'department-submissions' && <SubmissionOverviewTab type="department" scopes={submissionAccess.departments} />}
+
+          {activeTab === 'resources' && (
+              <ResourceManagementTab key={resourceRevision}
+                onOpenRequest={(request) => {
+                  setActiveTab('procurement');
+                  setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
+                  handleViewChecklist(request);
+                }}
+                onSelectInventoryItem={(item) => {
+                  setSelectedInventoryItem(item);
+                  setInventoryModalMode('LEND');
+                  setShowInventoryModal(true);
+                }}
+              />
+            )}
+
+          {activeTab === 'procurement' && (
+            <GSOProcurementTab
+              vehicleData={vehicleData} multimediaData={multimediaData} gymData={gymData} logData={logData}
+              procSearch={procSearch} setProcSearch={setProcSearch}
+              procFilter={procFilter} setProcFilter={setProcFilter}
+              procPage={procPage} setProcPage={setProcPage}
+              setShowPrintModal={setShowPrintModal}
+              setShowChecklistMakerModal={setShowChecklistMakerModal}
+              handleViewChecklist={handleViewChecklist}
+              handleAssignVehicle={setAssignmentRequest}
+              targetSection={procurementTargetSection}
+              setTargetSection={setProcurementTargetSection}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <Suspense fallback={<div className="flex min-h-[420px] items-center justify-center text-sm font-bold text-neutral-500">Loading analytics workspace...</div>}>
+              <OperationalAnalyticsTab
+                auditStartDate={auditStartDate} setAuditStartDate={setAuditStartDate}
+                auditEndDate={auditEndDate} setAuditEndDate={setAuditEndDate}
+                handleGenerateAuditReport={handleGenerateAuditReport}
+                isAnalyticsLoading={isAnalyticsLoading}
+                bottleneckSearch={bottleneckSearch} setBottleneckSearch={setBottleneckSearch}
+                bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
+                processedBottleneckData={processedBottleneckData}
+                equipmentInventory={equipmentInventory}
+                demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
+                chartReadyDemandData={chartReadyDemandData}
+                systemHealth={systemHealth} routePerf={routePerf}
+                administrativeInsights={administrativeInsights}
+              />
+            </Suspense>
+          )}
+
+          {activeTab === 'manage-bookings' && (
+            <ManageBookingsTab key={`${manageRefreshKey}-${resourceRevision}`} onAssignVehicle={setAssignmentRequest} />
+          )}
+
+          {activeTab === 'history' && (
+            <SubmissionActivityHistoryTab
+              includeOfficeActivity
+              onOpenChat={handleNavigateToChat}
+            />
+          )}
+
+          {activeTab === 'profile' && (
+            <UserProfileTab
+              profileName={profileName} setProfileName={setProfileName}
+              profileEmail={profileEmail} setProfileEmail={setProfileEmail}
+              facultyId={facultyId} officeName={gsoOfficeName}
+              twoFaEnabled={twoFaEnabled} toggle2FA={() => {}}
+              handleUpdateProfile={() => {}} setShowPassModal={setShowPassModal}
+              handleBack={() => setActiveTab(previousTab)}
+            />
+          )}
+        </div>
+
+        {/* FLOATING QR SCANNER BUTTON */}
+        <button 
+          onClick={() => { setScanMode('time-in'); setShowScannerModal(true); }}
+          aria-label="Open QR scanner"
+          className="absolute bottom-24 right-4 md:bottom-28 md:right-7 w-12 h-12 md:w-14 md:h-14 bg-red-800 hover:bg-red-900 text-white rounded-2xl shadow-xl flex items-center justify-center transition-transform hover:scale-105 z-40"
+        >
+          <QrCode size={22} />
+        </button>
+      </div>
+
+      {/* RENDER MODALS */}
+      <AnalyticsReportModal
+        open={showAnalyticsReport}
+        onClose={() => setShowAnalyticsReport(false)}
+        scope="gso"
+        startDate={auditStartDate}
+        setStartDate={setAuditStartDate}
+        endDate={auditEndDate}
+        setEndDate={setAuditEndDate}
+        data={{ peakDemandData, equipmentInventory, systemHealth }}
+      />
+      <FloatingChat isOpen={isChatOpen} onOpenChange={setIsChatOpen}
+        hasUnread={hasUnreadChats} onUnreadCleared={() => setHasUnreadChats(false)}
+        userId={userId} officeId={gsoOfficeId}
+        targetDoc={chatTargetDoc} onClearTargetDoc={() => setChatTargetDoc(null)} label="Chat Inbox" />
+      
+      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={async () => { await fetchProcurementData(); setManageRefreshKey(value => value + 1); }} />}
+      
+      <QRScannerModal 
+        showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
+        scanMode={scanMode} setScanMode={setScanMode}
+        simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload} executeSimulatedScanner={async (event, code) => {
+          event?.preventDefault();
+          try {
+            const response=await fetchWithAuth(`/api/documents/scan-${scanMode === "time-in" ? "in" : "out"}`, {method:"POST", headers:{"Content-Type":"application/json"},body:JSON.stringify({qrCode:code || simulatedQrInput})});
+            const result=await response.json();
+            if (!response.ok) throw new Error(result.error);
+            setShowScannerModal(false);setSimulatedQrPayload("");fetchGSOMeta();
+            minimalSwal.fire({icon:"success",text:result.message});
+          } catch (error) {minimalSwal.fire({icon:"error",text:error.message});}
+        }}
+      />
+      
+      <AddAssetModal 
+        showAddAssetModal={showAddAssetModal} setShowAddAssetModal={setShowAddAssetModal}
+        handleAddAssetSubmit={() => {}} assetForm={assetForm} setAssetForm={setAssetForm}
+      />
+      <ChangePasswordModal 
+        isOpen={showPassModal} onClose={() => setShowPassModal(false)}
+        currentPassword={currentPassword} setCurrentPassword={setCurrentPassword}
+        newPassword={newPassword} setNewPassword={setNewPassword}
+        confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} handleUpdatePassword={() => {}}
+      />
+      {showDetailsModal && selectedDoc && <DocumentTrackingModal selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
+        processorOfficeId={gsoOfficeId} officesList={officesList} onClose={() => setShowDetailsModal(false)} onRefresh={fetchGSOMeta} onOpenChat={handleNavigateToChat} />}
+      
+      <MasterChecklistModal
+        showChecklistMakerModal={showChecklistMakerModal} setShowChecklistMakerModal={setShowChecklistMakerModal}
+        activeChecklistTab={activeChecklistTab} setActiveChecklistTab={setActiveChecklistTab}
+        masterChecklistItems={masterChecklistItems} 
+        handleDeleteMasterChecklistItem={handleDeleteMasterChecklistItem} 
+        handleAddMasterChecklistItem={handleAddMasterChecklistItem}
+        newChecklistName={newChecklistName} setNewChecklistName={setNewChecklistName}
+      />
+      <EditAssetModal
+        showEditAssetModal={showEditAssetModal} setShowEditAssetModal={setShowEditAssetModal}
+        selectedEditAsset={selectedEditAsset} setSelectedEditAsset={setSelectedEditAsset} handleUpdateAsset={() => {}} assetSchedule={assetSchedule}
+      />
+      <ExportLogsModal
+        showPrintModal={showPrintModal} setShowPrintModal={setShowPrintModal}
+        printTargetTab={printTargetTab} setPrintTargetTab={setPrintTargetTab} 
+        printStartDate={printStartDate} setPrintStartDate={setPrintStartDate} 
+        printEndDate={printEndDate} setPrintEndDate={setPrintEndDate} 
+        handleGeneratePDF={handleGeneratePDF}
+      />
+      <FacilityBlackoutModal
+        showBlackoutModal={showBlackoutModal} setShowBlackoutModal={setShowBlackoutModal}
+        handleApplyBlackout={() => {}} blackoutForm={blackoutForm} setBlackoutForm={setBlackoutForm} assetsList={assetsList} todayString={todayString}
+      />
+      <InventoryActionModal
+        showInventoryModal={showInventoryModal} setShowInventoryModal={setShowInventoryModal}
+        selectedInventoryItem={selectedInventoryItem} inventoryModalMode={inventoryModalMode} setInventoryModalMode={setInventoryModalMode} handleInventorySubmit={() => {}} inventoryForm={inventoryForm} setInventoryForm={setInventoryForm} todayString={todayString} isActionProcessing={isActionProcessing}
+      />
+      <BookingRequirementsModal
+        showActiveChecklistModal={showActiveChecklistModal} setShowActiveChecklistModal={setShowActiveChecklistModal}
+        activeChecklistBooking={activeChecklistBooking} activeChecklistItems={activeChecklistItems} 
+        handleToggleChecklistItem={handleToggleChecklistItem}
+        busy={checklistBusy}
+      />
+      <IncomingDocumentsModal
+        isOpen={showIncomingModal}
+        onClose={() => setShowIncomingModal(false)}
+        documents={incomingDocsList}
+        isLoading={isIncomingLoading}
+      />
+      {showCompanionModal && (
+        <CompanionScannerModal 
+          onClose={() => setShowCompanionModal(false)}
+          onScanSuccess={() => {}}
+        />
+      )}
+    </div>
+  );
+}
