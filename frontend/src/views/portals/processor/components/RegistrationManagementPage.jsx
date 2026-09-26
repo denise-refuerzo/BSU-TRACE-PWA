@@ -155,10 +155,7 @@ export default function RegistrationManagementPage({ userId, access }) {
   return (
     <div className="mx-auto max-w-8xl space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-black text-neutral-900">Registration Management</h2>
-          <p className="mt-1 text-sm text-neutral-500">Request controlled registration batches and monitor the accounts created under you.</p>
-        </div>
+        <p className="text-sm text-neutral-500">Request controlled registration batches and monitor the accounts created under you.</p>
         <button type="button" onClick={() => setRequestOpen(true)} className="inline-flex w-fit items-center gap-2 rounded-lg bg-red-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-900">
           <Plus size={17} /> Request a link
         </button>

@@ -87,7 +87,7 @@ export default function RegistrationManagementTab() {
 
   return <div className="space-y-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div><h2 className="text-2xl font-black text-gray-900">Registration Management</h2><p className="mt-1 text-sm text-gray-500">Approve secure registration batches and monitor every account created from them.</p></div>
+      <p className="text-sm text-gray-500">Approve secure registration batches and monitor every account created from them.</p>
       <div className="flex gap-2">
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"><option value="">All statuses</option>{['pending','active','exhausted','expired','revoked','rejected'].map(status => <option key={status} value={status}>{status[0].toUpperCase()+status.slice(1)}</option>)}</select>
         <button type="button" onClick={load} className="rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50" aria-label="Refresh"><RefreshCw size={18}/></button>

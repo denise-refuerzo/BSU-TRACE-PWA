@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArchiveRestore, Eye, FileText, RefreshCw, Search, Users } from 'lucide-react';
+import { Eye, FileText, RefreshCw, Search } from 'lucide-react';
 import { fetchWithAuth } from '../../../api';
 import { formatPhilippineDateTime } from '../../../utils/philippineTime';
 import DocumentTrackingModal from '../modals/DocumentTrackingModal';
@@ -65,7 +65,7 @@ export default function CollaborativeSubmissionsTab({ mode = 'shared', onOpenCha
   const archived = mode === 'archived';
   return <div className="mx-auto max-w-8xl space-y-5 text-left">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div><h2 className="flex items-center gap-2 text-xl font-black text-neutral-900">{archived ? <ArchiveRestore size={21}/> : <Users size={21}/>} {archived ? 'Archived Submissions' : 'Shared With Me'}</h2><p className="mt-1 text-xs font-medium text-neutral-500">{archived ? 'Your personal archive. Other owners and collaborators are unaffected.' : 'Viewer access: view, track, and chat without changing the submitted record.'}</p></div>
+      <p className="text-xs font-medium text-neutral-500">{archived ? 'Your personal archive. Other owners and collaborators are unaffected.' : 'Viewer access: view, track, and chat without changing the submitted record.'}</p>
       <div className="relative"><Search className="absolute left-3 top-2.5 text-neutral-400" size={15}/><input value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder="Search submissions" className="w-full rounded-lg border border-neutral-300 py-2 pl-9 pr-3 text-xs outline-none focus:border-red-800 sm:w-64"/></div>
     </div>
     {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-800">{error}</p>}

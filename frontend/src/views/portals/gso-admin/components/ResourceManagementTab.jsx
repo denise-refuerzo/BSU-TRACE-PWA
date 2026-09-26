@@ -78,10 +78,7 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
         <div className="p-3 bg-red-50 border border-red-100 text-red-800 rounded-xl">
           <Building2 size={24} />
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Resource Inventory</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage campus facilities, vehicles, drivers, and inventory availability.</p>
-        </div>
+        <p className="text-sm text-gray-500">Manage campus facilities, vehicles, drivers, and inventory availability.</p>
       </header>
 
       {error && (

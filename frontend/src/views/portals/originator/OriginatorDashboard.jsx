@@ -15,6 +15,7 @@ import UserProfileTab from '../../shared/components/UserProfileTab';
 import FloatingChat from '../../shared/components/FloatingChat';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import { formatOfficeLabel } from '../../../utils/officeLabel';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
 import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
@@ -188,7 +189,7 @@ export default function OriginatorDashboard() {
                 {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'submission-history' ? 'History' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
               </h2>
               <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
-                Assigned: {profile.departmentName || 'Campus Office'}
+                {formatOfficeLabel(profile.departmentName)}
               </p>
             </div>
           </div>
