@@ -126,10 +126,7 @@ export default function GSOProcurementTab({
       
       {/* HEADER */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">List of Requests</h2>
-          <p className="text-sm text-gray-500 mt-1">Review, organize, and assign driver and room requests.</p>
-        </div>
+        <p className="text-sm text-gray-500">Review, organize, and assign driver and room requests.</p>
         <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={() => setShowPrintModal(true)} 

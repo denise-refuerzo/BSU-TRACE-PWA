@@ -22,6 +22,7 @@ import UserProfileTab from "../../shared/components/UserProfileTab";
 import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
 import FloatingChat from '../../shared/components/FloatingChat';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import { formatOfficeLabel } from '../../../utils/officeLabel';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
@@ -434,9 +435,9 @@ export default function ProcessorDashboard() {
             </button>
             <div>
               <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                 {activeTab === 'profile' ? 'Profile Management Hub' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'History' : 'Office Dashboard'}
+                 {activeTab === 'profile' ? 'Profile Management' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'History' : 'Office Dashboard'}
               </h2>
-              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">Assigned: {processorData.processorOfficeName}</p>
+              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">{formatOfficeLabel(processorData.processorOfficeName)}</p>
             </div>
           </div>
           
@@ -487,7 +488,7 @@ export default function ProcessorDashboard() {
           {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
           {activeTab === 'registration-management' && <RegistrationManagementPage userId={userId} access={submissionAccess} />}
           {activeTab === 'history' && (
-            <SubmissionActivityHistoryTab title="History" includeOfficeActivity onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />
+            <SubmissionActivityHistoryTab includeOfficeActivity onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />
           )}
           {activeTab === 'profile' && (
             <UserProfileTab 

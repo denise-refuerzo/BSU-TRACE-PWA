@@ -48,11 +48,7 @@ export default function OfficeDocumentsTab({
   return (
     <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
-      {/* HEADER SECTION */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900">Documents</h2>
-        <p className="text-sm text-gray-500 mt-1">Review and process active administrative requests across campus stations.</p>
-      </div>
+      <p className="text-sm text-gray-500">Review and process active administrative requests across campus stations.</p>
 
       {/* ACTIVE REQUESTS MATRIX TABLE */}
       <div 

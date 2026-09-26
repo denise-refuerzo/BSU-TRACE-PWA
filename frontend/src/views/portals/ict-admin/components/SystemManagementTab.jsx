@@ -120,9 +120,7 @@ export default function SystemManagementTab({ matrixProps, section = 'offices' }
   return (
     <div className="space-y-6 text-left animate-in fade-in duration-200">
       <div className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm md:p-6">
-        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#8c1023]">ICT administration</p>
-        <h2 className="mt-1 text-2xl font-black tracking-tight text-neutral-900">System management</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-neutral-600">Manage office locations, document types, and document workflows in one consistent workspace. Open a record to see its details; use the actions to make changes.</p>
+        <p className="max-w-3xl text-sm leading-relaxed text-neutral-600">Manage office locations, document types, and document workflows in one consistent workspace. Open a record to see its details; use the actions to make changes.</p>
       </div>
 
       {matrixProps.catalogError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{matrixProps.catalogError} <button type="button" onClick={matrixProps.refreshCatalogs} className="font-bold underline">Try again</button></p>}

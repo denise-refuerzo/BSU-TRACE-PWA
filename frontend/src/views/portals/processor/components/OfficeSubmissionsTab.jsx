@@ -166,10 +166,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
       
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">Personal Submissions</h2>
-          <p className="text-xs text-gray-500 font-medium mt-1">Manage and track only the documents you submitted.</p>
-        </div>
+        <p className="text-xs text-gray-500 font-medium">Manage and track only the documents you submitted.</p>
         <button 
           onClick={() => { setEstimateBase(Date.now()); setLoading(true); setShowModal(true); workflows(); }} 
           className="flex items-center justify-center gap-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200 w-full sm:w-auto"

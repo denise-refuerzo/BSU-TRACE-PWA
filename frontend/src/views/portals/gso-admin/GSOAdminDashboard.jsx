@@ -27,6 +27,7 @@ const OperationalAnalyticsTab = lazy(() => import('./components/OperationalAnaly
 import UserProfileTab from '../../shared/components/UserProfileTab';
 import FloatingChat from '../../shared/components/FloatingChat';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import { formatOfficeLabel } from '../../../utils/officeLabel';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
 import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
 import AnalyticsReportModal from '../../shared/components/AnalyticsReportModal';
@@ -686,7 +687,7 @@ export default function GSOAdminDashboard() {
                 {tabTitles[activeTab] || 'GSO Admin Portal'}
               </h2>
               <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
-                Assigned: {gsoOfficeName || 'General Services Office'}
+                {formatOfficeLabel(gsoOfficeName, 'General Services Office')}
               </p>
             </div>
           </div>
@@ -831,7 +832,6 @@ export default function GSOAdminDashboard() {
 
           {activeTab === 'history' && (
             <SubmissionActivityHistoryTab
-              title="History"
               includeOfficeActivity
               onOpenChat={handleNavigateToChat}
             />

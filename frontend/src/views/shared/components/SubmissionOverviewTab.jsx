@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, CalendarDays, FileText, Landmark, MapPin, Search, X } from 'lucide-react';
+import { CalendarDays, FileText, MapPin, Search, X } from 'lucide-react';
 import { API_BASE_URL, fetchWithAuth } from '../../../api';
 import { createRealtimeClient } from '../../../utils/realtimeClient';
 
@@ -49,13 +49,9 @@ export default function SubmissionOverviewTab({ type, scopes }) {
       .some(value => String(value || '').toLowerCase().includes(needle)));
   }, [documents, query]);
 
-  const title = `${isOffice ? 'Office' : 'Department'} Submissions`;
-  const Icon = isOffice ? Building2 : Landmark;
-
   return <div className="mx-auto max-w-8xl space-y-5 text-left animate-in fade-in duration-200">
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-      <h2 className="flex items-center gap-2 text-2xl font-black text-gray-900"><Icon className="text-red-700" size={23} /> {title}</h2>
-      <p className="mt-1 text-sm text-gray-500">View documents submitted by staff in the {isOffice ? 'offices' : 'departments'} assigned to you.</p>
+      <p className="text-sm text-gray-500">View documents submitted by staff in the {isOffice ? 'offices' : 'departments'} assigned to you.</p>
     </div>
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-gray-100 p-4 sm:flex-row">
