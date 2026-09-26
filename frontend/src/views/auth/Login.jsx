@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { API_BASE_URL } from '../../api';
-import ThemeToggle from '../shared/components/ThemeToggle'; // Adjust path if your ThemeToggle file is located elsewhere
+import ThemeToggle from '../shared/components/ThemeToggle'; // Adjust path to your ThemeToggle component
+
+const API_BASE_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export default function Login() {
-  // --- NEW: WIPE STALE SESSION DATA ON LOAD ---
-  useEffect(() => {
-    localStorage.clear();
-  }, []);
-
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,7 +20,7 @@ export default function Login() {
   const [tempUserId, setTempUserId] = useState(null);
   const [otpExpiresAt, setOtpExpiresAt] = useState(null);
   const [resendAvailableAt, setResendAvailableAt] = useState(null);
-  const [otpClock, setOtpClock] = useState(() => Date.now());
+  const [otpClock, setOtpClock] = useState(Date.now());
   useEffect(() => {
     if (!require2FA) return;
     const timer = setInterval(() => setOtpClock(Date.now()), 1000);
@@ -67,6 +63,7 @@ export default function Login() {
           body: JSON.stringify({ username, password })  
         });
         
+        // DEBUG CATCHER: Check if the response is actually JSON before parsing
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
           const htmlText = await response.text();
@@ -153,13 +150,11 @@ export default function Login() {
     localStorage.setItem('userId', cleanUserId);  
 
     const role = data.role || data.a_id;
-    
-    // --- NEW: EXPLICITLY SAVE ROLE TO LOCALSTORAGE SO GUARDS WORK ---
-    localStorage.setItem('role', role);
-
     if (role === 5) {
       navigate('/admin/dashboard');  
-    } else if (role === 2 || role === 3) {
+    } else if (role === 2) {
+      navigate('/office/dashboard');   
+    } else if (role === 3) {
       navigate('/office/dashboard');   
     } else if (role === 4) {
       navigate('/gso-dashboard'); 
@@ -360,8 +355,8 @@ export default function Login() {
                 <div className="pl-8 text-justify">
                   <p className="mb-2">To continuously improve campus operations, BSU-Trace applies data-driven intelligence to historical administrative logs:</p>
                   <ul className="list-disc pl-5 space-y-2 text-gray-600 dark:text-gray-300 marker:text-[#D32F2F]">
-                    <li><strong>Processing Delay Analysis:</strong> The system compares average document processing time across offices. This identifies operational delays without automated intervention, allowing governance to address constraints proactively.</li>
-                    <li><strong>Demand Planning:</strong> Historical van and facility bookings are evaluated for a recurring weekly pattern. A short-term projection is shown only when the pattern meets the reliability threshold, and it remains a supporting planning indicator rather than a guaranteed prediction.</li>
+                    <li><strong>Bottleneck Analysis:</strong> The system conducts an analytical evaluation process on document "dwell times" at various offices. This identifies constraints and operational friction without automated intervention, allowing governance to address delays proactively.</li>
+                    <li><strong>Predictive Forecasting:</strong> Historical scheduling data is used to forecast peak demand for van scheduling and facility usage, ensuring optimal distribution of institutional assets.</li>
                   </ul>
                 </div>
               </section>
