@@ -22,14 +22,15 @@ import OfficeEditModal from './modals/OfficeEditModal';
 
 // -- Shared Component --
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import ThemeToggle from '../../shared/components/ThemeToggle'; // Added ThemeToggle import
 
 const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
     cancelButton: 'px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-neutral-600 border border-neutral-200 bg-white hover:bg-neutral-50 mx-2',
-    popup: 'rounded-3xl border border-neutral-100 shadow-2xl',
-    title: 'text-lg font-black text-neutral-900',
-    htmlContainer: 'text-sm font-medium text-neutral-500'
+    popup: 'rounded-3xl border border-neutral-100 dark:border-[#42292f] shadow-2xl dark:bg-[#180e10]',
+    title: 'text-lg font-black text-neutral-900 dark:text-white',
+    htmlContainer: 'text-sm font-medium text-neutral-500 dark:text-gray-400'
   },
   buttonsStyling: false
 });
@@ -125,7 +126,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="trace-portal flex h-screen w-screen bg-[#FDFBF9] overflow-hidden text-neutral-800 font-sans relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FDFBF9] dark:bg-[#120b0c] overflow-hidden text-neutral-800 dark:text-gray-200 font-sans relative">
       
       <PWAInstallBanner />
 
@@ -154,7 +155,7 @@ export default function AdminDashboard() {
             </div>
             <button 
               onClick={() => setIsSidebarOpen(false)}
-              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden"
+              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden cursor-pointer"
             >
               <X size={20} />
             </button>
@@ -164,7 +165,7 @@ export default function AdminDashboard() {
             <button 
               type="button" 
               onClick={() => handleTabSelect('dashboard')} 
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'dashboard' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left cursor-pointer ${activeSidebar === 'dashboard' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
             >
               <LayoutDashboard size={18} /> Dashboard
             </button>
@@ -174,7 +175,7 @@ export default function AdminDashboard() {
                 onClick={handleAccountsManagementSelect}
                 aria-expanded={isAccountsManagementOpen}
                 aria-controls="accounts-management-navigation"
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs whitespace-nowrap transition-colors text-left ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs whitespace-nowrap transition-colors text-left cursor-pointer ${activeSidebar === 'accounts' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
               >
                 <Users size={16} className="shrink-0" /> <span className="min-w-0 flex-1">Account Management</span><ChevronDown size={14} className={`shrink-0 transition-transform ${isAccountsManagementOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -185,7 +186,7 @@ export default function AdminDashboard() {
                   { id: 'registration', label: 'Registration Management', icon: Link2 }
                 ].map(item => {
                   const Icon = item.icon;
-                  return <button key={item.id} type="button" onClick={() => handleAccountSectionSelect(item.id)} className={`w-full flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition-colors ${activeSidebar === 'accounts' && accountProps.activeTab === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={13} className="shrink-0" /> {item.label}</button>;
+                  return <button key={item.id} type="button" onClick={() => handleAccountSectionSelect(item.id)} className={`w-full flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition-colors cursor-pointer ${activeSidebar === 'accounts' && accountProps.activeTab === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={13} className="shrink-0" /> {item.label}</button>;
                 })}
               </div>}
             </div>
@@ -195,7 +196,7 @@ export default function AdminDashboard() {
                 onClick={handleSystemManagementSelect}
                 aria-expanded={isSystemManagementOpen}
                 aria-controls="system-management-navigation"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'matrix' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left cursor-pointer ${activeSidebar === 'matrix' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
               >
                 <Network size={18} /> <span className="flex-1">System Management</span><ChevronDown size={16} className={`transition-transform ${isSystemManagementOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -208,14 +209,14 @@ export default function AdminDashboard() {
                   { id: 'requests', label: 'Additional Routing', icon: GitBranch }
                 ].map(item => {
                   const Icon = item.icon;
-                  return <button key={item.id} type="button" onClick={() => handleSystemManagementSectionSelect(item.id)} className={`w-full flex items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-semibold transition-colors ${activeSidebar === 'matrix' && systemManagementSection === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={14} /> {item.label}</button>;
+                  return <button key={item.id} type="button" onClick={() => handleSystemManagementSectionSelect(item.id)} className={`w-full flex items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-semibold transition-colors cursor-pointer ${activeSidebar === 'matrix' && systemManagementSection === item.id ? 'bg-red-900/40 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><Icon size={14} /> {item.label}</button>;
                 })}
               </div>}
             </div>
             <button 
               type="button" 
               onClick={() => handleTabSelect('analytics')} 
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${activeSidebar === 'analytics' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left cursor-pointer ${activeSidebar === 'analytics' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}
             >
               <BarChart3 size={18} /> Operational Analytics 
             </button>
@@ -223,7 +224,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="border-t border-neutral-700 pt-4">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
             <LogOut size={16} /> Sign Out
           </button>
         </div>
@@ -231,28 +232,31 @@ export default function AdminDashboard() {
 
       {/* Main Panel Content Area */}
       <div className="flex-1 flex flex-col overflow-y-auto relative min-w-0">
-        <header className="h-16 border-b border-neutral-200/80 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs shrink-0">
+        <header className="h-16 border-b border-neutral-200/80 dark:border-[#42292f] bg-white dark:bg-[#1c1113] px-4 md:px-8 flex items-center justify-between shadow-xs shrink-0">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+              className="p-2 -ml-2 rounded-lg text-neutral-600 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-[#2b1317] md:hidden cursor-pointer"
               aria-label="Open menu"
             >
               <Menu size={22} />
             </button>
             <div className="min-w-0 text-left">
-              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+              <h2 className="truncate text-base font-black text-neutral-900 dark:text-white md:text-lg">
                 {getHeaderTitle()}
               </h2>
-              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400 dark:text-gray-400">
                 ICT Administration
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 border-l pl-3 md:pl-4 border-neutral-200 text-xs">
-            <span className="font-bold text-neutral-900 truncate max-w-[120px] md:max-w-none">{adminName}</span>
-            <span className="bg-neutral-100 px-2 py-0.5 rounded text-[10px] uppercase text-neutral-500 font-bold">ICT Root</span>
+          <div className="flex items-center gap-3 md:gap-4">
+            <ThemeToggle />
+            <div className="flex items-center gap-2 border-l pl-3 md:pl-4 border-neutral-200 dark:border-gray-700 text-xs text-neutral-600 dark:text-gray-300">
+              <span className="font-bold text-neutral-900 dark:text-white truncate max-w-[120px] md:max-w-none">{adminName}</span>
+              <span className="bg-neutral-100 dark:bg-gray-800 px-2 py-0.5 rounded text-[10px] uppercase text-neutral-500 dark:text-gray-400 font-bold">ICT Root</span>
+            </div>
           </div>
         </header>
 

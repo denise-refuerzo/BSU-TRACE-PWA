@@ -71,9 +71,9 @@ export default function ChangePasswordModal({
 
   return (
     <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-in fade-in duration-150">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border overflow-hidden flex flex-col text-left animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-[#180e10] w-full max-w-md rounded-2xl shadow-2xl border border-neutral-200 dark:border-[#42292f] overflow-hidden flex flex-col text-left animate-in zoom-in-95 duration-200">
         
-        <div className="p-4 bg-neutral-900 text-white font-bold text-sm flex items-center justify-between">
+        <div className="p-4 bg-neutral-900 dark:bg-[#1c1113] text-white font-bold text-sm flex items-center justify-between border-b dark:border-[#42292f]">
           <div className="flex items-center gap-2">
             <KeyRound size={16} />
             <span>Update Account Password</span>
@@ -87,42 +87,42 @@ export default function ChangePasswordModal({
           
           {/* Current Password Field */}
           <div>
-            <label className="block text-[10px] font-black text-neutral-400 uppercase mb-1 tracking-wide">Current Password</label>
+            <label className="block text-[10px] font-black text-neutral-400 dark:text-gray-400 uppercase mb-1 tracking-wide">Current Password</label>
             <div className="relative flex items-center">
               <input 
                 type={showCurrent ? "text" : "password"} 
                 required 
                 value={currentPassword} 
                 onChange={e => setCurrentPassword(e.target.value)} 
-                className="w-full px-4 pr-10 py-2 text-xs border border-neutral-300 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-neutral-50 font-bold text-neutral-800" 
+                className="w-full px-4 pr-10 py-2 text-xs border border-neutral-300 dark:border-gray-700 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-neutral-50 dark:bg-[#1c1113] font-bold text-neutral-800 dark:text-white" 
               />
               <button 
                 type="button" 
                 onClick={() => setShowCurrent(!showCurrent)} 
-                className="absolute right-3 text-neutral-400 hover:text-neutral-600 focus:outline-none cursor-pointer"
+                className="absolute right-3 text-neutral-400 dark:text-gray-400 hover:text-neutral-600 dark:hover:text-gray-200 focus:outline-none cursor-pointer"
               >
                 {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
           
-          <div className="border-t border-neutral-100 my-4"></div>
+          <div className="border-t border-neutral-100 dark:border-[#42292f] my-4"></div>
 
           {/* New Password Field */}
           <div>
-            <label className="block text-[10px] font-black text-neutral-400 uppercase mb-1 tracking-wide">New Password</label>
+            <label className="block text-[10px] font-black text-neutral-400 dark:text-gray-400 uppercase mb-1 tracking-wide">New Password</label>
             <div className="relative flex items-center">
               <input 
                 type={showNew ? "text" : "password"} 
                 required 
                 value={newPassword} 
                 onChange={e => setNewPassword(e.target.value)} 
-                className="w-full px-4 pr-10 py-2 text-xs border border-neutral-300 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-neutral-50 font-bold text-neutral-800" 
+                className="w-full px-4 pr-10 py-2 text-xs border border-neutral-300 dark:border-gray-700 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-neutral-50 dark:bg-[#1c1113] font-bold text-neutral-800 dark:text-white" 
               />
               <button 
                 type="button" 
                 onClick={() => setShowNew(!showNew)} 
-                className="absolute right-3 text-neutral-400 hover:text-neutral-600 focus:outline-none cursor-pointer"
+                className="absolute right-3 text-neutral-400 dark:text-gray-400 hover:text-neutral-600 dark:hover:text-gray-200 focus:outline-none cursor-pointer"
               >
                 {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -131,19 +131,19 @@ export default function ChangePasswordModal({
 
           {/* Confirm New Password Field */}
           <div>
-            <label className="block text-[10px] font-black text-neutral-400 uppercase mb-1 tracking-wide">Confirm New Password</label>
+            <label className="block text-[10px] font-black text-neutral-400 dark:text-gray-400 uppercase mb-1 tracking-wide">Confirm New Password</label>
             <div className="relative flex items-center">
               <input 
                 type={showConfirm ? "text" : "password"} 
                 required 
                 value={confirmPassword} 
                 onChange={e => setConfirmPassword(e.target.value)} 
-                className="w-full px-4 pr-10 py-2 text-xs border border-neutral-300 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-neutral-50 font-bold text-neutral-800" 
+                className="w-full px-4 pr-10 py-2 text-xs border border-neutral-300 dark:border-gray-700 rounded-xl outline-none focus:ring-1 focus:ring-red-800 bg-neutral-50 dark:bg-[#1c1113] font-bold text-neutral-800 dark:text-white" 
               />
               <button 
                 type="button" 
                 onClick={() => setShowConfirm(!showConfirm)} 
-                className="absolute right-3 text-neutral-400 hover:text-neutral-600 focus:outline-none cursor-pointer"
+                className="absolute right-3 text-neutral-400 dark:text-gray-400 hover:text-neutral-600 dark:hover:text-gray-200 focus:outline-none cursor-pointer"
               >
                 {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -154,13 +154,13 @@ export default function ChangePasswordModal({
             <button 
               type="button" 
               onClick={handleClose} 
-              className="px-5 py-2 border border-neutral-300 bg-white hover:bg-neutral-100 rounded-xl font-bold text-xs text-neutral-600 transition-all cursor-pointer"
+              className="px-5 py-2 border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#180e10] hover:bg-neutral-100 dark:hover:bg-gray-800 rounded-xl font-bold text-xs text-neutral-600 dark:text-gray-300 transition-all cursor-pointer"
             >
               Cancel
             </button>
             <button 
               type="submit" 
-              className="px-6 py-2 bg-red-800 hover:bg-red-900 text-white font-bold text-xs rounded-xl shadow-md uppercase tracking-wider transition-all cursor-pointer"
+              className="px-6 py-2 bg-red-800 dark:bg-red-700 hover:bg-red-900 dark:hover:bg-red-800 text-white font-bold text-xs rounded-xl shadow-md uppercase tracking-wider transition-all cursor-pointer"
             >
               Confirm Update
             </button>
