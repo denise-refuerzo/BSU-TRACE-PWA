@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, Car, Filter, Inbox, Search, Settings2, X } from 'lucide-react';
+import { AlertTriangle, Car, Filter, Inbox, Search, Settings2, X } from 'lucide-react';
 import { resourceApi, resourceError, resourceSuccess } from '../resourceActions';
 
 const badgeClasses = {
@@ -75,7 +75,7 @@ export default function ManageBookingsTab({ onAssignVehicle }) {
   useEffect(()=>{let active=true;resourceApi('manage-bookings').then(data=>{if(active){setBookings(data);setError('');}}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[]);
   const rows=useMemo(()=>bookings.filter(b=>(filter==='All'||b.status===filter)&&`${b.requestor} ${b.purpose} ${b.asset_name||''}`.toLowerCase().includes(search.toLowerCase())),[bookings,filter,search]);
   return <div className="mx-auto max-w-8xl space-y-6 text-left">
-    <header className="flex flex-col justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-xs md:flex-row md:items-center"><div><h2 className="flex items-center gap-2 text-2xl font-bold text-gray-900"><CalendarClock className="text-red-800"/>Manage Bookings</h2><p className="mt-1 text-sm text-gray-500">Operate approved facility and vehicle bookings until completion.</p></div><div className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-800">{bookings.length} active booking{bookings.length===1?'':'s'}</div></header>
+    <header className="flex flex-col justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-xs md:flex-row md:items-center"><p className="text-sm text-gray-500">Operate approved facility and vehicle bookings until completion.</p><div className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-800">{bookings.length} active booking{bookings.length===1?'':'s'}</div></header>
     <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
       <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/60 p-4 sm:flex-row sm:justify-end"><div className="relative"><Search size={14} className="absolute left-3 top-3 text-gray-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search booking…" className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-xs sm:w-64"/></div><div className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-3"><Filter size={14} className="text-gray-400"/><select value={filter} onChange={e=>setFilter(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold outline-none"><option>All</option><option>Approved</option><option>Ongoing</option><option>Delayed</option><option>Rescheduled</option><option>Resource Reassigned</option></select></div></div>
       {error&&<div className="m-4 rounded-xl bg-red-50 p-4 text-xs font-semibold text-red-800">{error} <button onClick={refresh} className="underline">Retry</button></div>}

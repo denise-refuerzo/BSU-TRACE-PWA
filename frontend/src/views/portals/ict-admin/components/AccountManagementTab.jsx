@@ -10,10 +10,7 @@ export default function AccountManagementTab({
   return (
     <div className="w-full">
       <div className="w-full">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900">Accounts Management</h2>
-          <p className="text-sm text-gray-500 mt-1 mb-6">Manage university staff access and system permissions.</p>
-        </div>
+        <p className="mb-6 text-sm text-gray-500">Manage university staff access and system permissions.</p>
 
         {/* PANEL CONTEXT 1: ACCOUNTS REGISTRY TABLE */}
         {activeTab === 'registry' && (

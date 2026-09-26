@@ -60,7 +60,7 @@ export default function WorkflowEditorModal({
                         </select>
                       </label>
                       <label className="block text-xs font-bold text-neutral-700" htmlFor={`workflow-step-${index}`}>
-                        {isGroup ? 'Office category' : 'Office location'} {index < 2 ? <span className="text-rose-700">(required)</span> : null}
+                        {isGroup ? 'Office category' : 'Office'} {index < 2 ? <span className="text-rose-700">(required)</span> : null}
                         <select id={`workflow-step-${index}`} required={index < 2} value={isGroup ? (stop.groupId || '') : (stop || '')} onChange={event => handleStopSelectorChange(index, event.target.value)} className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-normal">
                           <option value="">Select {isGroup ? 'a category' : 'an office'}</option>
                           {isGroup

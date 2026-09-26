@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Lock, Calendar, MapPin, Box, Search, Eye, ClipboardList, Truck, MonitorPlay, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Lock, Calendar, MapPin, Box, Search, Eye, Truck, MonitorPlay, Users } from 'lucide-react';
 import { API_BASE_URL, fetchWithAuth } from "../../../api";
 import { createRealtimeClient } from '../../../utils/realtimeClient';
 import Swal from 'sweetalert2';
@@ -256,8 +256,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
     return (
       <div className="space-y-5 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
         <div className="trace-section-banner rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-          <h3 className="flex items-center gap-2 text-xl font-black tracking-tight text-gray-900 sm:text-2xl"><ClipboardList className="text-[#D32F2F]" size={22} /> Submitted Requests</h3>
-          <p className="mt-1 text-sm text-gray-500">Track the latest review status and assignment details for facility and vehicle requests from this account.</p>
+          <p className="text-sm text-gray-500">Track the latest review status and assignment details for facility and vehicle requests from this account.</p>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -320,8 +319,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
       {/* The facility choice now lives in the responsive sidebar. */}
       <div className="trace-section-banner bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-5">
         <div>
-          <h3 className="text-2xl font-bold tracking-tight text-gray-900">Request {activeFacility === 'Van' ? 'a Vehicle' : activeFacility === 'Multimedia Room' ? 'a Room' : 'the Gymnasium'}</h3>
-          <p className="text-sm text-gray-500 mt-1">Check open times, blocked periods, and existing requests before submitting to GSO.</p>
+          <p className="text-sm text-gray-500">Check open times, blocked periods, and existing requests before submitting to GSO.</p>
         </div>
         {!facility && (
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-gray-100/80 p-1.5 text-xs font-bold shadow-inner">
