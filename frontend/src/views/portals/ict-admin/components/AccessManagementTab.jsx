@@ -120,103 +120,134 @@ export default function AccessManagementTab({ accounts, offices, departments, fi
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {!embedded && <div>
-        <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-gray-900"><ShieldCheck className="text-red-700" /> Access & Responsibilities</h2>
-        <p className="mt-1 text-sm text-gray-500">Choose who can view submissions or handle requests for an office or department.</p>
-      </div>}
-
-      {!fixedUserId && <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-[minmax(220px,0.4fr)_minmax(320px,1fr)]">
-          <label className="block text-xs font-bold uppercase tracking-wide text-gray-700">Office filter
-            <select value={officeFilter} onChange={event => changeOfficeFilter(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal normal-case outline-none focus:border-red-700">
-              <option value="">All offices</option>
-              {offices.map(office => <option key={office.id} value={String(office.id)}>{office.name}</option>)}
-              <option value="unassigned">No assigned office</option>
-            </select>
-          </label>
-          <div className="relative">
-            <label htmlFor="person-search" className="block text-xs font-bold uppercase tracking-wide text-gray-700">Find a person</label>
-            <input
-              id="person-search"
-              type="search"
-              autoComplete="off"
-              value={personQuery}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={() => window.setTimeout(() => setShowSuggestions(false), 120)}
-              onChange={event => {
-                setPersonQuery(event.target.value);
-                setUserId('');
-                setAssignments([]);
-                setShowSuggestions(true);
-              }}
-              placeholder="Type a name, username, or email..."
-              aria-autocomplete="list"
-              aria-expanded={showSuggestions}
-              className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-red-700 focus:ring-2 focus:ring-red-100"
-            />
-            {showSuggestions && <div role="listbox" className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
-              {matchingAccounts.length === 0 ? <p className="px-3 py-4 text-sm text-gray-500">No matching people found.</p> : matchingAccounts.map(account => (
-                <button
-                  key={account.u_id}
-                  type="button"
-                  role="option"
-                  aria-selected={String(account.u_id) === userId}
-                  onMouseDown={event => event.preventDefault()}
-                  onClick={() => choosePerson(account)}
-                  className="block w-full rounded-lg px-3 py-2.5 text-left hover:bg-red-50 focus:bg-red-50 focus:outline-none"
-                >
-                  <span className="block text-sm font-bold text-gray-900">{account.full_name}</span>
-                  <span className="block text-xs text-gray-500">{account.office_name || account.department_name || 'No assigned area'}{account.uni_email ? ` · ${account.uni_email}` : ''}</span>
-                </button>
-              ))}
-            </div>}
-          </div>
+    <div className="space-y-6 animate-in fade-in duration-200 text-left">
+      {!embedded && (
+        <div>
+          <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white"><ShieldCheck className="text-red-700 dark:text-red-400" /> Access & Responsibilities</h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Choose who can view submissions or handle requests for an office or department.</p>
         </div>
-        {selectedUser && <p className="mt-3 text-xs text-gray-500">Assigned area: {selectedUser.office_name || selectedUser.department_name || 'Not assigned'}</p>}
-      </section>}
+      )}
 
-      {userId && <>
-        <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h3 className="font-bold text-gray-900">Add access for an area</h3>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="text-xs font-bold text-gray-700">Applies to
-              <select value={draft.scopeType} onChange={event => setDraft({ ...emptyDraft, scopeType: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-normal">
-                <option value="office">Office</option><option value="department">Department</option>
+      {!fixedUserId && (
+        <section className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-5 shadow-sm">
+          <div className="grid gap-4 md:grid-cols-[minmax(220px,0.4fr)_minmax(320px,1fr)]">
+            <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Office filter
+              <select value={officeFilter} onChange={event => changeOfficeFilter(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] px-3 py-2.5 text-sm font-normal normal-case text-gray-900 dark:text-white outline-none focus:border-red-700 cursor-pointer">
+                <option value="">All offices</option>
+                {offices.map(office => <option key={office.id} value={String(office.id)}>{office.name}</option>)}
+                <option value="unassigned">No assigned office</option>
               </select>
             </label>
-            <label className="text-xs font-bold text-gray-700">{draft.scopeType === 'office' ? 'Office' : 'Department'}
-              <select value={draft.targetId} onChange={event => setDraft({ ...draft, targetId: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-normal">
-                <option value="">Choose...</option>{choices.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-            </label>
-            <label className="text-xs font-bold text-gray-700 md:col-span-2">Title or responsibility <span className="font-normal text-gray-400">(optional)</span>
-              <input value={draft.positionTitle} onChange={event => setDraft({ ...draft, positionTitle: event.target.value })} placeholder="e.g. Department Chair or Office Head" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-normal" />
-            </label>
+            <div className="relative">
+              <label htmlFor="person-search" className="block text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Find a person</label>
+              <input
+                id="person-search"
+                type="search"
+                autoComplete="off"
+                value={personQuery}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => window.setTimeout(() => setShowSuggestions(false), 120)}
+                onChange={event => {
+                  setPersonQuery(event.target.value);
+                  setUserId('');
+                  setAssignments([]);
+                  setShowSuggestions(true);
+                }}
+                placeholder="Type a name, username, or email..."
+                aria-autocomplete="list"
+                aria-expanded={showSuggestions}
+                className="mt-2 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm outline-none focus:border-red-700 focus:ring-2 focus:ring-red-100"
+              />
+              {showSuggestions && (
+                <div role="listbox" className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-1 shadow-xl">
+                  {matchingAccounts.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">No matching people found.</p>
+                  ) : (
+                    matchingAccounts.map(account => (
+                      <button
+                        key={account.u_id}
+                        type="button"
+                        role="option"
+                        aria-selected={String(account.u_id) === userId}
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => choosePerson(account)}
+                        className="block w-full rounded-lg px-3 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-900/30 focus:bg-red-50 dark:focus:bg-red-900/30 focus:outline-none cursor-pointer"
+                      >
+                        <span className="block text-sm font-bold text-gray-900 dark:text-white">{account.full_name}</span>
+                        <span className="block text-xs text-gray-500 dark:text-gray-400">{account.office_name || account.department_name || 'No assigned area'}{account.uni_email ? ` · ${account.uni_email}` : ''}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {[['canViewSubmissions', 'See submissions'], ['canRecommend', 'Recommend requests'], ['canApprove', 'Approve requests'], ['canRequestRegistration', 'Request registration links']].map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm font-semibold text-gray-700"><input type="checkbox" checked={draft[key]} onChange={event => setDraft({ ...draft, [key]: event.target.checked })} /> {label}</label>
-            ))}
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <label className="text-xs font-bold text-gray-700">Starts on <span className="font-normal text-gray-400">(optional)</span><input type="date" value={draft.startsOn} onChange={event => setDraft({ ...draft, startsOn: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-normal" /></label>
-            <label className="text-xs font-bold text-gray-700">Ends on <span className="font-normal text-gray-400">(optional)</span><input type="date" min={draft.startsOn || undefined} value={draft.endsOn} onChange={event => setDraft({ ...draft, endsOn: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-normal" /></label>
-          </div>
-          <button type="button" onClick={addAssignment} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800"><Plus size={16} /> Add to list</button>
+          {selectedUser && <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Assigned area: {selectedUser.office_name || selectedUser.department_name || 'Not assigned'}</p>}
         </section>
+      )}
 
-        <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 p-5"><h3 className="font-bold text-gray-900">Assigned access</h3><p className="mt-1 text-xs text-gray-500">These changes take effect after you select Save changes.</p></div>
-          {loading ? <p className="p-8 text-center text-sm text-gray-500">Loading access...</p> : assignments.length === 0 ? <p className="p-8 text-center text-sm text-gray-500">No additional access or responsibilities assigned.</p> : <div className="divide-y divide-gray-100">
-            {assignments.map((item, index) => <div key={`${item.scopeType}-${item.targetId}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex gap-3">{item.scopeType === 'office' ? <Building2 className="mt-0.5 text-blue-600" size={18} /> : <Landmark className="mt-0.5 text-emerald-600" size={18} />}<div><p className="font-bold text-gray-900">{item.name}</p><p className="text-xs text-gray-500">{[item.canViewSubmissions && 'See submissions', item.canRecommend && 'Recommend requests', item.canApprove && 'Approve requests', item.canRequestRegistration && 'Request registration links'].filter(Boolean).join(' · ')}</p>{item.positionTitle && <p className="mt-1 text-xs font-semibold text-gray-700">{item.positionTitle}</p>}</div></div>
-              <button type="button" onClick={() => setAssignments(current => current.filter((_, rowIndex) => rowIndex !== index))} className="inline-flex items-center gap-1 self-start rounded-lg px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50"><Trash2 size={14} /> Remove</button>
-            </div>)}
-          </div>}
-          <div className="flex justify-end border-t border-gray-100 p-4"><button type="button" disabled={saving} onClick={save} className="inline-flex items-center gap-2 rounded-lg bg-red-800 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-900 disabled:opacity-60"><Save size={16} /> {saving ? 'Saving...' : 'Save changes'}</button></div>
-        </section>
-      </>}
+      {userId && (
+        <>
+          <section className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-5 shadow-sm">
+            <h3 className="font-bold text-gray-900 dark:text-white">Add access for an area</h3>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Applies to
+                <select value={draft.scopeType} onChange={event => setDraft({ ...emptyDraft, scopeType: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal cursor-pointer">
+                  <option value="office">Office</option>
+                  <option value="department">Department</option>
+                </select>
+              </label>
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">{draft.scopeType === 'office' ? 'Office' : 'Department'}
+                <select value={draft.targetId} onChange={event => setDraft({ ...draft, targetId: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal cursor-pointer">
+                  <option value="">Choose...</option>
+                  {choices.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300 md:col-span-2">Title or responsibility <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span>
+                <input value={draft.positionTitle} onChange={event => setDraft({ ...draft, positionTitle: event.target.value })} placeholder="e.g. Department Chair or Office Head" className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal" />
+              </label>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {[['canViewSubmissions', 'See submissions'], ['canRecommend', 'Recommend requests'], ['canApprove', 'Approve requests'], ['canRequestRegistration', 'Request registration links']].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-3 text-sm font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <input type="checkbox" checked={draft[key]} onChange={event => setDraft({ ...draft, [key]: event.target.checked })} /> {label}
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Starts on <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span><input type="date" value={draft.startsOn} onChange={event => setDraft({ ...draft, startsOn: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal" /></label>
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Ends on <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span><input type="date" min={draft.startsOn || undefined} value={draft.endsOn} onChange={event => setDraft({ ...draft, endsOn: event.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal" /></label>
+            </div>
+            <button type="button" onClick={addAssignment} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gray-900 dark:bg-gray-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 dark:hover:bg-gray-700 cursor-pointer"><Plus size={16} /> Add to list</button>
+          </section>
+
+          <section className="overflow-hidden rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-sm">
+            <div className="border-b border-gray-100 dark:border-[#42292f] p-5"><h3 className="font-bold text-gray-900 dark:text-white">Assigned access</h3><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">These changes take effect after you select Save changes.</p></div>
+            {loading ? (
+              <p className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Loading access...</p>
+            ) : assignments.length === 0 ? (
+              <p className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">No additional access or responsibilities assigned.</p>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {assignments.map((item, index) => (
+                  <div key={`${item.scopeType}-${item.targetId}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex gap-3">
+                      {item.scopeType === 'office' ? <Building2 className="mt-0.5 text-blue-600 dark:text-blue-400" size={18} /> : <Landmark className="mt-0.5 text-emerald-600 dark:text-emerald-400" size={18} />}
+                      <div>
+                        <p className="font-bold text-gray-900 dark:text-white">{item.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{[item.canViewSubmissions && 'See submissions', item.canRecommend && 'Recommend requests', item.canApprove && 'Approve requests', item.canRequestRegistration && 'Request registration links'].filter(Boolean).join(' · ')}</p>
+                        {item.positionTitle && <p className="mt-1 text-xs font-semibold text-gray-700 dark:text-gray-300">{item.positionTitle}</p>}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setAssignments(current => current.filter((_, rowIndex) => rowIndex !== index))} className="inline-flex items-center gap-1 self-start rounded-lg px-3 py-2 text-xs font-bold text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer"><Trash2 size={14} /> Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end border-t border-gray-100 dark:border-[#42292f] p-4"><button type="button" disabled={saving} onClick={save} className="inline-flex items-center gap-2 rounded-lg bg-red-800 dark:bg-red-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-900 dark:hover:bg-red-800 disabled:opacity-60 cursor-pointer"><Save size={16} /> {saving ? 'Saving...' : 'Save changes'}</button></div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

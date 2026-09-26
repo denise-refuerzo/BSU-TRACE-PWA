@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { PWAProvider } from './views/shared/context/PWAContext';
@@ -13,8 +13,32 @@ import GSOAdminDashboard from './views/portals/gso-admin/GSOAdminDashboard';
 import AdminDashboard from './views/portals/ict-admin/AdminDashboard';
 import ContinuousMobileScanner from './views/shared/ContinuousMobileScanner';
 
-// --- NEW: 30-MINUTE IDLE TIMEOUT WRAPPER ---
+// --- NEW: THEME TOGGLE WRAPPER & BUTTON ---
+const ThemeToggle = () => {
+  const [isDark, setIsDark] = useState(() => {
+    // Check localStorage or fallback to system preference on initial load
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark' ||
+        (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
+};
+
+// --- EXISTING: 30-MINUTE IDLE TIMEOUT WRAPPER ---
 const IdleTimer = ({ children }) => {
+  /* ... keep existing IdleTimer implementation exactly as is ... */
   const navigate = useNavigate();
   const location = useLocation();
   const timerRef = useRef(null);
@@ -23,11 +47,9 @@ const IdleTimer = ({ children }) => {
   const lastHeartbeatRef = useRef(0);
 
   const handleLogout = useCallback(async () => {
-    // Only fire if the user actually has an active session
     if (localStorage.getItem('token')) {
       warningActiveRef.current = false;
       await endSession();
-      
       Swal.fire({
         icon: 'warning',
         title: 'Session Expired',
@@ -69,24 +91,15 @@ const IdleTimer = ({ children }) => {
   }, [handleLogout]);
 
   useEffect(() => {
-    // Do not run the idle timer on the login screen or companion scanner
     if (location.pathname === '/login' || location.pathname === '/companion') {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
       return;
     }
-
-    // Events that count as "activity"
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
-    
-    // Reset the timer whenever an event fires
     const handleActivity = () => resetTimer();
-
     events.forEach(event => document.addEventListener(event, handleActivity));
-    
-    // Initialize the timer on mount
     resetTimer(); 
-
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
@@ -100,6 +113,7 @@ const IdleTimer = ({ children }) => {
 
 // 1. PUBLIC ROUTE GUARD
 const PublicRoute = ({ children }) => {
+  /* ... keep existing PublicRoute exactly as is ... */
   const token = localStorage.getItem('token');
   const roleId = Number(localStorage.getItem('role')); 
 
@@ -109,28 +123,24 @@ const PublicRoute = ({ children }) => {
     if (roleId === 4) return <Navigate to="/gso-dashboard" replace />;
     if (roleId === 5) return <Navigate to="/admin/dashboard" replace />;
   }
-
   return children;
 };
 
 // 2. PROTECTED ROUTE GUARD
 const ProtectedRoute = ({ children, allowedRoles }) => {
+  /* ... keep existing ProtectedRoute exactly as is ... */
   const token = localStorage.getItem('token');
   const roleId = Number(localStorage.getItem('role'));
 
-  if (!token) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!token) return <Navigate to="/login" replace />;
 
   if (allowedRoles && !allowedRoles.includes(roleId)) {
     if (roleId === 1) return <Navigate to="/dashboard" replace />;
     if (roleId === 2 || roleId === 3) return <Navigate to="/office/dashboard" replace />;
     if (roleId === 4) return <Navigate to="/gso-dashboard" replace />;
     if (roleId === 5) return <Navigate to="/admin/dashboard" replace />;
-    
     return <Navigate to="/login" replace />;
   }
-
   return children;
 };
 
@@ -138,60 +148,17 @@ export default function App() {
   return (
     <PWAProvider>
       <BrowserRouter>
-        {/* The IdleTimer sits inside BrowserRouter so it can use 'useNavigate' and 'useLocation' */}
+        <ThemeToggle /> {/* Floating Toggle rendered globally */}
         <IdleTimer>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
-
-            <Route 
-              path="/login" 
-              element={
-                <PublicRoute>
-                  <Login />
-                </PublicRoute>
-              } 
-            />
-
+            <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register/:token" element={<RegistrationLinkSignup />} />
-
             <Route path="/companion" element={<ContinuousMobileScanner />} />
-
-            <Route 
-              path="/dashboard" 
-              element={
-                <ProtectedRoute allowedRoles={[1]}>
-                  <OriginatorDashboard />
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/office/dashboard" 
-              element={
-                <ProtectedRoute allowedRoles={[2, 3]}>
-                  <ProcessorDashboard />
-                </ProtectedRoute>
-              } 
-            />
-
-            <Route 
-              path="/gso-dashboard" 
-              element={
-                <ProtectedRoute allowedRoles={[4]}>
-                  <GSOAdminDashboard />
-                </ProtectedRoute>
-              } 
-            />
-
-            <Route 
-              path="/admin/dashboard" 
-              element={
-                <ProtectedRoute allowedRoles={[5]}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } 
-            />
-
+            <Route path="/dashboard" element={<ProtectedRoute allowedRoles={[1]}><OriginatorDashboard /></ProtectedRoute>} />
+            <Route path="/office/dashboard" element={<ProtectedRoute allowedRoles={[2, 3]}><ProcessorDashboard /></ProtectedRoute>} />
+            <Route path="/gso-dashboard" element={<ProtectedRoute allowedRoles={[4]}><GSOAdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={[5]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </IdleTimer>

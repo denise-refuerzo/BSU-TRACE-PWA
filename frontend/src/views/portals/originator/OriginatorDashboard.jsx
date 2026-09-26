@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { LayoutDashboard, FileText, School, User, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList, History } from 'lucide-react';
 import { endSession } from '../../../api';
+import ThemeToggle from '../../shared/components/ThemeToggle';
 
 // Custom Hook
 import useOriginatorData from './hooks/useOriginatorData';
@@ -33,7 +34,7 @@ export default function OriginatorDashboard() {
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  
+
   const {
     userId, userName, navigate,
     activeTab, setActiveTab,
@@ -53,6 +54,7 @@ export default function OriginatorDashboard() {
     handleProcessChange, submitDocument, toggleTwoFactorAuth,
     fetchDashboardLedger
   } = useOriginatorData();
+
   const submissionAccess = useSubmissionAccess(userId);
 
   const handleTabSelect = (tab) => {
@@ -89,7 +91,7 @@ export default function OriginatorDashboard() {
   };
 
   return (
-    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] dark:bg-[#120b0c] text-neutral-800 dark:text-gray-200 font-sans overflow-hidden relative">
       
       <PWAInstallBanner />
 
@@ -128,6 +130,7 @@ export default function OriginatorDashboard() {
             <button onClick={() => handleTabSelect('dashboard')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'dashboard' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <LayoutDashboard size={18} /> Home
             </button>
+
             <div>
               <button onClick={openDocumentsMenu} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${['documents', 'shared-submissions', 'archived-submissions', 'office-submissions', 'department-submissions'].includes(activeTab) ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
                 <span className="flex items-center gap-3"><FileText size={18} /> Documents</span><ChevronDown size={15} className={`transition-transform ${documentsExpanded ? 'rotate-180' : ''}`} />
@@ -140,6 +143,7 @@ export default function OriginatorDashboard() {
                 {submissionAccess.departments.length > 0 && <button onClick={() => handleTabSelect('department-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab === 'department-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Department Submissions</button>}
               </div>}
             </div>
+
             <div>
               <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
                 <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
@@ -160,6 +164,7 @@ export default function OriginatorDashboard() {
                 </div>
               )}
             </div>
+
             <button onClick={() => handleTabSelect('submission-history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'submission-history' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><History size={18}/> History</button>
           </nav>
         </div>
@@ -175,32 +180,35 @@ export default function OriginatorDashboard() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         
         {/* HEADER */}
-        <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
+        <header className="h-16 border-b border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#1c1113] px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
           <div className="flex min-w-0 items-center gap-3 text-left">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden cursor-pointer"
+              className="p-2 -ml-2 rounded-lg text-neutral-600 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-[#2b1317] md:hidden cursor-pointer"
               aria-label="Open menu"
             >
               <Menu size={22} />
             </button>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+              <h2 className="truncate text-base font-black text-neutral-900 dark:text-white md:text-lg">
                 {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'submission-history' ? 'History' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
               </h2>
-              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400 dark:text-gray-400">
                 {formatOfficeLabel(profile.departmentName)}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-4 text-neutral-600">
+          <div className="flex items-center gap-2 md:gap-4 text-neutral-600 dark:text-gray-300">
+            {/* NEW TOGGLE BUTTON HERE */}
+            <ThemeToggle />
+            
             <NotificationDropdown 
               userId={userId}
               notifications={notifications}
               onNotificationClick={handleNotificationClick}
             />
-            <button onClick={() => setActiveTab('profile')} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-neutral-100 text-red-800' : ''}`}>
+            <button onClick={() => setActiveTab('profile')} className={`p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-neutral-100 dark:bg-[#2b1317] text-red-800 dark:text-red-400' : ''}`}>
               <User size={20} />
             </button>
           </div>
@@ -287,8 +295,8 @@ export default function OriginatorDashboard() {
         handleUpdatePassword={updatePasswordRequest}
       />
 
-      {showModal && ( 
-        <DocumentSubmissionModal 
+      {showModal && (
+         <DocumentSubmissionModal 
           setShowModal={setShowModal}
           submitDocument={submitDocument}
           form={form}
@@ -304,13 +312,12 @@ export default function OriginatorDashboard() {
         />
       )}
 
-      {showQrModal && ( 
-        <NewSubmissionQrModal 
+      {showQrModal && (
+         <NewSubmissionQrModal 
           generatedQr={generatedQr}
           setShowQrModal={setShowQrModal}
         />
       )}
-
     </div>
   );
 }

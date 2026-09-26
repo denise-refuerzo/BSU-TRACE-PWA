@@ -32,13 +32,16 @@ import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSu
 import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
 import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
 
+// NEW: Theme Toggle Component
+import ThemeToggle from '../../shared/components/ThemeToggle';
+
 const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
     cancelButton: 'px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-neutral-600 border border-neutral-200 bg-white hover:bg-neutral-50 mx-2',
-    popup: 'rounded-3xl border border-neutral-100 shadow-2xl',
-    title: 'text-lg font-black text-neutral-900',
-    htmlContainer: 'text-sm font-medium text-neutral-500'
+    popup: 'rounded-3xl border border-neutral-100 dark:border-[#42292f] shadow-2xl dark:bg-[#180e10]',
+    title: 'text-lg font-black text-neutral-900 dark:text-white',
+    htmlContainer: 'text-sm font-medium text-neutral-500 dark:text-gray-400'
   },
   buttonsStyling: false
 });
@@ -46,7 +49,7 @@ const minimalSwal = Swal.mixin({
 export default function ProcessorDashboard() {
   const navigate = useNavigate();
   const userId = localStorage.getItem('userId');
-  
+
   // --- CORE UI STATE ---
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -55,7 +58,7 @@ export default function ProcessorDashboard() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
-  
+
   // --- MODAL & ACTION STATE ---
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [isHistoryDetails, setIsHistoryDetails] = useState(false);
@@ -66,7 +69,7 @@ export default function ProcessorDashboard() {
   const scanBusy = useRef(false);
   const [scanMode, setScanMode] = useState('time-in');
   const [simulatedQrInput, setSimulatedQrPayload] = useState('');
-  
+
   // --- PASSWORD STATE ---
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -137,13 +140,12 @@ export default function ProcessorDashboard() {
   // Notification click: switches view to 'documents' and deep-links to that specific document's modal
   const handleNotificationClick = async (notif) => {
     setActiveTab('documents');
-
     const targetIniId = notif.ini_id;
     const allKnownDocs = processorData.pipelineDocs || [];
 
     // 1. Try finding in loaded pipeline documents
     let matchedDoc = allKnownDocs.find(d => 
-      (targetIniId && d.ini_id === targetIniId) || 
+      (targetIniId && d.ini_id === targetIniId) ||
       (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
     );
 
@@ -171,7 +173,6 @@ export default function ProcessorDashboard() {
   const executeSimulatedScanner = async (e, scannedCode = null) => {
     if (e) e.preventDefault();
     const targetQr = scannedCode || simulatedQrInput;
-
     if (!targetQr || !targetQr.trim()) {
       return minimalSwal.fire({ icon: 'warning', title: 'Input Required', text: 'Please type or scan a valid reference token string first.' });
     }
@@ -267,7 +268,6 @@ export default function ProcessorDashboard() {
       }
       return;
     }
-
     try {
       minimalSwal.fire({
         title: 'Sending Code...',
@@ -275,10 +275,8 @@ export default function ProcessorDashboard() {
         allowOutsideClick: false,
         didOpen: () => { minimalSwal.showLoading(); }
       });
-
       const requestRes = await fetchWithAuth(`/api/users/${userId}/request-profile-otp`, { method: 'POST' });
       if (!requestRes.ok) throw new Error('Failed to dispatch email.');
-
       const { value: otpCode } = await minimalSwal.fire({
         title: 'Verify Your Email',
         text: `We sent a 6-digit code to ${processorData.profileEmail}.`,
@@ -287,14 +285,12 @@ export default function ProcessorDashboard() {
         showCancelButton: true,
         confirmButtonText: 'Verify & Enable'
       });
-
       if (otpCode) {
         const verifyRes = await fetchWithAuth(`/api/profile/${userId}/verify-enable-2fa`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ otpCode })
         });
-
         if (verifyRes.ok) {
           processorData.setTwoFaEnabled(true);
           minimalSwal.fire({ icon: 'success', title: 'Secured!', text: 'Email Two-Factor Authentication is now active.' });
@@ -312,10 +308,10 @@ export default function ProcessorDashboard() {
   };
 
   return (
-    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] dark:bg-[#120b0c] text-neutral-800 dark:text-gray-200 font-sans overflow-hidden relative">
       
       <PWAInstallBanner />
-      
+
       {/* Mobile Backdrop */}
       {isSidebarOpen && (
         <div 
@@ -346,11 +342,12 @@ export default function ProcessorDashboard() {
               <X size={20} />
             </button>
           </div>
-          
+
           <nav className="space-y-1 text-sm">
             <button onClick={() => { handleTabSelect('dashboard'); processorData.setSearch(''); processorData.setFilterStatus('All'); processorData.setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'dashboard' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <LayoutDashboard size={18} /> Dashboard
             </button>
+
             <div>
               <button onClick={openDocumentsMenu} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${documentTabs.includes(activeTab) ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
                 <span className="flex items-center gap-3"><FileText size={18} /> Documents</span>
@@ -367,6 +364,7 @@ export default function ProcessorDashboard() {
                 </div>
               )}
             </div>
+
             <div>
               <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
                 <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
@@ -387,9 +385,11 @@ export default function ProcessorDashboard() {
                 </div>
               )}
             </div>
+
             {submissionAccess.canRequestRegistration && <button onClick={() => handleTabSelect('registration-management')} className={`w-full flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${activeTab === 'registration-management' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <Link2 size={16} className="shrink-0" /> Registration Management
             </button>}
+
             <button onClick={() => { handleTabSelect('history'); processorData.setSearch(''); processorData.setHistoryFilter('All'); processorData.setHistoryPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <History size={18} /> History
             </button>
@@ -411,7 +411,7 @@ export default function ProcessorDashboard() {
           >
             <Camera size={16} /> Web Scanner
           </button>
-          
+
           <div className="border-t border-neutral-700 pt-3">
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
               <LogOut size={16} /> Sign Out
@@ -424,24 +424,26 @@ export default function ProcessorDashboard() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         
         {/* HEADER */}
-        <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
+        <header className="h-16 border-b border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#1c1113] px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
           <div className="flex items-center gap-3 text-left">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden cursor-pointer"
+              className="p-2 -ml-2 rounded-lg text-neutral-600 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-[#2b1317] md:hidden cursor-pointer"
               aria-label="Open menu"
             >
               <Menu size={22} />
             </button>
             <div>
-              <h2 className="text-base md:text-lg font-black text-neutral-900 truncate">
-                 {activeTab === 'profile' ? 'Profile Management' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'History' : 'Office Dashboard'}
+              <h2 className="text-base md:text-lg font-black text-neutral-900 dark:text-white truncate"> 
+                {activeTab === 'profile' ? 'Profile Management' : activeTab === 'registration-management' ? 'Registration Management' : activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'submissions' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'documents' ? 'Active Documents' : activeTab === 'history' ? 'History' : 'Office Dashboard'}
               </h2>
-              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wide truncate">{formatOfficeLabel(processorData.processorOfficeName)}</p>
+              <p className="text-[10px] font-bold text-neutral-400 dark:text-gray-400 uppercase tracking-wide truncate">{formatOfficeLabel(processorData.processorOfficeName)}</p>
             </div>
           </div>
-          
-          <div className="flex items-center gap-2 md:gap-4 text-neutral-600">
+
+          <div className="flex items-center gap-2 md:gap-4 text-neutral-600 dark:text-gray-300">
+            <ThemeToggle />
+            
             <NotificationDropdown 
               userId={userId}
               notifications={processorData.notifications}
@@ -449,8 +451,8 @@ export default function ProcessorDashboard() {
             />
             
             <button 
-              onClick={() => setActiveTab(activeTab === 'profile' ? 'dashboard' : 'profile')} 
-              className={`p-2 rounded-full transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-red-50 text-red-700' : 'hover:bg-neutral-100'}`}
+              onClick={() => setActiveTab(activeTab === 'profile' ? 'dashboard' : 'profile')}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400' : 'hover:bg-neutral-100 dark:hover:bg-[#2b1317]'}`}
             >
               <User size={20} />
             </button>
@@ -467,6 +469,7 @@ export default function ProcessorDashboard() {
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
           )}
+
           {activeTab === 'documents' && (
             <OfficeDocumentsTab
               {...processorData} 
@@ -477,6 +480,7 @@ export default function ProcessorDashboard() {
               handleOpenPipelineDetails={handleOpenPipelineDetails} 
             />
           )}
+
           {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={processorData.processorOfficeId} processTypes={processorData.processTypes} onProcessed={processorData.fetchProcessorMeta} onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
           {activeTab === 'shared-submissions' && <CollaborativeSubmissionsTab mode="shared" onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
           {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />}
@@ -524,14 +528,12 @@ export default function ProcessorDashboard() {
           executeSimulatedScanner={executeSimulatedScanner}
         />
       )}
-
       {showCompanionModal && (
         <CompanionScannerModal 
           onClose={() => setShowCompanionModal(false)} 
           onScanSuccess={processorData.fetchProcessorMeta} 
         />
       )}
-
       {showPipelineModal && selectedDoc && (
         <DocumentTrackingModal
           selectedDoc={selectedDoc}
@@ -543,7 +545,6 @@ export default function ProcessorDashboard() {
           onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }}
         />
       )}
- 
       {showPassModal && (
         <ChangePasswordModal 
           isOpen={showPassModal}
@@ -554,7 +555,6 @@ export default function ProcessorDashboard() {
           handleUpdatePassword={handleUpdatePassword}
         />
       )}
-
       {processorData.isIncomingModalOpen && (
         <IncomingDocumentsModal 
           isOpen={processorData.isIncomingModalOpen}
@@ -563,7 +563,6 @@ export default function ProcessorDashboard() {
           isLoading={processorData.isIncomingLoading}
         />
       )}
-
     </div>
   );
 }

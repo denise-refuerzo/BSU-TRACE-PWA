@@ -14,7 +14,7 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const selectClass = 'mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-xs font-medium focus:ring-1 focus:ring-red-800 outline-none bg-white';
+  const selectClass = 'mt-1 w-full rounded-xl border border-gray-300 dark:border-gray-700 px-3 py-2.5 text-xs font-medium focus:ring-1 focus:ring-red-800 outline-none bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white cursor-pointer';
 
   useEffect(() => {
     let cancelled = false;
@@ -100,60 +100,60 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
         aria-modal="true" 
         aria-label="Assign Vehicle and Driver" 
         onSubmit={save} 
-        className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 w-full max-w-lg space-y-4 text-left"
+        className="bg-white dark:bg-[#180e10] rounded-2xl shadow-2xl border border-gray-200 dark:border-[#42292f] p-6 w-full max-w-lg space-y-4 text-left"
       >
-        <header className="flex items-start justify-between border-b border-gray-100 pb-3">
+        <header className="flex items-start justify-between border-b border-gray-100 dark:border-[#42292f] pb-3">
           <div>
-            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              <Car size={18} className="text-red-800" /> Assign Vehicle & Driver
+            <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Car size={18} className="text-red-800 dark:text-red-400" /> Assign Vehicle & Driver
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {publicReference('REQ', request.booking_id)} · {request.requestor || request.requestor_name}
             </p>
           </div>
           <button 
             type="button" 
             onClick={onClose} 
-            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+            className="text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-lg cursor-pointer"
           >
             <X size={18} />
           </button>
         </header>
 
         {/* READ-ONLY REQUEST TIMEFRAME */}
-        <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-3 grid grid-cols-2 gap-3 text-xs">
+        <div className="bg-neutral-50 dark:bg-[#1c1113] border border-neutral-200/80 dark:border-gray-800 rounded-xl p-3 grid grid-cols-2 gap-3 text-xs">
           <div>
-            <span className="text-[10px] font-bold text-gray-400 uppercase block">Travel Date</span>
-            <span className="font-bold text-gray-900">{request.reservation_date || 'N/A'}</span>
+            <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase block">Travel Date</span>
+            <span className="font-bold text-gray-900 dark:text-white">{request.reservation_date || 'N/A'}</span>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+            <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase flex items-center gap-1">
               <Clock size={12} /> Requested Time Window
             </span>
-            <span className="font-bold text-gray-900 font-mono">{start} – {end}</span>
+            <span className="font-bold text-gray-900 dark:text-white font-mono">{start} – {end}</span>
           </div>
         </div>
 
         <fieldset disabled={busy} className="space-y-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
+            <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
               <AlertCircle size={15} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           {!options && !error && (
-            <p className="text-xs text-gray-500 py-4 text-center animate-pulse">Checking fleet & driver availability…</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 py-4 text-center animate-pulse">Checking fleet & driver availability…</p>
           )}
 
           {options && (
             <div className="space-y-3">
-              <div className="text-xs rounded-xl bg-gray-50 border border-gray-200 p-3 text-gray-700 font-medium leading-relaxed">
+              <div className="text-xs rounded-xl bg-gray-50 dark:bg-[#1c1113] border border-gray-200 dark:border-gray-800 p-3 text-gray-700 dark:text-gray-300 font-medium leading-relaxed">
                 {options.reason}
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Select Available Vehicle</label>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Select Available Vehicle</label>
                 <select 
                   required 
                   value={vehicleId} 
@@ -168,12 +168,12 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
                   ))}
                 </select>
                 {options.vehicles.length === 0 && (
-                  <p className="text-[11px] text-amber-700 mt-1">No vehicles available for this requested time window.</p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">No vehicles available for this requested time window.</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Select Available Driver</label>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Select Available Driver</label>
                 <select 
                   required 
                   value={driverId} 
@@ -188,25 +188,25 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
                   ))}
                 </select>
                 {options.drivers.length === 0 && (
-                  <p className="text-[11px] text-amber-700 mt-1">No drivers available for this requested time window.</p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">No drivers available for this requested time window.</p>
                 )}
               </div>
             </div>
           )}
         </fieldset>
 
-        <footer className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+        <footer className="flex justify-end gap-2 border-t border-gray-100 dark:border-[#42292f] pt-4">
           <button 
             disabled={busy} 
             type="button" 
             onClick={onClose} 
-            className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 cursor-pointer"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
           >
             Cancel
           </button>
           <button 
             disabled={busy || !vehicleId || !driverId || !options?.vehicles?.length || !options?.drivers?.length} 
-            className="px-4 py-2 bg-red-800 hover:bg-red-900 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer transition-colors shadow-2xs"
+            className="px-4 py-2 bg-red-800 dark:bg-red-700 hover:bg-red-900 dark:hover:bg-red-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer transition-colors shadow-2xs"
           >
             {busy ? 'Saving...' : 'Save Assignment'}
           </button>

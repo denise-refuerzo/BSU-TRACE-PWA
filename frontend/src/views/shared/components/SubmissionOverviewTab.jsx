@@ -49,46 +49,99 @@ export default function SubmissionOverviewTab({ type, scopes }) {
       .some(value => String(value || '').toLowerCase().includes(needle)));
   }, [documents, query]);
 
-  return <div className="mx-auto max-w-8xl space-y-5 text-left animate-in fade-in duration-200">
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-      <p className="text-sm text-gray-500">View documents submitted by staff in the {isOffice ? 'offices' : 'departments'} assigned to you.</p>
-    </div>
-    <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-gray-100 p-4 sm:flex-row">
-        <select value={effectiveId} onChange={event => setSelectedId(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 sm:min-w-72">
-          {scopes.map(scope => <option key={scope[scopeIdKey]} value={scope[scopeIdKey]}>{scope[scopeNameKey]}</option>)}
-        </select>
-        <label className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search submissions..." className="w-full rounded-lg border border-gray-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-red-700" /></label>
+  return (
+    <div className="mx-auto max-w-8xl space-y-5 text-left animate-in fade-in duration-200">
+      <div className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-5 shadow-sm sm:p-6">
+        <p className="text-sm text-gray-500 dark:text-gray-400">View documents submitted by staff in the {isOffice ? 'offices' : 'departments'} assigned to you[cite: 29].</p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[800px] text-left text-sm">
-          <thead className="bg-red-50/60 text-[11px] uppercase tracking-wide text-red-900"><tr><th className="px-5 py-3">Document</th><th className="px-5 py-3">Submitted by</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Submitted</th></tr></thead>
-          <tbody className="divide-y divide-gray-100">{visible.map(document => <tr key={document.ini_id} onClick={() => setSelectedDocument(document)} className="cursor-pointer hover:bg-gray-50/70"><td className="px-5 py-4"><p className="flex items-center gap-2 font-bold text-gray-900"><FileText size={15} className="text-red-700" /> {document.title}</p></td><td className="px-5 py-4"><p className="font-semibold text-gray-800">{document.submitted_by}</p><p className="text-xs text-gray-500">{document.office_name || document.department_name || 'No affiliation listed'}</p></td><td className="px-5 py-4 text-gray-600">{document.process_name}</td><td className="px-5 py-4"><span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-black uppercase text-gray-700">{document.current_status}</span></td><td className="px-5 py-4 whitespace-nowrap text-gray-500">{new Date(document.created_at).toLocaleDateString()}</td></tr>)}</tbody>
-        </table>
-      </div>
-      {!loading && visible.length === 0 && <p className="p-10 text-center text-sm text-gray-500">No submissions found for this area.</p>}
-      {loading && <p className="p-10 text-center text-sm text-gray-500">Loading submissions...</p>}
-    </div>
-    {selectedDocument && <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/55 p-4 backdrop-blur-sm" onMouseDown={event => event.target === event.currentTarget && setSelectedDocument(null)}>
-      <section role="dialog" aria-modal="true" aria-labelledby="overview-document-title" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/30 bg-white text-left shadow-2xl">
-        <header className="flex items-center justify-between gap-3 bg-red-900 px-5 py-4 text-white">
-          <div className="flex items-center gap-3"><span className="rounded-xl bg-white/15 p-2"><FileText size={20} /></span><div><p className="text-[10px] uppercase tracking-[.18em] text-white/70">Submission overview</p><h2 id="overview-document-title" className="font-bold">Document Details</h2></div></div>
-          <button type="button" onClick={() => setSelectedDocument(null)} aria-label="Close document details" className="rounded-full p-2 hover:bg-white/15"><X size={19} /></button>
-        </header>
-        <div className="space-y-5 p-5 sm:p-6">
-          <div><span className="inline-flex rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-[10px] font-black uppercase text-red-900">{selectedDocument.current_status}</span><h3 className="mt-3 text-xl font-black text-gray-900">{selectedDocument.title}</h3><p className="mt-1 text-sm text-gray-500">{selectedDocument.process_name}</p></div>
-          <dl className="grid gap-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4 text-sm sm:grid-cols-2">
-            <div><dt className="text-xs font-bold uppercase tracking-wide text-gray-400">Submitted by</dt><dd className="mt-1 font-semibold text-gray-800">{selectedDocument.submitted_by}</dd></div>
-            <div><dt className="text-xs font-bold uppercase tracking-wide text-gray-400">Assigned area</dt><dd className="mt-1 font-semibold text-gray-800">{selectedDocument.office_name || selectedDocument.department_name || 'Not listed'}</dd></div>
-            <div><dt className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-gray-400"><CalendarDays size={13} /> Submitted</dt><dd className="mt-1 text-gray-700">{new Date(selectedDocument.created_at).toLocaleString()}</dd></div>
-            <div><dt className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-gray-400"><CalendarDays size={13} /> Estimated completion</dt><dd className="mt-1 text-gray-700">{selectedDocument.edc ? new Date(selectedDocument.edc).toLocaleDateString() : 'Not available'}</dd></div>
-            <div><dt className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-gray-400"><MapPin size={13} /> Current office</dt><dd className="mt-1 text-gray-700">{selectedDocument.current_office || 'Not yet assigned'}</dd></div>
-            <div><dt className="text-xs font-bold uppercase tracking-wide text-gray-400">Next office</dt><dd className="mt-1 text-gray-700">{selectedDocument.next_office || 'None listed'}</dd></div>
-          </dl>
-          <p className="text-xs text-gray-500">This overview is read-only. Processing history, QR downloads, workflow actions, and chat are not available here.</p>
+
+      <div className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-sm overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-gray-100 dark:border-[#42292f] bg-gray-50/50 dark:bg-[#1c1113] p-4 sm:flex-row">
+          <select 
+            value={effectiveId} 
+            onChange={event => setSelectedId(event.target.value)} 
+            className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 sm:min-w-72 outline-none cursor-pointer"
+          >
+            {scopes.map(scope => <option key={scope[scopeIdKey]} value={scope[scopeIdKey]}>{scope[scopeNameKey]}</option>)}
+          </select>
+          <label className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input 
+              value={query} 
+              onChange={event => setQuery(event.target.value)} 
+              placeholder="Search submissions..." 
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-red-700" 
+            />
+          </label>
         </div>
-        <footer className="flex justify-end border-t border-gray-100 bg-gray-50 px-5 py-4"><button type="button" onClick={() => setSelectedDocument(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-100">Close</button></footer>
-      </section>
-    </div>}
-  </div>;
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-left text-sm">
+            <thead className="bg-red-50/60 dark:bg-[#2b1317] text-[11px] uppercase tracking-wide text-red-900 dark:text-red-300 border-b border-gray-200 dark:border-[#42292f]">
+              <tr>
+                <th className="px-5 py-3">Document</th>
+                <th className="px-5 py-3">Submitted by</th>
+                <th className="px-5 py-3">Type</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Submitted</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {visible.map(document => (
+                <tr key={document.ini_id} onClick={() => setSelectedDocument(document)} className="cursor-pointer hover:bg-gray-50/70 dark:hover:bg-[#2b1317]/50 transition-colors">
+                  <td className="px-5 py-4"><p className="flex items-center gap-2 font-bold text-gray-900 dark:text-white"><FileText size={15} className="text-red-700 dark:text-red-400" /> {document.title}</p></td>
+                  <td className="px-5 py-4"><p className="font-semibold text-gray-800 dark:text-gray-200">{document.submitted_by}</p><p className="text-xs text-gray-500 dark:text-gray-400">{document.office_name || document.department_name || 'No affiliation listed'}</p></td>
+                  <td className="px-5 py-4 text-gray-600 dark:text-gray-400">{document.process_name}</td>
+                  <td className="px-5 py-4"><span className="rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2.5 py-1 text-[10px] font-black uppercase text-gray-700 dark:text-gray-300">{document.current_status}</span></td>
+                  <td className="px-5 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{new Date(document.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {!loading && visible.length === 0 && <p className="p-10 text-center text-sm text-gray-500 dark:text-gray-400">No submissions found for this area.</p>}
+        {loading && <p className="p-10 text-center text-sm text-gray-500 dark:text-gray-400">Loading submissions...</p>}
+      </div>
+
+      {selectedDocument && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/55 p-4 backdrop-blur-sm animate-in fade-in duration-150" onMouseDown={event => event.target === event.currentTarget && setSelectedDocument(null)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="overview-document-title" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/30 dark:border-[#42292f] bg-white dark:bg-[#180e10] text-left shadow-2xl">
+            <header className="flex items-center justify-between gap-3 bg-red-900 dark:bg-red-950 px-5 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <span className="rounded-xl bg-white/15 p-2"><FileText size={20} /></span>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[.18em] text-white/70">Submission overview</p>
+                  <h2 id="overview-document-title" className="font-bold">Document Details</h2>
+                </div>
+              </div>
+              <button type="button" onClick={() => setSelectedDocument(null)} aria-label="Close document details" className="rounded-full p-2 hover:bg-white/15 cursor-pointer"><X size={19} /></button>
+            </header>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              <div>
+                <span className="inline-flex rounded-full border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-900/30 px-2.5 py-1 text-[10px] font-black uppercase text-red-900 dark:text-red-300">{selectedDocument.current_status}</span>
+                <h3 className="mt-3 text-xl font-black text-gray-900 dark:text-white">{selectedDocument.title}</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{selectedDocument.process_name}</p>
+              </div>
+
+              <dl className="grid gap-4 rounded-xl border border-gray-200 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] p-4 text-sm sm:grid-cols-2">
+                <div><dt className="text-xs font-bold uppercase tracking-wide text-gray-400">Submitted by</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{selectedDocument.submitted_by}</dd></div>
+                <div><dt className="text-xs font-bold uppercase tracking-wide text-gray-400">Assigned area</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{selectedDocument.office_name || selectedDocument.department_name || 'Not listed'}</dd></div>
+                <div><dt className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-gray-400"><CalendarDays size={13} /> Submitted</dt><dd className="mt-1 text-gray-700 dark:text-gray-300">{new Date(selectedDocument.created_at).toLocaleString()}</dd></div>
+                <div><dt className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-gray-400"><CalendarDays size={13} /> Estimated completion</dt><dd className="mt-1 text-gray-700 dark:text-gray-300">{selectedDocument.edc ? new Date(selectedDocument.edc).toLocaleDateString() : 'Not available'}</dd></div>
+                <div><dt className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-gray-400"><MapPin size={13} /> Current office</dt><dd className="mt-1 text-gray-700 dark:text-gray-300">{selectedDocument.current_office || 'Not yet assigned'}</dd></div>
+                <div><dt className="text-xs font-bold uppercase tracking-wide text-gray-400">Next office</dt><dd className="mt-1 text-gray-700 dark:text-gray-300">{selectedDocument.next_office || 'None listed'}</dd></div>
+              </dl>
+              <p className="text-xs text-gray-500 dark:text-gray-400">This overview is read-only. Processing history, QR downloads, workflow actions, and chat are not available here.</p>
+            </div>
+
+            <footer className="flex justify-end border-t border-gray-100 dark:border-[#42292f] bg-gray-50 dark:bg-[#1c1113] px-5 py-4">
+              <button type="button" onClick={() => setSelectedDocument(null)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-4 py-2 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer">Close</button>
+            </footer>
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }

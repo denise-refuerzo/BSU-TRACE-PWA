@@ -16,7 +16,6 @@ export default function ContinuousMobileScanner() {
   const [feedback, setFeedback] = useState({ title: '', message: 'Align document QR code inside the box' });
   const [debugLog, setDebugLog] = useState('Initializing camera engine...');
   
-  // NEW: Dedicated state to break the camera out of the closure trap
   const [latestScan, setLatestScan] = useState(null);
 
   const socketRef = useRef(null);
@@ -24,7 +23,6 @@ export default function ContinuousMobileScanner() {
   const cooldownTimerRef = useRef(null);
   const html5QrCodeRef = useRef(null);
 
-  // 1. Screen Wake Lock
   useEffect(() => {
     let wakeLock = null;
     const requestWakeLock = async () => {
@@ -51,7 +49,6 @@ export default function ContinuousMobileScanner() {
     };
   }, []);
 
-  // 2. WebSocket Connection (Allows HTTP Polling fallback)
   useEffect(() => {
     if (!roomId) return;
 
@@ -90,7 +87,7 @@ export default function ContinuousMobileScanner() {
         setStatus('ready');
         setFeedback({ title: '', message: 'Ready for next document' });
         lastScanRef.current = null;
-        setLatestScan(null); // Clear the scan state so the same doc can be scanned again later
+        setLatestScan(null); 
       }, 2200);
     });
 
@@ -100,7 +97,6 @@ export default function ContinuousMobileScanner() {
     };
   }, [roomId]);
 
-  // 3. NEW: Relay Logic Effect (Always has fresh state, safely interacts with Socket)
   useEffect(() => {
     if (!latestScan || !connected || status !== 'ready') return;
     
@@ -117,7 +113,6 @@ export default function ContinuousMobileScanner() {
     }
   }, [latestScan, connected, status, roomId, scanMode]);
 
-  // 4. Start Html5Qrcode Scanner Engine (EMPTY DEPENDENCY ARRAY - Boot only ONCE)
   useEffect(() => {
     let isMounted = true;
     const qrRegionId = 'html5qr-code-full-region';
@@ -137,10 +132,9 @@ export default function ContinuousMobileScanner() {
         (decodedText) => {
           const qrText = String(decodedText).trim();
           setDebugLog(`Scanned: ${qrText}`);
-          // We simply update state here. The relay effect above handles the rest.
           setLatestScan(qrText);
         },
-        () => {} // Ignore frame miss
+        () => {} 
       ).catch((err) => {
         console.error('Camera initialization failed:', err);
         setDebugLog(`Cam Error: ${err?.message || err}`);
@@ -155,7 +149,7 @@ export default function ContinuousMobileScanner() {
         html5QrCodeRef.current.stop().catch(err => console.error('Failed to stop scanner:', err));
       }
     };
-  }, []); // <-- CRITICAL: This array is now empty so the camera never restarts mid-session
+  }, []);
 
   if (!roomId) {
     return (

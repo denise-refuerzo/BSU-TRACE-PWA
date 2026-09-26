@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
 
 /* Shared BSU accents for the Office, Originator, GSO and ICT portals. */
 :root {
@@ -142,3 +143,86 @@
   color: white;
 }
 .trace-matrix button:is(.bg-gray-900, .bg-red-800):hover { background: var(--trace-wine-dark); }
+
+/* --- DARK MODE OVERRIDES --- */
+.dark {
+  --trace-wine: #e14d64; /* Brighter wine for visibility on dark backgrounds */
+  --trace-wine-dark: #b81f38;
+  --trace-rose: #241417;
+  --trace-border: #42292f;
+  --trace-ink: #f0e6e8;
+}
+
+.dark body {
+  background-color: #120b0c;
+  color: var(--trace-ink);
+}
+
+.dark .trace-portal {
+  background: radial-gradient(ellipse at top right, #2b1317 0, transparent 48%), #120b0c;
+}
+
+.dark .trace-portal > .flex-1 > header {
+  background: linear-gradient(100deg, #1c1113, #2b1317);
+  border-top-color: var(--trace-wine-dark);
+}
+
+.dark .trace-portal .bg-white,
+.dark .trace-matrix .bg-white {
+  background-color: #180e10;
+}
+
+.dark .trace-portal table thead,
+.dark .trace-portal table thead tr {
+  background: #2b1317;
+  color: var(--trace-wine);
+  border-bottom-color: var(--trace-border);
+}
+
+.dark .trace-portal table tbody tr:hover {
+  background-color: #201315;
+}
+
+.dark .trace-button {
+  background: #1c1113;
+  color: #e5d5d8;
+  border-color: var(--trace-border);
+}
+
+.dark .trace-button:hover {
+  background: #2b1317;
+}
+
+.dark .trace-button-primary {
+  background: var(--trace-wine-dark);
+  color: white;
+  border-color: var(--trace-wine-dark);
+}
+
+.dark .trace-button-primary:hover {
+  background: var(--trace-wine);
+}
+
+.dark .trace-matrix :is(input, textarea, select) {
+  background-color: #1c1113;
+  color: var(--trace-ink);
+}
+
+.dark .trace-matrix .trace-category-card {
+  background: linear-gradient(110deg, #1f1214, #180e10);
+  border-color: var(--trace-border);
+  border-left-color: var(--trace-wine-dark);
+}
+
+.dark .trace-matrix .trace-category-card button:hover:not(:disabled) { 
+  background: #2b1317; 
+}
+
+.dark .trace-matrix .bg-gray-50 { 
+  background-color: #1c1113; 
+}
+
+.dark .swal2-popup {
+  background-color: #180e10;
+  color: var(--trace-ink);
+}

@@ -36,6 +36,9 @@ import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSu
 import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
 import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
 
+// NEW: Theme Toggle
+import ThemeToggle from '../../shared/components/ThemeToggle';
+
 // Modals
 import QRScannerModal from './modals/QRScannerModal';
 import AddAssetModal from './modals/AddAssetModal';
@@ -52,9 +55,9 @@ const minimalSwal = Swal.mixin({
   customClass: {
     confirmButton: 'px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-red-800 hover:bg-red-900 shadow-md mx-2',
     cancelButton: 'px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-neutral-600 border border-neutral-200 bg-white hover:bg-neutral-50 mx-2',
-    popup: 'rounded-3xl border border-neutral-100 shadow-2xl',
-    title: 'text-lg font-black text-neutral-900',
-    htmlContainer: 'text-sm font-medium text-neutral-500'
+    popup: 'rounded-3xl border border-neutral-100 shadow-2xl dark:bg-[#180e10] dark:border-[#42292f]',
+    title: 'text-lg font-black text-neutral-900 dark:text-white',
+    htmlContainer: 'text-sm font-medium text-neutral-500 dark:text-gray-400'
   },
   buttonsStyling: false
 });
@@ -62,7 +65,6 @@ const minimalSwal = Swal.mixin({
 export default function GSOAdminDashboard() {
   const navigate = useNavigate();
   const notificationRef = useRef(null);
-  
   const [activeTab, setActiveTab] = useState('dashboard');
   const [previousTab, setPreviousTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -85,7 +87,7 @@ export default function GSOAdminDashboard() {
   const [showIncomingModal, setShowIncomingModal] = useState(false);
   const [incomingDocsList, setIncomingDocsList] = useState([]);
   const [isIncomingLoading, setIsIncomingLoading] = useState(false);
-
+  
   const handleOpenIncomingModal = async () => {
     if (!gsoOfficeId) return;
     setShowIncomingModal(true);
@@ -113,6 +115,7 @@ export default function GSOAdminDashboard() {
     bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
+
   const submissionAccess = useSubmissionAccess(userId);
 
   useEffect(() => {
@@ -155,6 +158,7 @@ export default function GSOAdminDashboard() {
 
   const todayObj = new Date();
   const todayString = todayObj.toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+
   const [showAddAssetModal, setShowAddAssetModal] = useState(false);
   const [assetForm, setAssetForm] = useState({ assetName: '', assetTypeId: '1', quantity: 1, isConfirmed: false });
   const [showInventoryModal, setShowInventoryModal] = useState(false);
@@ -170,10 +174,12 @@ export default function GSOAdminDashboard() {
 
   const [showChecklistMakerModal, setShowChecklistMakerModal] = useState(false);
   const [activeChecklistTab, setActiveChecklistTab] = useState('Vehicle');
+
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printTargetTab, setPrintTargetTab] = useState('Vehicle'); 
   const [printStartDate, setPrintStartDate] = useState('');
   const [printEndDate, setPrintEndDate] = useState('');
+
   const [procSearch, setProcSearch] = useState({ vehicle: '', multimedia: '', gym: '', logistics: '' });
   const [procFilter, setProcFilter] = useState({ vehicle: 'All', multimedia: 'All', gym: 'All', logistics: 'All' });
   const [procPage, setProcPage] = useState({ vehicle: 1, multimedia: 1, gym: 1, logistics: 1 });
@@ -185,7 +191,6 @@ export default function GSOAdminDashboard() {
   const [auditStartDate, setAuditStartDate] = useState('');
   const [auditEndDate, setAuditEndDate] = useState('');
   const [showAnalyticsReport, setShowAnalyticsReport] = useState(false);
-  
   const [inventoryForm, setInventoryForm] = useState({
     requestorName: '', department: '', purpose: '', duration: '', quantityNeeded: '', returnDate: '', returnTime: '', isDamaged: false, damageNotes: ''
   });
@@ -241,6 +246,7 @@ export default function GSOAdminDashboard() {
     if (!doc.time_in) return 'Awaiting Scan-In';
     return 'Pending';
   };
+
   const filteredOfficeDocuments = pipelineDocs.filter(doc => {
     const matchesSearch = `${doc.title || ''} ${doc.qr_code || ''}`.toLowerCase().includes(documentSearch.toLowerCase());
     return matchesSearch && (documentFilter === 'All' || resolveOfficeStatus(doc) === documentFilter);
@@ -256,7 +262,6 @@ export default function GSOAdminDashboard() {
     if (filterStatus === 'Completed') return matchesSearch && (doc.time_out !== null || doc.status?.toLowerCase() === 'signed' || doc.status?.toLowerCase() === 'completed');
     return matchesSearch;
   });
-
   const currentDashDocs = filteredMasterDocs.slice((dashboardPage - 1) * itemsPerPage, dashboardPage * itemsPerPage);
   const totalDashPages = Math.ceil(filteredMasterDocs.length / itemsPerPage);
 
@@ -286,7 +291,6 @@ export default function GSOAdminDashboard() {
     .filter(d => (d.office_name || '').toLowerCase().includes((bottleneckSearch || '').toLowerCase()))
     .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
     .slice(0, 5);
-
   const { chartReadyDemandData } = prepareDemandChart(peakDemandData, demandTimeFilter);
 
   const isAwaitingScanIn = selectedDoc && !selectedDoc.time_in;
@@ -313,7 +317,6 @@ export default function GSOAdminDashboard() {
     if (!await confirmResourceAction('Add this requirement?', newChecklistName.trim())) return;
     const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
     const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
-
     try {
       const res = await fetchWithAuth('/api/procurement/templates', {
         method: 'POST',
@@ -530,7 +533,7 @@ export default function GSOAdminDashboard() {
     if (elapsed < 60000) return 'Just now';
     else if (elapsed < 3600000) return `${Math.round(elapsed / 60000)} minutes ago`;   
     else if (elapsed < 86400000) return `${Math.round(elapsed / 3600000)} hours ago`;   
-    else return `${Math.round(elapsed / 86400000)} days ago`;   
+    else return `${Math.round(elapsed / 86400000)} days ago`; 
   };
 
   const handleGenerateAuditReport = () => setShowAnalyticsReport(true);
@@ -539,7 +542,7 @@ export default function GSOAdminDashboard() {
     e.preventDefault();
     if (!selectedInventoryItem || isActionProcessing) return;
     setIsActionProcessing(true);
-  
+    
     try {
       const isLend = inventoryModalMode === 'LEND';
       const endpoint = isLend ? '/api/procurement/logistics/borrow' : '/api/procurement/logistics/return';
@@ -560,16 +563,15 @@ export default function GSOAdminDashboard() {
         isDamaged: inventoryForm.isDamaged,
         damageNotes: inventoryForm.damageNotes
       };
-  
+
       const res = await fetchWithAuth(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-  
       const result = await res.json();
+      
       if (!res.ok) throw new Error(result.error || 'Action failed.');
-  
       setShowInventoryModal(false);
       fetchInventoryMetrics();
       fetchProcurementData();
@@ -582,8 +584,7 @@ export default function GSOAdminDashboard() {
   };
 
   return (
-    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] text-neutral-800 font-sans overflow-hidden relative">
-
+    <div className="trace-portal flex h-screen w-screen bg-[#FAF8F5] dark:bg-[#120b0c] text-neutral-800 dark:text-gray-200 font-sans overflow-hidden relative">
       <PWAInstallBanner />
 
       {/* Mobile Backdrop */}
@@ -621,6 +622,7 @@ export default function GSOAdminDashboard() {
             <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
+
             <div>
               <button onClick={() => setDocumentsExpanded(value => !value)} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['documents','submissions','office-submissions','department-submissions','shared-submissions','archived-submissions'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
                 <span className="flex items-center gap-3"><Archive size={18}/> Documents</span><ChevronDown size={15} className={`transition-transform ${documentsExpanded ? 'rotate-180' : ''}`}/>
@@ -634,6 +636,7 @@ export default function GSOAdminDashboard() {
                 <button onClick={() => handleTabSelect('archived-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='archived-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Archived</button>
               </div>}
             </div>
+
             <div>
               <button onClick={() => setResourcesExpanded(value => !value)} aria-expanded={resourcesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['resources','procurement','manage-bookings'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
                 <span className="flex items-center gap-3"><Archive size={18} /> School Resources</span>
@@ -647,6 +650,7 @@ export default function GSOAdminDashboard() {
                 </div>
               )}
             </div>
+
             <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <BarChart3 size={18} /> Operational Analytics
             </button>
@@ -655,6 +659,7 @@ export default function GSOAdminDashboard() {
             </button>
           </nav>
         </div>
+
         <div className="space-y-3">
           {/* COMPANION SCANNER BUTTON */}
           <button 
@@ -663,6 +668,7 @@ export default function GSOAdminDashboard() {
           >
             <Smartphone size={16} /> Mobile Scanner
           </button>
+
           <div className="border-t border-neutral-700 pt-3">
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
               <LogOut size={16} /> Sign Out
@@ -672,54 +678,59 @@ export default function GSOAdminDashboard() {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+        
         {/* HEADER */}
-        <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
+        <header className="h-16 border-b border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#1c1113] px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
           <div className="flex min-w-0 items-center gap-3 text-left">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+              className="p-2 -ml-2 rounded-lg text-neutral-600 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-[#2b1317] md:hidden"
               aria-label="Open menu"
             >
               <Menu size={22} />
             </button>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+              <h2 className="truncate text-base font-black text-neutral-900 dark:text-white md:text-lg">
                 {tabTitles[activeTab] || 'GSO Admin Portal'}
               </h2>
-              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400 dark:text-gray-400">
                 {formatOfficeLabel(gsoOfficeName, 'General Services Office')}
               </p>
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2 text-neutral-600 md:gap-4">
+          <div className="ml-auto flex items-center gap-2 text-neutral-600 dark:text-gray-300 md:gap-4">
+            <ThemeToggle />
+            
             <div className="relative" ref={notificationRef}>
-              <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 relative transition-colors">
+              <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] relative transition-colors">
                 <Bell size={20} />
                 {notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></span>}
               </button>
+
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white border border-neutral-200 rounded-2xl shadow-xl z-50 overflow-hidden text-left">
-                  <div className="p-4 border-b border-neutral-100 bg-[#FDFBF9] font-bold text-xs uppercase text-neutral-900 tracking-wide">Notifications</div>
-                  <div className="max-h-64 overflow-y-auto divide-y divide-neutral-100">
+                <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white dark:bg-[#180e10] border border-neutral-200 dark:border-[#42292f] rounded-2xl shadow-xl z-50 overflow-hidden text-left">
+                  <div className="p-4 border-b border-neutral-100 dark:border-[#42292f] bg-[#FDFBF9] dark:bg-[#1c1113] font-bold text-xs uppercase text-neutral-900 dark:text-white tracking-wide">Notifications</div>
+                  <div className="max-h-64 overflow-y-auto divide-y divide-neutral-100 dark:divide-gray-800">
                     {notifications.map(n => (
-                      <div key={n.id} className="p-4 text-xs border-b last:border-b-0 hover:bg-neutral-50/50 transition-colors">
+                      <div key={n.id} className="p-4 text-xs border-b last:border-b-0 hover:bg-neutral-50/50 dark:hover:bg-[#2b1317]/50 transition-colors">
                         <div className="flex justify-between items-start gap-2">
                           <div>
-                            <p className="font-bold text-neutral-900">{n.title}</p>
-                            <span className="text-[8px] bg-red-50 text-red-800 border px-1 rounded uppercase font-black tracking-tight mt-0.5 inline-block">{n.roleSource || 'System'}</span>
+                            <p className="font-bold text-neutral-900 dark:text-white">{n.title}</p>
+                            <span className="text-[8px] bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-400 border border-red-100 dark:border-red-800 px-1 rounded uppercase font-black tracking-tight mt-0.5 inline-block">{n.roleSource || 'System'}</span>
                           </div>
                           <span className="text-[10px] text-neutral-400 whitespace-nowrap">{formatRelativeTime(n.time)}</span>
                         </div>
-                        <p className="text-neutral-500 mt-1.5 font-medium leading-relaxed">{n.message}</p>
+                        <p className="text-neutral-500 dark:text-gray-400 mt-1.5 font-medium leading-relaxed">{n.message}</p>
                       </div>
                     ))}
-                    {notifications.length === 0 && <div className="p-6 text-center text-neutral-400 font-bold text-xs">📭 No active system notifications.</div>}
+                    {notifications.length === 0 && <div className="p-6 text-center text-neutral-400 font-bold text-xs"> No active system notifications.</div>}
                   </div>
                 </div>
               )}
             </div>
-            <button onClick={() => { setPreviousTab(activeTab); setActiveTab('profile'); }} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 transition-colors border text-xs font-bold text-neutral-800">
+
+            <button onClick={() => { setPreviousTab(activeTab); setActiveTab('profile'); }} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] transition-colors border dark:border-gray-700 text-xs font-bold text-neutral-800 dark:text-gray-300">
               <User size={16} />
               <span className="hidden sm:inline">GSO Admin Portal</span>
             </button>
@@ -777,6 +788,7 @@ export default function GSOAdminDashboard() {
           {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={handleNavigateToChat} />}
           {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
           {activeTab === 'department-submissions' && <SubmissionOverviewTab type="department" scopes={submissionAccess.departments} />}
+
           {activeTab === 'resources' && (
               <ResourceManagementTab key={resourceRevision}
                 onOpenRequest={(request) => {
@@ -808,7 +820,7 @@ export default function GSOAdminDashboard() {
           )}
 
           {activeTab === 'analytics' && (
-            <Suspense fallback={<div className="flex min-h-[420px] items-center justify-center text-sm font-bold text-neutral-500">Loading analytics workspace…</div>}>
+            <Suspense fallback={<div className="flex min-h-[420px] items-center justify-center text-sm font-bold text-neutral-500">Loading analytics workspace...</div>}>
               <OperationalAnalyticsTab
                 auditStartDate={auditStartDate} setAuditStartDate={setAuditStartDate}
                 auditEndDate={auditEndDate} setAuditEndDate={setAuditEndDate}
@@ -837,7 +849,6 @@ export default function GSOAdminDashboard() {
             />
           )}
 
-
           {activeTab === 'profile' && (
             <UserProfileTab
               profileName={profileName} setProfileName={setProfileName}
@@ -845,7 +856,7 @@ export default function GSOAdminDashboard() {
               facultyId={facultyId} officeName={gsoOfficeName}
               twoFaEnabled={twoFaEnabled} toggle2FA={() => {}}
               handleUpdateProfile={() => {}} setShowPassModal={setShowPassModal}
-              handleBack={() => setActiveTab(previousTab)} // Add this line!
+              handleBack={() => setActiveTab(previousTab)}
             />
           )}
         </div>
@@ -875,7 +886,9 @@ export default function GSOAdminDashboard() {
         hasUnread={hasUnreadChats} onUnreadCleared={() => setHasUnreadChats(false)}
         userId={userId} officeId={gsoOfficeId}
         targetDoc={chatTargetDoc} onClearTargetDoc={() => setChatTargetDoc(null)} label="Chat Inbox" />
+      
       {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={async () => { await fetchProcurementData(); setManageRefreshKey(value => value + 1); }} />}
+      
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
         scanMode={scanMode} setScanMode={setScanMode}
@@ -890,6 +903,7 @@ export default function GSOAdminDashboard() {
           } catch (error) {minimalSwal.fire({icon:"error",text:error.message});}
         }}
       />
+      
       <AddAssetModal 
         showAddAssetModal={showAddAssetModal} setShowAddAssetModal={setShowAddAssetModal}
         handleAddAssetSubmit={() => {}} assetForm={assetForm} setAssetForm={setAssetForm}
@@ -902,7 +916,7 @@ export default function GSOAdminDashboard() {
       />
       {showDetailsModal && selectedDoc && <DocumentTrackingModal selectedDoc={selectedDoc} isHistoryDetails={isHistoryDetails}
         processorOfficeId={gsoOfficeId} officesList={officesList} onClose={() => setShowDetailsModal(false)} onRefresh={fetchGSOMeta} onOpenChat={handleNavigateToChat} />}
-
+      
       <MasterChecklistModal
         showChecklistMakerModal={showChecklistMakerModal} setShowChecklistMakerModal={setShowChecklistMakerModal}
         activeChecklistTab={activeChecklistTab} setActiveChecklistTab={setActiveChecklistTab}
@@ -942,14 +956,10 @@ export default function GSOAdminDashboard() {
         documents={incomingDocsList}
         isLoading={isIncomingLoading}
       />
-
       {showCompanionModal && (
         <CompanionScannerModal 
           onClose={() => setShowCompanionModal(false)}
-          onScanSuccess={() => {
-            // Insert your data refresh function here
-            // e.g., gsoData.fetchGsoMeta()
-          }}
+          onScanSuccess={() => {}}
         />
       )}
     </div>
