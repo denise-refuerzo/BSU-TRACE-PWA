@@ -132,7 +132,7 @@ export default function UserProfileTab({
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
+    <div className="max-w-7xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
       
       {/* 2FA MODAL OVERLAY */}
       {show2FAModal && (
@@ -184,13 +184,7 @@ export default function UserProfileTab({
         </div>
       )}
 
-      {/* Navigation & Header */}
-      <div className="flex items-center gap-3">
-        <div>
-          <h2 className="text-xl font-black tracking-tight text-neutral-900 leading-none">Profile Settings</h2>
-          <p className="text-xs text-neutral-500 font-medium mt-1">Manage your administrative credentials and security preferences.</p>
-        </div>
-      </div>
+      <p className="text-xs text-neutral-500 font-medium">Manage your administrative credentials and security preferences.</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Header Profile Banner */}

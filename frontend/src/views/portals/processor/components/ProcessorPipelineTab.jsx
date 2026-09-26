@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Filter, Search, Inbox, FileText } from 'lucide-react';
 
-export default function ProcessorPipelineTab({
+export default function OfficeDocumentsTab({
   resolveOfficeStatus,
   search,
   setSearch,
@@ -24,7 +24,7 @@ export default function ProcessorPipelineTab({
   // Deep link handler: triggers verification modal and smooth scrolls
   useEffect(() => {
     if (targetDocId && pipelineDocs && pipelineDocs.length > 0) {
-      const matched = pipelineDocs.find(d => d.ini_id === parseInt(targetDocId));
+      const matched = pipelineDocs.find(d => String(d.ini_id) === String(targetDocId));
       if (matched) {
         handleOpenPipelineDetails(matched, false);
         if (tableRef.current) {
@@ -33,7 +33,7 @@ export default function ProcessorPipelineTab({
       }
       if (onClearTargetDocId) onClearTargetDocId();
     }
-  }, [targetDocId, pipelineDocs]);
+  }, [targetDocId, pipelineDocs, handleOpenPipelineDetails, onClearTargetDocId]);
 
   const handleFilterChange = (val) => {
     if (val === 'Incoming') {
@@ -46,13 +46,9 @@ export default function ProcessorPipelineTab({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
-      {/* HEADER SECTION */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900">Documents</h2>
-        <p className="text-sm text-gray-500 mt-1">Review and process active administrative requests across campus stations.</p>
-      </div>
+      <p className="text-sm text-gray-500">Review and process active administrative requests across campus stations.</p>
 
       {/* ACTIVE REQUESTS MATRIX TABLE */}
       <div 

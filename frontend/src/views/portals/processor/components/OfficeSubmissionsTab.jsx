@@ -1,17 +1,20 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { fetchWithAuth } from '../../../../api';
+import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 import DocumentSubmissionModal from '../../originator/modals/DocumentSubmissionModal';
 import OfficeDocumentModal from '../../../shared/modals/DocumentTrackingModal';
 import { formatPhilippineDateTime, formatPhilippineDate } from '../../../../utils/philippineTime';
-import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Building, Filter, MoreVertical } from 'lucide-react';
+import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Filter, MoreVertical } from 'lucide-react';
 
-export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} }) {
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
+
+export default function OfficeSubmissionsTab({ officeId, processTypes: providedProcessTypes = [], onProcessed = () => {}, onOpenChat }) {
   const userId = localStorage.getItem('userId');
-  
+
   // --- STATE ---
   const [estimateBase, setEstimateBase] = useState(() => Date.now());
   const [documents, setDocuments] = useState([]);
-  const [processTypes, setProcessTypes] = useState([]);
+  const [processTypes, setProcessTypes] = useState(providedProcessTypes);
   const [loading, setLoading] = useState(true);
   const [isDocsLoading, setIsDocsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,14 +23,13 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const [selected, setSelected] = useState(null);
   const [revision, setRevision] = useState(null);
   const [busy, setBusy] = useState(false);
-  
+
   // Search & Filter State
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
-  
   const [predictions, setPredictions] = useState([]);
-  const [customHours, setCustomHours] = useState(null);
+  const [customEstimate, setCustomEstimate] = useState({ routeKey: '', hours: null });
   const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false });
 
   // --- OPTIMIZATION: Search Debouncing ---
@@ -43,15 +45,74 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
     const data = await res.json(); if (!res.ok) throw new Error(data.error); return data;
   }).then(data => { setDocuments(data); setError(''); }).catch(err => setError(err.message)).finally(() => setIsDocsLoading(false)), [userId]);
 
-  const workflows = useCallback(() => fetchWithAuth('/api/process-types').then(async res => {
+  const workflows = useCallback(() => {
+    if (providedProcessTypes.length) {
+      setProcessTypes(providedProcessTypes);
+      setLoading(false);
+      return Promise.resolve();
+    }
+    return fetchWithAuth('/api/process-types').then(async res => {
     const data = await res.json(); if (!res.ok) throw new Error(data.error); return data;
-  }).then(data => { setProcessTypes(data); setWorkflowError(''); }).catch(err => setWorkflowError(err.message)).finally(() => setLoading(false)), []);
+    }).then(data => { setProcessTypes(data); setWorkflowError(''); }).catch(err => setWorkflowError(err.message)).finally(() => setLoading(false));
+  }, [providedProcessTypes]);
 
-  useEffect(() => { load(); workflows(); const timer = setInterval(load, 15000); return () => clearInterval(timer); }, [officeId, load, workflows]);
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
-  useEffect(() => { let cancelled = false; fetchWithAuth('/api/analytics/edc').then(async res => { if (res.ok) { const data = await res.json(); if (!cancelled && Array.isArray(data)) setPredictions(data); } }).catch(() => {}); return () => { cancelled = true; }; }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(workflows, 0);
+    return () => window.clearTimeout(timer);
+  }, [workflows]);
 
-  useEffect(() => { let cancelled = false; const ids = form.customRoute?.stops?.filter(Boolean); if (!ids?.length) { setCustomHours(null); return; } fetchWithAuth(`/api/analytics/edc?route=${ids.join(',')}`).then(async r => r.ok ? r.json() : []).then(d => { if (!cancelled) setCustomHours(d[0]?.estimated_hours_to_complete ?? null); }).catch(() => setCustomHours(null)); return () => { cancelled = true; }; }, [form.customRoute?.stops?.join(',')]);
+  // --- REAL-TIME WEBSOCKET EFFECT (Replaces setInterval) ---
+  useEffect(() => {
+    if (!officeId) return undefined;
+
+    const socket = io(SOCKET_URL, { 
+      secure: true, 
+      reconnection: true 
+    });
+    
+    socket.on('connect', () => {
+      // Listen to this specific office's updates
+      socket.emit('join-office-room', officeId);
+      socket.emit('join-user-room', userId);
+    });
+
+    socket.on('pipeline-updated', () => {
+      load(); // Instantly refresh table when a document changes
+    });
+    socket.on('document-updated', load);
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [officeId, userId, load]);
+
+  useEffect(() => { 
+    let cancelled = false; 
+    fetchWithAuth('/api/analytics/edc').then(async res => { 
+      if (res.ok) { 
+        const data = await res.json(); 
+        if (!cancelled && Array.isArray(data)) setPredictions(data); 
+      } 
+    }).catch(() => {}); 
+    return () => { cancelled = true; }; 
+  }, []);
+
+  const customRouteKey = form.customRoute?.stops?.filter(Boolean).join(',') || '';
+  useEffect(() => {
+    if (!customRouteKey) return undefined;
+    let cancelled = false;
+    fetchWithAuth(`/api/analytics/edc?route=${customRouteKey}`).then(async r => r.ok ? r.json() : []).then(d => {
+      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, hours: d[0]?.estimated_hours_to_complete ?? null });
+    }).catch(() => {
+      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, hours: null });
+    });
+    return () => { cancelled = true; };
+  }, [customRouteKey]);
 
   // --- LOGIC ---
   const process = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
@@ -59,7 +120,8 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const hours = Number(predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete);
   const estimate = Number.isFinite(hours) && hours >= 0 ? new Date(estimateBase + hours * 3600000) : null;
   const edc = estimate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(estimate) : null;
-  const customEdc = form.customRoute?.stops?.every(Boolean) && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + customHours * 3600000)) : null;
+  const customHours = customEstimate.routeKey === customRouteKey ? customEstimate.hours : null;
+  const customEdc = form.customRoute?.stops?.every(Boolean) && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(estimateBase + customHours * 3600000)) : null;
   const resolvedEdc = form.customRoute ? customEdc : edc;
 
   const submit = async e => {
@@ -85,6 +147,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const getStatusStyles = (status) => {
     const s = status?.toLowerCase() || '';
     if (s.includes('completed') || s.includes('finalized')) return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    if (s.includes('cancelled')) return 'bg-neutral-100 text-neutral-700 border border-neutral-300';
     if (s.includes('action required') || s.includes('halted')) return 'bg-red-50 text-[#D32F2F] border border-red-200';
     return 'bg-amber-50 text-amber-700 border border-amber-200';
   };
@@ -99,14 +162,11 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   }, [documents, debouncedSearch, filterStatus]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">Office Submissions</h2>
-          <p className="text-xs text-gray-500 font-medium mt-1">Manage and track documents submitted by your office.</p>
-        </div>
+        <p className="text-xs text-gray-500 font-medium">Manage and track only the documents you submitted.</p>
         <button 
           onClick={() => { setEstimateBase(Date.now()); setLoading(true); setShowModal(true); workflows(); }} 
           className="flex items-center justify-center gap-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200 w-full sm:w-auto"
@@ -147,6 +207,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                 <option value="Pending">Pending</option>
                 <option value="In Transit">In Transit</option>
                 <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
             </div>
 
@@ -166,7 +227,15 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
 
         {/* Table Body - Mobile Friendly Horizontal Scroll */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-[1000px] text-left text-sm border-collapse">
+          <table className="w-full min-w-[1180px] table-fixed text-left text-sm border-collapse">
+            <colgroup>
+              <col className="w-[24%]" />
+              <col className="w-[19%]" />
+              <col className="w-[18%]" />
+              <col className="w-[12%]" />
+              <col className="w-[13%]" />
+              <col className="w-[14%]" />
+            </colgroup>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-wider">
                 <th className="p-4">Document Name</th>
@@ -183,8 +252,8 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
               {isDocsLoading && documents.length === 0 ? (
                 [...Array(4)].map((_, i) => (
                   <tr key={`skeleton-${i}`}>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+                    <td className="p-4 align-middle">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-gray-200 animate-pulse shrink-0"></div>
                         <div className="space-y-2">
                           <div className="h-4 w-48 bg-gray-200 rounded animate-pulse"></div>
@@ -205,40 +274,41 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                   <tr key={d.ini_id} 
                       onClick={() => setSelected(d)}
                       className={`transition-colors cursor-pointer group ${selected?.ini_id === d.ini_id ? 'bg-red-50/40' : 'hover:bg-gray-50/80'}`}>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+                    <td className="p-4 align-middle">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className={`p-2 rounded-lg transition-all duration-150 shrink-0 ${selected?.ini_id === d.ini_id ? 'bg-white shadow-sm border border-red-100' : 'bg-gray-50 border border-gray-100 group-hover:bg-white group-hover:border-red-100 group-hover:shadow-sm'}`}>
                           <FileText size={16} className={`transition-colors duration-150 ${selected?.ini_id === d.ini_id ? 'text-[#D32F2F]' : 'text-gray-500 group-hover:text-[#D32F2F]'}`} />
                         </div>
-                        <div>
-                          <p className="font-bold text-gray-900 text-sm leading-tight line-clamp-2">{d.title}</p>
-                          <p className="text-[10px] text-gray-500 font-medium mt-1 uppercase tracking-wide">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-bold text-gray-900 text-sm leading-5" title={d.title}>{d.title}</p>
+                          <p className="mt-1 whitespace-nowrap text-[10px] font-medium uppercase tracking-wide text-gray-500">
                             {formatPhilippineDateTime(d.created_at)}
                           </p>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4">
-                      <span className="font-mono font-bold text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2 py-1 rounded whitespace-nowrap">
+                    <td className="p-4 align-middle">
+                      <span title={d.qr_code} className="block max-w-full truncate rounded border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-xs font-bold text-gray-600">
                         {d.qr_code}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className="flex items-center gap-1.5 text-xs text-gray-700 font-medium whitespace-nowrap">
+                    <td className="p-4 align-middle">
+                      <span className="flex items-start gap-1.5 text-xs font-medium leading-5 text-gray-700">
                         <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                        {d.process_name}
+                        <span className="line-clamp-2" title={d.process_name}>{d.process_name}</span>
                       </span>
                     </td>
-                    <td className="p-4 text-xs text-gray-600 font-medium whitespace-nowrap">
+                    <td className="p-4 align-middle text-xs text-gray-600 font-medium whitespace-nowrap">
                       {d.edc ? new Date(d.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
                     </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm whitespace-nowrap ${getStatusStyles(d.status)}`}>
-                        {d.status?.toLowerCase() === 'completed' ? 'Completed' : 
-                         d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
+                    <td className="p-4 align-middle">
+                      <span className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
+                        {d.status?.toLowerCase() === 'completed' ? 'Completed' :
+                          d.status?.toLowerCase() === 'cancelled' ? 'Cancelled' :
+                          d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
                       </span>
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="p-4 text-center align-middle">
                       <button 
                         onClick={(e) => { e.stopPropagation(); setSelected(d); }}
                         className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 hover:shadow-sm text-gray-500 hover:text-gray-900 mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
@@ -247,14 +317,14 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                       </button>
                       
                       {d.status?.toLowerCase() === 'action required' && (
-                        <div className="mt-3 text-left bg-red-50 border border-red-200 p-3 rounded-xl min-w-[200px]" onClick={e => e.stopPropagation()}>
+                        <div className="mt-3 w-full rounded-xl border border-red-200 bg-red-50 p-3 text-left" onClick={e => e.stopPropagation()}>
                           <p className="text-[11px] text-red-800 font-medium mb-2 leading-relaxed">
                             <strong className="block text-[10px] uppercase tracking-wider mb-0.5">Remarks:</strong>
                             {d.last_action}
                           </p>
                           {d.release_time ? (
                             <button 
-                              onClick={(e) => { e.stopPropagation(); setRevision({ ...d }); }}
+                              onClick={(e) => { e.stopPropagation(); setRevision({ ...d }); }} 
                               className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-red-700 hover:text-red-900 cursor-pointer mt-2 transform active:scale-95 transition-[transform,colors] duration-200"
                             >
                               <RefreshCw size={12} /> Correct & Resubmit
@@ -316,6 +386,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
           isHistoryDetails 
           onClose={() => setSelected(null)} 
           onRefresh={load} 
+          onOpenChat={onOpenChat}
         />
       )}
 

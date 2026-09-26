@@ -122,14 +122,11 @@ export default function GSOProcurementTab({
   ];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">List of Requests</h2>
-          <p className="text-sm text-gray-500 mt-1">Review, organize, and assign driver and room requests.</p>
-        </div>
+        <p className="text-sm text-gray-500">Review, organize, and assign driver and room requests.</p>
         <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={() => setShowPrintModal(true)} 
@@ -196,8 +193,8 @@ export default function GSOProcurementTab({
                   </>
                 ) : (
                   <>
-                    <option value="Reserved">Pending</option>
-                    <option value="Confirmed">Confirmed</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
                   </>
                 )}
               </select>
@@ -221,6 +218,10 @@ export default function GSOProcurementTab({
             <tbody className="divide-y divide-gray-100 font-medium">
               {items.map((row, idx) => {
                 const isLog = row._type === 'logistics';
+                const hasVehicleAssignment = Boolean(
+                  (row.assigned_vehicle_id && row.assigned_driver_id) ||
+                  (row.vehicle_to_be_used && row.designated_driver)
+                );
                 const dateObj = new Date(isLog ? row.borrowed_at : row.reservation_date);
                 const requestor = row.requestor || row.requestor_name || 'Anonymous';
                 
@@ -279,12 +280,12 @@ export default function GSOProcurementTab({
                     {/* STATUS */}
                     <td className="p-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border shadow-2xs ${
-                        row.status === 'Confirmed' || row.status === 'Returned'
+                        row.status === 'Approved' || row.status === 'Returned'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                           : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
-                          row.status === 'Confirmed' || row.status === 'Returned' ? 'bg-emerald-500' : 'bg-amber-500'
+                          row.status === 'Approved' || row.status === 'Returned' ? 'bg-emerald-500' : 'bg-amber-500'
                         }`}></span>
                         {row.status === 'Reserved' ? 'Pending' : row.status}
                       </span>
@@ -305,7 +306,7 @@ export default function GSOProcurementTab({
 
                           {/* 2. Vehicle Assignment Logic */}
                           {row._type === 'vehicle' && (
-                            row.assigned_vehicle_id && row.assigned_driver_id ? (
+                            hasVehicleAssignment ? (
                               /* Case A: Already Assigned -> Disabled "Assigned" Chip */
                               <span 
                                 title={`Assigned: ${row.vehicle_to_be_used || 'Vehicle'} · Driver: ${row.designated_driver || 'Driver'}`}
@@ -314,8 +315,8 @@ export default function GSOProcurementTab({
                                 <UserCheck size={13} className="text-emerald-600" />
                                 Assigned
                               </span>
-                            ) : row.status === 'Confirmed' ? (
-                              /* Case B: Confirmed but Not Assigned -> Clickable Assign Button */
+                            ) : row.status === 'Approved' ? (
+                              /* Case B: Approved but not assigned */
                               <button 
                                 onClick={() => handleAssignVehicle(row)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-800 hover:bg-red-900 text-white font-bold rounded-lg text-[11px] shadow-2xs cursor-pointer transition-colors"
@@ -324,10 +325,10 @@ export default function GSOProcurementTab({
                                 Assign Driver
                               </button>
                             ) : (
-                              /* Case C: Still Pending -> Disabled until Confirmed */
+                              /* Case C: Still pending */
                               <button 
                                 disabled
-                                title="Complete document checklist and confirm request before assigning driver and vehicle."
+                                title="Complete the document checklist and approve the request before assigning a driver and vehicle."
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-400 font-bold rounded-lg text-[11px] cursor-not-allowed select-none opacity-80"
                               >
                                 <UserCheck size={13} />

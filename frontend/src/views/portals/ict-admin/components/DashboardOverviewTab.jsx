@@ -1,15 +1,9 @@
-import React from 'react';
-
 export default function DashboardOverviewTab({ data }) {
   return (
     <div className="space-y-6">
-      {/* HEADER */}
-      <div className="bg-white p-6 rounded-2xl border border-gray-300 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Operations Control Center</h2>
-          <p className="text-sm text-gray-500 mt-1">Real-time telemetry monitoring for data pipelines, traffic flows, and backlogs.</p>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 text-xs font-bold shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-gray-500">Real-time telemetry monitoring for data pipelines, traffic flows, and backlogs.</p>
+        <div className="flex w-fit shrink-0 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-sm">
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
@@ -63,7 +57,7 @@ export default function DashboardOverviewTab({ data }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* LEFT COLUMN: LIVE STREAM AUDIT LOG FEED */}
-        <div className="lg:col-span-2 bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[500px]">
+        <div className="lg:col-span-2 bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[600px]">
           <div className="p-5 border-b border-gray-200 bg-gray-50/80">
             <h3 className="text-sm font-black text-gray-900 flex items-center gap-2 uppercase tracking-wide">
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,7 +120,7 @@ export default function DashboardOverviewTab({ data }) {
         </div>
 
         {/* RIGHT COLUMN: DELAY CONGESTION ALERTS PANEL */}
-        <div className="bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[500px]">
+        <div className="bg-white border border-gray-300 rounded-2xl shadow-md overflow-hidden flex flex-col h-[600px]">
           <div className="p-5 border-b border-gray-200 bg-red-50/50">
             <h4 className="text-sm font-black text-gray-900 flex items-center gap-2 uppercase tracking-wide">
               <svg className="w-5 h-5 text-[#D32F2F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

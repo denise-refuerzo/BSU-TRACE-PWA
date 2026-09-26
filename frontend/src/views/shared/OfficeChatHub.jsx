@@ -1,8 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, ChevronRight, Hash, ChevronLeft, ArrowLeft } from 'lucide-react';
+import { useState, useEffect, useRef, useEffectEvent } from 'react';
+import { createRealtimeClient as io } from '../../utils/realtimeClient';
+import { publicReference } from '../../utils/publicReference';
+import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, Hash, ArrowLeft } from 'lucide-react';
 import { fetchWithAuth } from "../../api";
 
-export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = null, onClearTargetDoc = null }) {
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
+
+function mergeMessages(previous, incoming) {
+  const messages = new Map(previous.map(message => [String(message.message_id), message]));
+  incoming.forEach(message => messages.set(String(message.message_id), message));
+  return [...messages.values()].sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at));
+}
+
+export default function OfficeChatHub({ userId, officeId, targetDoc = null, onClearTargetDoc = null, compact = false }) {
   const [directory, setDirectory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -12,68 +22,65 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
   const [textInput, setTextInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingDirectory, setLoadingDirectory] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  
   const messageEndRef = useRef(null);
-
-  useEffect(() => {
-    fetchActiveDirectory();
-  }, []);
-
-  useEffect(() => {
-    if (activeChannel) {
-      fetchMessageLogs(activeChannel.roomId);
-      const streamTimer = setInterval(() => fetchMessageLogs(activeChannel.roomId), 5000);
-      return () => clearInterval(streamTimer);
-    }
-  }, [activeChannel]);
-
-  useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const socketRef = useRef(null);
+  const selectionVersion = useRef(0);
+  const activeRoomRef = useRef(null);
 
   const fetchActiveDirectory = async () => {
     setLoadingDirectory(true);
     try {
       const res = await fetchWithAuth('/api/chat/active-documents-directory');
       const data = await res.json();
-      if (res.ok) setDirectory(data);
+      if (!res.ok) throw new Error('Unable to load conversations. Please try again.');
+      setDirectory(Array.isArray(data) ? data : []);
     } catch (err) { 
-      console.error(err); 
+      console.error(err);
+      setError('Unable to load conversations. Use Refresh to try again.');
     } finally {
       setLoadingDirectory(false);
     }
   };
 
-  // Immediate selection of targetDoc when redirected from Document Tracking Details
-  useEffect(() => {
-    if (targetDoc) {
-      handleSelectDocument(targetDoc, true);
-      if (onClearTargetDoc) onClearTargetDoc();
-    }
-  }, [targetDoc]);
-
   const handleSelectDocument = async (doc, autoSelectFirstChannel = false) => {
+    const version = ++selectionVersion.current;
+    const directoryContext = directory.find(item => String(item.ini_id) === String(doc.ini_id));
+    const selectedDocument = { ...doc, ...directoryContext };
+    activeRoomRef.current = null;
     setDirectory(prev => prev.map(d => d.ini_id === doc.ini_id ? { ...d, hasAnyChat: false } : d));
-    setSelectedDoc(doc);
+    setSelectedDoc(selectedDocument);
     setActiveChannel(null);
     setMessages([]);
+    setChannels([]);
+    setError('');
+    setLoading(true);
 
     try {
       const res = await fetchWithAuth(`/api/chat/document-channels/${doc.ini_id}`);
       const data = await res.json();
-      if (res.ok && Array.isArray(data)) {
+      if (version !== selectionVersion.current) return;
+      if (!res.ok) throw new Error(data.error || 'Unable to load offices.');
+      if (Array.isArray(data)) {
+        const channelContext = data[0] || {};
+        const canViewAllChannels = Boolean(selectedDocument.canViewAllChannels || channelContext.canViewAllChannels);
+        const viewerRole = selectedDocument.viewerRole || channelContext.viewerRole || 'Processing Office';
+        setSelectedDoc(previous => String(previous?.ini_id) === String(doc.ini_id) ? { ...previous, canViewAllChannels, viewerRole } : previous);
         setChannels(data);
 
-        // Auto-select workspace channel for processors
-        if (roleId === 2 && officeId) {
+        // Processing offices use their station. Submitters and collaborators can choose any station.
+        if (!canViewAllChannels && officeId) {
           const targetOfficeChannel = data.find(c => c.officeId === parseInt(officeId));
           if (targetOfficeChannel) {
             handleActivateChannel(doc.ini_id, targetOfficeChannel);
             return;
           }
+          setError('No conversation is available for your office on this document.');
         }
 
-        // Auto-select first unlocked station for originators if requested
-        if (autoSelectFirstChannel && data.length > 0) {
+        if (canViewAllChannels && autoSelectFirstChannel && data.length > 0) {
           const firstAvailable = data.find(c => !c.isLocked) || data[0];
           if (firstAvailable) {
             handleActivateChannel(doc.ini_id, firstAvailable);
@@ -81,11 +88,19 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         }
       }
     } catch (err) { 
-      console.error(err); 
+      if (version === selectionVersion.current) setError('Unable to load offices for this document. Please try again.');
+      console.error(err);
+    } finally {
+      if (version === selectionVersion.current) setLoading(false);
     }
   };
 
   const handleActivateChannel = async (docId, channel) => {
+    const version = ++selectionVersion.current;
+    activeRoomRef.current = null;
+    setActiveChannel(null);
+    setMessages([]);
+    setError('');
     setChannels(prev => prev.map(c => c.officeId === channel.officeId ? { ...c, hasChat: false } : c));
     setLoading(true);
 
@@ -96,30 +111,28 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         body: JSON.stringify({ iniId: docId, officeId: channel.officeId })
       });
       const data = await res.json();
+      if (version !== selectionVersion.current) return;
       if (res.ok) {
+        activeRoomRef.current = data.roomId;
         setActiveChannel({ ...channel, roomId: data.roomId });
+      } else {
+        setError(data.error || 'Unable to open this conversation.');
       }
     } catch (err) { 
-      console.error(err); 
+      if (version === selectionVersion.current) setError('Unable to open this conversation. Please try again.');
+      console.error(err);
     } finally { 
-      setLoading(false); 
-    }
-  };
-
-  const fetchMessageLogs = async (roomId) => {
-    try {
-      const res = await fetchWithAuth(`/api/chat/rooms/${roomId}/messages`);
-      const data = await res.json();
-      if (res.ok) setMessages(data);
-    } catch (err) { 
-      console.error(err); 
+      if (version === selectionVersion.current) setLoading(false);
     }
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!textInput.trim() || !activeChannel) return;
-
+    if (!textInput.trim() || !activeChannel || sending) return;
+    const roomId = activeChannel.roomId;
+    const draft = textInput;
+    setSending(true);
+    setError('');
     try {
       const res = await fetchWithAuth('/api/chat/messages', {
         method: 'POST',
@@ -127,26 +140,100 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         body: JSON.stringify({ roomId: activeChannel.roomId, messageText: textInput })
       });
       if (res.ok) {
-        setTextInput('');
-        fetchMessageLogs(activeChannel.roomId);
+        const message = await res.json();
+        if (String(activeRoomRef.current) === String(roomId)) {
+          setMessages(previous => mergeMessages(previous, [message]));
+          setTextInput(current => current === draft ? '' : current);
+        }
+      } else {
+        setError('Message was not sent. Your draft is still available to retry.');
       }
     } catch (err) { 
-      console.error(err); 
+      console.error(err);
+      setError('Could not verify delivery. Check the conversation before retrying.');
+    } finally {
+      setSending(false);
     }
   };
+
+  const refreshDirectory = useEffectEvent(() => fetchActiveDirectory());
+  const openTarget = useEffectEvent(doc => {
+    handleSelectDocument(doc, true);
+    onClearTargetDoc?.();
+  });
+
+  useEffect(() => {
+    const socket = io(SOCKET_URL, { reconnection: true });
+    socketRef.current = socket;
+    let connectedOnce = false;
+    const connect = () => {
+      if (userId) socket.emit('join-user-room', userId);
+      if (officeId) socket.emit('join-office-room', officeId);
+      if (connectedOnce) refreshDirectory();
+      connectedOnce = true;
+    };
+    const refresh = () => refreshDirectory();
+    socket.on('connect', connect);
+    socket.on('chat-badge-updated', refresh);
+    const initial = setTimeout(refresh, 0);
+    return () => { clearTimeout(initial); socket.disconnect(); };
+  }, [userId, officeId]);
+
+  useEffect(() => {
+    if (!targetDoc) return;
+    const timer = setTimeout(() => openTarget(targetDoc), 0);
+    return () => clearTimeout(timer);
+  }, [targetDoc]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!activeChannel || !socket) return;
+    const roomId = activeChannel.roomId;
+    let cancelled = false;
+    const loadMessages = async () => {
+      try {
+        const res = await fetchWithAuth(`/api/chat/rooms/${roomId}/messages`);
+        if (!res.ok) throw new Error('Unable to load messages.');
+        const data = await res.json();
+        if (!cancelled && String(activeRoomRef.current) === String(roomId)) setMessages(previous => mergeMessages(previous, data));
+      } catch (err) { if (!cancelled) setError(err.message); }
+    };
+    const join = () => {
+      socket.emit('join-chat-channel', roomId);
+      loadMessages();
+    };
+    const receive = message => {
+      if (String(activeRoomRef.current) === String(roomId) && String(message.room_id) === String(roomId)) setMessages(previous => mergeMessages(previous, [message]));
+    };
+    socket.on('new-chat-message', receive);
+    socket.on('connect', join);
+    // Reconnection runs join again and retrieves any messages missed offline.
+    if (!socket.connected) loadMessages();
+    return () => {
+      cancelled = true;
+      socket.emit('leave-chat-channel', roomId);
+      socket.off('new-chat-message', receive);
+      socket.off('connect', join);
+    };
+  }, [activeChannel, userId, officeId]);
+
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [messages]);
 
   const filteredDirectory = directory.filter(doc => 
     doc.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const adHocDetourChannel = roleId === 2 && channels.find(c => c.officeId !== parseInt(officeId));
+  const usesChannelPicker = Boolean(selectedDoc?.canViewAllChannels);
+  const adHocDetourChannel = !usesChannelPicker && channels.find(c => c.officeId !== parseInt(officeId));
 
   return (
-    <div className="max-w-6xl mx-auto h-[calc(100vh-10rem)] md:h-[calc(100vh-12rem)] border border-gray-200 bg-white rounded-2xl shadow-sm flex overflow-hidden text-left relative">
+    <div className={`${compact ? 'h-full w-full' : 'max-w-6xl mx-auto h-[calc(100vh-10rem)] md:h-[calc(100vh-12rem)]'} border border-gray-200 bg-white ${compact ? 'rounded-none border-0' : 'rounded-2xl shadow-sm'} flex overflow-hidden text-left relative`}>
       
       {/* 1. DOCUMENT LIST (Full width on mobile if no doc selected) */}
-      <div className={`flex-col flex-shrink-0 w-full md:w-72 lg:w-80 border-r border-gray-200 bg-gray-50/50 ${
-        selectedDoc ? 'hidden md:flex' : 'flex'
+      <div className={`flex-col min-h-0 flex-shrink-0 w-full ${compact ? '' : 'md:w-72 lg:w-80'} border-r border-gray-200 bg-gray-50/50 ${
+        selectedDoc ? (compact ? 'hidden' : 'hidden md:flex') : 'flex'
       }`}>
         <div className="p-4 border-b border-gray-200 bg-white space-y-3 shrink-0">
           <div className="flex justify-between items-center">
@@ -176,6 +263,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         </div>
         
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+          {error && !selectedDoc && <p role="alert" className="p-2 text-xs text-red-700">{error}</p>}
           {filteredDirectory.map(doc => (
             <button 
               key={doc.ini_id} 
@@ -195,7 +283,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                 {doc.hasAnyChat && <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shrink-0 animate-pulse"></span>}
               </div>
               <div className="flex items-center justify-between text-[10px] text-gray-400 font-medium">
-                <span className="font-mono">ID: {doc.ini_id}</span>
+                <span className="font-mono">{publicReference('DOC', doc.ini_id)}</span>
                 <span>{doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
               </div>
             </button>
@@ -209,16 +297,16 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
         </div>
       </div>
 
-      {/* 2. CHANNELS LIST (Mobile step 2: shown when doc selected but no chat active) */}
-      {roleId === 1 && selectedDoc && (
-        <div className={`flex-col flex-shrink-0 w-full md:w-64 border-r border-gray-200 bg-white ${
-          activeChannel ? 'hidden md:flex' : 'flex'
+      {/* Submitters and collaborators choose among the document's office channels. */}
+      {usesChannelPicker && selectedDoc && (
+        <div className={`flex-col min-h-0 flex-shrink-0 w-full ${compact ? '' : 'md:w-64'} border-r border-gray-200 bg-white ${
+          activeChannel ? (compact ? 'hidden' : 'hidden md:flex') : 'flex'
         }`}>
           <div className="p-4 border-b border-gray-200 bg-gray-50/70 shrink-0 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => setSelectedDoc(null)} 
-                className="md:hidden p-1.5 -ml-1 text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer"
+                onClick={() => { selectionVersion.current += 1; setSelectedDoc(null); setLoading(false); }}
+                className={`${compact ? '' : 'md:hidden'} p-1.5 -ml-1 text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer`}
                 title="Back to Documents"
               >
                 <ArrowLeft size={16} />
@@ -258,16 +346,48 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                 </div>
               </button>
             ))}
-            {channels.length === 0 && (
+            {error && <p role="alert" className="text-xs text-red-700 p-2">{error}</p>}
+            {loading && <p role="status" className="text-xs text-gray-500 p-2">Opening conversation…</p>}
+            {!loading && channels.length === 0 && (
               <p className="text-xs text-center text-gray-400 mt-8">No stations mapped to this file yet.</p>
             )}
           </div>
         </div>
       )}
 
+      {/* Office users have one relevant channel, so resolve it without showing the channel picker. */}
+      {!usesChannelPicker && selectedDoc && !activeChannel && (
+        <div className="flex min-h-0 w-full flex-1 flex-col bg-white">
+          <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50/70 p-4">
+            <button
+              type="button"
+              onClick={() => { selectionVersion.current += 1; setSelectedDoc(null); setLoading(false); setError(''); }}
+              className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-200"
+              aria-label="Back to documents"
+            >
+              <ArrowLeft size={17} />
+            </button>
+            <p className="min-w-0 truncate text-xs font-bold text-gray-800">{selectedDoc.title}</p>
+          </div>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+            {loading ? (
+              <>
+                <RefreshCw size={24} className="animate-spin text-[#D32F2F]" />
+                <div><p role="status" className="text-sm font-bold text-gray-800">Opening conversation…</p><p className="mt-1 text-xs text-gray-400">Connecting to your office channel.</p></div>
+              </>
+            ) : (
+              <>
+                <MessageSquare size={24} className="text-gray-300" />
+                <div><p className="text-sm font-bold text-gray-800">Conversation unavailable</p><p role="alert" className="mt-1 text-xs text-gray-500">{error || 'This document has no conversation for your office.'}</p></div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 3. ACTIVE CHAT WORKSPACE (Full width on mobile when channel is active) */}
-      <div className={`flex-col flex-1 w-full bg-gray-50/50 ${
-        activeChannel ? 'flex' : 'hidden md:flex'
+      <div className={`flex-col min-h-0 min-w-0 flex-1 w-full bg-gray-50/50 ${
+        activeChannel ? 'flex' : (compact ? 'hidden' : 'hidden md:flex')
       }`}>
         {activeChannel ? (
           <>
@@ -276,10 +396,12 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => {
-                    if (roleId === 1) setActiveChannel(null);
-                    else setSelectedDoc(null);
+                    selectionVersion.current += 1;
+                    activeRoomRef.current = null;
+                    setActiveChannel(null);
+                    if (!usesChannelPicker) setSelectedDoc(null);
                   }}
-                  className="md:hidden p-1.5 -ml-1 text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer"
+                  className={`${compact ? '' : 'md:hidden'} p-1.5 -ml-1 text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer`}
                   title="Back"
                 >
                   <ArrowLeft size={18} />
@@ -295,8 +417,8 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                 </div>
               </div>
 
-              {/* Ad-Hoc sub tabs for Processor (Role 2) */}
-              {roleId === 2 && adHocDetourChannel && (
+              {/* Ad-hoc station switcher for processing-office participants. */}
+              {!usesChannelPicker && adHocDetourChannel && (
                 <div className="flex bg-gray-100 p-1 rounded-lg text-xs font-bold w-full overflow-x-auto">
                   <button 
                     onClick={() => handleSelectDocument(selectedDoc, false)}
@@ -304,7 +426,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                       activeChannel.officeId === parseInt(officeId) ? 'bg-white text-[#D32F2F] shadow-xs' : 'text-gray-600'
                     }`}
                   >
-                    Originator
+                    Submitter channel
                   </button>
                   <button 
                     onClick={() => handleActivateChannel(selectedDoc.ini_id, adHocDetourChannel)}
@@ -319,9 +441,9 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
             </div>
 
             {/* Messages Feed */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 bg-gray-50/70">
+            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 bg-gray-50/70">
               {messages.map(msg => {
-                const isMe = msg.sender_id === parseInt(userId);
+                const isMe = String(msg.sender_id) === String(userId);
                 return (
                   <div 
                     key={msg.message_id} 
@@ -352,6 +474,7 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
             </div>
 
             {/* Input Bar or Locked Status */}
+            {error && <p role="alert" className="px-4 py-2 text-xs text-red-700 bg-red-50">{error}</p>}
             {activeChannel.isLocked ? (
               <div className="p-3.5 border-t border-gray-200 bg-gray-100 flex items-center justify-center gap-2 text-gray-500 font-bold text-xs select-none">
                 <Lock size={14} className="text-gray-400" /> {activeChannel.statusMessage}
@@ -363,11 +486,12 @@ export default function OfficeChatHub({ userId, roleId, officeId, targetDoc = nu
                   placeholder="Type your message..." 
                   value={textInput} 
                   onChange={e => setTextInput(e.target.value)}
-                  className="flex-1 border border-gray-300 px-3.5 py-2.5 text-xs md:text-sm rounded-xl outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] bg-gray-50 focus:bg-white transition-all shadow-2xs" 
+                  className="min-w-0 flex-1 border border-gray-300 px-3.5 py-2.5 text-base md:text-sm rounded-xl outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] bg-gray-50 focus:bg-white transition-all shadow-2xs"
                 />
                 <button 
                   type="submit" 
-                  disabled={!textInput.trim()} 
+                  disabled={!textInput.trim() || sending}
+                  aria-label="Send message"
                   className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white rounded-xl shadow-xs transition-all disabled:opacity-40 cursor-pointer flex items-center justify-center"
                 >
                   <Send size={16} />

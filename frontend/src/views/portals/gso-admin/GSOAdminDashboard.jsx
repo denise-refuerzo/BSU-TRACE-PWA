@@ -1,11 +1,15 @@
 import OfficeSubmissionsTab from '../processor/components/OfficeSubmissionsTab';
-import React, { useState, useRef, useEffect } from 'react';
+import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
-  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, MessageSquare, Menu, X 
+  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X,
+  ChevronDown, Boxes, CalendarClock
 } from 'lucide-react';
-import { fetchWithAuth } from '../../../api';
+import { endSession, fetchWithAuth } from '../../../api';
+import { prepareDemandChart } from './demandAnalytics';
+import { Smartphone } from 'lucide-react';
+import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
 
 // Custom Hook
 import { useGSOAdminData } from './hooks/useGSOAdminData';
@@ -16,14 +20,21 @@ import ResourceManagementTab from './components/ResourceManagementTab';
 import VehicleAssignmentModal from './modals/VehicleAssignmentModal';
 import {confirmResourceAction, resourceSuccess, resourceError} from './resourceActions';
 import GSOProcurementTab from './components/GSOProcurementTab';
-import GSOHistoryTab from './components/GSOHistoryTab';
-import OperationalAnalyticsTab from './components/OperationalAnalyticsTab';
+import ManageBookingsTab from './components/ManageBookingsTab';
+const OperationalAnalyticsTab = lazy(() => import('./components/OperationalAnalyticsTab'));
 
 // Shared Components
 import UserProfileTab from '../../shared/components/UserProfileTab';
-import OfficeChatHub from '../../shared/OfficeChatHub';
+import FloatingChat from '../../shared/components/FloatingChat';
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import { formatOfficeLabel } from '../../../utils/officeLabel';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
+import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import AnalyticsReportModal from '../../shared/components/AnalyticsReportModal';
+import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
+import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
+import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
 
 // Modals
 import QRScannerModal from './modals/QRScannerModal';
@@ -55,14 +66,19 @@ export default function GSOAdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [previousTab, setPreviousTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [resourcesExpanded, setResourcesExpanded] = useState(true);
+  const [documentsExpanded, setDocumentsExpanded] = useState(false);
+  const [manageRefreshKey, setManageRefreshKey] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [procurementTargetSection, setProcurementTargetSection] = useState(null);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [showCompanionModal, setShowCompanionModal] = useState(false);
 
   const handleNavigateToChat = (doc) => {
     setShowDetailsModal(false);
     setChatTargetDoc(doc);
-    setActiveTab('messages');
+    setIsChatOpen(true);
     setIsSidebarOpen(false);
   };
 
@@ -91,12 +107,13 @@ export default function GSOAdminDashboard() {
     userId, userName, gsoOfficeName, gsoOfficeId, profileName, setProfileName, profileEmail, setProfileEmail,
     facultyId, departmentName, twoFaEnabled, setTwoFaEnabled, twoFaCode,
     notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
-    pipelineDocs, actionHistory, processTypes, officesList, expectedIncomingCount,
+    pipelineDocs, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
-    reservationsList, logisticsList,
-    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth,
+    reservationsList, logisticsList, resourceRevision,
+    bottleneckData, peakDemandData, isAnalyticsLoading, routePerf, systemHealth, administrativeInsights,
     fetchGSOMeta, fetchProcurementData, fetchOperationalAnalytics, fetchBlackouts, fetchMasterAssets, fetchInventoryMetrics, fetchSystemAnalyticsData
   } = useGSOAdminData();
+  const submissionAccess = useSubmissionAccess(userId);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -109,16 +126,17 @@ export default function GSOAdminDashboard() {
       fetchMasterAssets();
       fetchBlackouts();
       fetchInventoryMetrics();
-    } else if (activeTab === 'procurement') {
+    } else if (activeTab === 'procurement' || activeTab === 'manage-bookings') {
       fetchProcurementData();
     }
   }, [activeTab]);
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All'); 
-  const [historyFilter, setHistoryFilter] = useState('All');
   const [dashboardPage, setDashboardPage] = useState(1);
-  const [historyPage, setHistoryPage] = useState(1);
+  const [documentPage, setDocumentPage] = useState(1);
+  const [documentSearch, setDocumentSearch] = useState('');
+  const [documentFilter, setDocumentFilter] = useState('All');
   const [isHistoryDetails, setIsHistoryDetails] = useState(false);
   const itemsPerPage = 5;
 
@@ -166,6 +184,7 @@ export default function GSOAdminDashboard() {
   const [demandTimeFilter, setDemandTimeFilter] = useState(3);
   const [auditStartDate, setAuditStartDate] = useState('');
   const [auditEndDate, setAuditEndDate] = useState('');
+  const [showAnalyticsReport, setShowAnalyticsReport] = useState(false);
   
   const [inventoryForm, setInventoryForm] = useState({
     requestorName: '', department: '', purpose: '', duration: '', quantityNeeded: '', returnDate: '', returnTime: '', isDamaged: false, damageNotes: ''
@@ -188,6 +207,22 @@ export default function GSOAdminDashboard() {
     setIsSidebarOpen(false);
   };
 
+  const tabTitles = {
+    dashboard: 'GSO Dashboard',
+    documents: 'Active Documents',
+    submissions: 'Personal Submissions',
+    'shared-submissions': 'Shared With Me',
+    'archived-submissions': 'Archived Submissions',
+    'office-submissions': 'Office Submissions',
+    'department-submissions': 'Department Submissions',
+    resources: 'Resource Inventory',
+    procurement: 'List of Requests',
+    'manage-bookings': 'Manage Bookings',
+    analytics: 'Operational Analytics',
+    history: 'History',
+    profile: 'Profile Management'
+  };
+
   const handleNavigateToProcurement = (sectionKey) => {
     setProcurementTargetSection(sectionKey);
     setActiveTab('procurement');
@@ -197,6 +232,21 @@ export default function GSOAdminDashboard() {
   const pendingDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'pending' && d.time_in !== null && !d.time_out);
   const archivedDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'action required');
   const completedDocsList = pipelineDocs.filter(d => d.status?.toLowerCase() === 'signed' || d.status?.toLowerCase() === 'completed' || d.time_out !== null);
+
+  const resolveOfficeStatus = doc => {
+    if (Number(doc.office_status_id) === 4 || doc.status?.toLowerCase() === 'action required') return 'Action Required';
+    if (doc.time_out) return 'Completed';
+    if (Number(doc.office_status_id) === 2 || doc.status?.toLowerCase() === 'in verification') return 'In Verification';
+    if (Number(doc.office_status_id) === 3 || doc.status?.toLowerCase() === 'signed') return 'Signed';
+    if (!doc.time_in) return 'Awaiting Scan-In';
+    return 'Pending';
+  };
+  const filteredOfficeDocuments = pipelineDocs.filter(doc => {
+    const matchesSearch = `${doc.title || ''} ${doc.qr_code || ''}`.toLowerCase().includes(documentSearch.toLowerCase());
+    return matchesSearch && (documentFilter === 'All' || resolveOfficeStatus(doc) === documentFilter);
+  });
+  const currentOfficeDocuments = filteredOfficeDocuments.slice((documentPage - 1) * itemsPerPage, documentPage * itemsPerPage);
+  const totalOfficeDocumentPages = Math.max(1, Math.ceil(filteredOfficeDocuments.length / itemsPerPage));
 
   const filteredMasterDocs = pipelineDocs.filter(doc => {
     const matchesSearch = doc.title?.toLowerCase().includes(search.toLowerCase()) || doc.qr_code?.toLowerCase().includes(search.toLowerCase());
@@ -209,16 +259,6 @@ export default function GSOAdminDashboard() {
 
   const currentDashDocs = filteredMasterDocs.slice((dashboardPage - 1) * itemsPerPage, dashboardPage * itemsPerPage);
   const totalDashPages = Math.ceil(filteredMasterDocs.length / itemsPerPage);
-
-  const filteredHistoryLogs = actionHistory.filter(log => {
-    const matchesSearch = log.title?.toLowerCase().includes(search.toLowerCase()) || 
-                          log.full_name?.toLowerCase().includes(search.toLowerCase()) || 
-                          log.qr_code?.toLowerCase().includes(search.toLowerCase());
-    return historyFilter !== 'All' ? (matchesSearch && log.action_type === historyFilter) : matchesSearch;
-  });
-
-  const currentHistoryPageRows = filteredHistoryLogs.slice((historyPage - 1) * itemsPerPage, historyPage * itemsPerPage);
-  const totalHistoryTabPages = Math.ceil(filteredHistoryLogs.length / itemsPerPage);
 
   const processProcurementData = (type, dataArray, searchKey, filterKey, pageKey) => {
     let filtered = type !== 'Logistics' ? dataArray.filter(item => item.booking_type === type) : dataArray;
@@ -247,23 +287,7 @@ export default function GSOAdminDashboard() {
     .sort((a, b) => bottleneckSort === 'desc' ? b.dwell_time_hours - a.dwell_time_hours : a.dwell_time_hours - b.dwell_time_hours)
     .slice(0, 5);
 
-  const cutoffDate = new Date();
-  cutoffDate.setMonth(cutoffDate.getMonth() - demandTimeFilter);
-  const cutoffString = cutoffDate.toISOString().split('T')[0];
-  const timeFilteredDemand = peakDemandData.filter(d => d.type === 'forecast' || d.date >= cutoffString);
-  const transitionDate = timeFilteredDemand.find((d, i, arr) => d.type === 'historical' && arr[i + 1]?.type === 'forecast')?.date;
-
-  const chartReadyDemandData = timeFilteredDemand.map(d => {
-    const isForecast = d.type === 'forecast';
-    const isTransition = d.date === transitionDate;
-    return {
-      ...d,
-      van_hist: (!isForecast || isTransition) ? d.vehicle_demand : null,
-      fac_hist: (!isForecast || isTransition) ? d.facility_demand : null,
-      van_fore: (isForecast || isTransition) ? d.vehicle_demand : null,
-      fac_fore: (isForecast || isTransition) ? d.facility_demand : null,
-    };
-  });
+  const { chartReadyDemandData } = prepareDemandChart(peakDemandData, demandTimeFilter);
 
   const isAwaitingScanIn = selectedDoc && !selectedDoc.time_in;
   const isInVerification = selectedDoc?.status?.toLowerCase() === 'in verification' || ((selectedDoc?.current_step_is_adhoc || selectedDoc?.is_adhoc) && selectedDoc?.current_office !== gsoOfficeName);
@@ -350,9 +374,9 @@ export default function GSOAdminDashboard() {
           item.check_id === checkId ? { ...item, is_checked: !currentStatus } : item
         ));
         const result = await res.json();
-        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Confirmed' : 'Reserved'}));
+        setActiveChecklistBooking(previous => ({...previous, status:result.allChecked ? 'Approved' : 'Pending'}));
         fetchProcurementData();
-        await resourceSuccess(result.allChecked ? 'Request confirmed.' : 'Requirement updated. Request is pending.');
+        await resourceSuccess(result.allChecked ? 'Request approved.' : 'Requirement updated. Request is pending.');
       } else {
         const result = await res.json();
         await minimalSwal.fire({icon:'warning',title:'Request could not be confirmed',text:result.error || 'Please review the assignment and schedule.'});
@@ -479,10 +503,9 @@ export default function GSOAdminDashboard() {
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Yes, Sign Out'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        sessionStorage.removeItem('bsu_pwa_banner_dismissed');
-        localStorage.clear();
+        await endSession();
         navigate('/login');
       }
     });
@@ -510,72 +533,7 @@ export default function GSOAdminDashboard() {
     else return `${Math.round(elapsed / 86400000)} days ago`;   
   };
 
-  const handleGenerateAuditReport = () => {
-    const printWindow = window.open('', '_blank');
-    
-    const filteredDemand = (peakDemandData || []).filter(d => {
-      const dDate = d.date;
-      return (!auditStartDate || dDate >= auditStartDate) && (!auditEndDate || dDate <= auditEndDate);
-    });
-
-    const htmlContent = `
-      <html>
-        <head>
-          <title>Full Operational Audit Report</title>
-          <style>
-            body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #333; }
-            .report-header { border-bottom: 2px solid #991b1b; padding-bottom: 20px; margin-bottom: 30px; }
-            .section { margin-bottom: 40px; }
-            h2 { color: #991b1b; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
-            th { background: #f9fafb; padding: 10px; border: 1px solid #ddd; text-align: left; }
-            td { padding: 8px; border: 1px solid #ddd; }
-          </style>
-        </head>
-        <body>
-          <div class="report-header">
-            <h1>BSU GSO Operational Audit</h1>
-            <p>Generated on: ${new Date().toLocaleString()}</p>
-            <p>Range: ${auditStartDate || 'Start'} to ${auditEndDate || 'Present'}</p>
-          </div>
-
-          <div class="section">
-            <h2>1. Bottleneck Analytics</h2>
-            <table>
-              <thead><tr><th>Office Name</th><th>Dwell Time (Hours)</th></tr></thead>
-              <tbody>
-                ${(bottleneckData || []).map(b => `<tr><td>${b.office_name}</td><td>${Number(b.dwell_time_hours || 0).toFixed(2)}h</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>2. Equipment Inventory Status</h2>
-            <table>
-              <thead><tr><th>Asset</th><th>Total</th><th>Available</th></tr></thead>
-              <tbody>
-                ${(equipmentInventory || []).map(i => `<tr><td>${i.asset_name}</td><td>${i.capacity}</td><td>${i.current_stock}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>3. Demand Forecast Data</h2>
-            <table>
-              <thead><tr><th>Date</th><th>Vehicle Demand</th><th>Facility Demand</th></tr></thead>
-              <tbody>
-                ${filteredDemand.map(d => `<tr><td>${d.date}</td><td>${d.vehicle_demand || 0}</td><td>${d.facility_demand || 0}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-  };
+  const handleGenerateAuditReport = () => setShowAnalyticsReport(true);
 
   const handleInventorySubmit = async (e) => {
     e.preventDefault();
@@ -663,44 +621,78 @@ export default function GSOAdminDashboard() {
             <button onClick={() => { handleTabSelect('dashboard'); setSearch(''); setFilterStatus('All'); setDashboardPage(1); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'dashboard' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <LayoutDashboard size={18} /> GSO Dashboard
             </button>
-            <button onClick={() => handleTabSelect('submissions')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold text-neutral-400 hover:text-white"><Archive size={18}/> Office Submissions</button>
-            <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'resources' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <Archive size={18} /> School Resources
-            </button>
-            <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'procurement' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <ShoppingCart size={18} /> List of Requests
-            </button>
+            <div>
+              <button onClick={() => setDocumentsExpanded(value => !value)} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['documents','submissions','office-submissions','department-submissions','shared-submissions','archived-submissions'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+                <span className="flex items-center gap-3"><Archive size={18}/> Documents</span><ChevronDown size={15} className={`transition-transform ${documentsExpanded ? 'rotate-180' : ''}`}/>
+              </button>
+              {documentsExpanded&&<div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                <button onClick={() => handleTabSelect('documents')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='documents'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Active Documents</button>
+                <button onClick={() => handleTabSelect('submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Personal Submissions</button>
+                {submissionAccess.offices.length > 0&&<button onClick={() => handleTabSelect('office-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='office-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Office Submissions</button>}
+                {submissionAccess.departments.length > 0&&<button onClick={() => handleTabSelect('department-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='department-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Department Submissions</button>}
+                <button onClick={() => handleTabSelect('shared-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='shared-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Shared With Me</button>
+                <button onClick={() => handleTabSelect('archived-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab==='archived-submissions'?'bg-red-700 text-white':'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>Archived</button>
+              </div>}
+            </div>
+            <div>
+              <button onClick={() => setResourcesExpanded(value => !value)} aria-expanded={resourcesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${['resources','procurement','manage-bookings'].includes(activeTab) ? 'bg-[#3b2a29] text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+                <span className="flex items-center gap-3"><Archive size={18} /> School Resources</span>
+                <ChevronDown size={15} className={`transition-transform ${resourcesExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              {resourcesExpanded && (
+                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
+                  <button onClick={() => handleTabSelect('resources')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'resources' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><Boxes size={14}/>Resource Inventory</button>
+                  <button onClick={() => handleTabSelect('procurement')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'procurement' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><ShoppingCart size={14}/>List of Requests</button>
+                  <button onClick={() => handleTabSelect('manage-bookings')} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === 'manage-bookings' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}><CalendarClock size={14}/>Manage Bookings</button>
+                </div>
+              )}
+            </div>
             <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <BarChart3 size={18} /> Operational Analytics
             </button>
             <button onClick={() => handleTabSelect('history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'history' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <History size={18} /> History
             </button>
-            <button onClick={() => { handleTabSelect('messages'); setHasUnreadChats(false); }} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'messages' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <div className="flex items-center gap-3"><MessageSquare size={18} /> Chat Inbox</div>
-              {hasUnreadChats && <span className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></span>}
-            </button>
           </nav>
         </div>
-        <div className="border-t border-neutral-700 pt-4">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors">
-            <LogOut size={16} /> Sign Out
+        <div className="space-y-3">
+          {/* COMPANION SCANNER BUTTON */}
+          <button 
+            onClick={() => { setShowCompanionModal(true); setIsSidebarOpen(false); }}
+            className="w-full py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider cursor-pointer"
+          >
+            <Smartphone size={16} /> Mobile Scanner
           </button>
+          <div className="border-t border-neutral-700 pt-3">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-400 hover:text-red-400 font-semibold transition-colors cursor-pointer">
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* HEADER */}
         <header className="h-16 border-b border-neutral-200 bg-white px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
-            aria-label="Open menu"
-          >
-            <Menu size={22} />
-          </button>
+          <div className="flex min-w-0 items-center gap-3 text-left">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 -ml-2 rounded-lg text-neutral-600 hover:bg-neutral-100 md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
+                {tabTitles[activeTab] || 'GSO Admin Portal'}
+              </h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                {formatOfficeLabel(gsoOfficeName, 'General Services Office')}
+              </p>
+            </div>
+          </div>
 
-          <div className="flex items-center gap-2 md:gap-4 text-neutral-600 ml-auto">
+          <div className="ml-auto flex items-center gap-2 text-neutral-600 md:gap-4">
             <div className="relative" ref={notificationRef}>
               <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 relative transition-colors">
                 <Bell size={20} />
@@ -755,14 +747,38 @@ export default function GSOAdminDashboard() {
               handleNavigateToProcurement={handleNavigateToProcurement}
               handleOpenIncomingModal={handleOpenIncomingModal}
               processedBottleneckData={processedBottleneckData}
+              bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
               demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
-              chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
+              chartReadyDemandData={chartReadyDemandData}
             />
           )}
 
-          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} />}
+          {activeTab === 'documents' && (
+            <OfficeDocumentsTab
+              resolveOfficeStatus={resolveOfficeStatus}
+              search={documentSearch}
+              setSearch={setDocumentSearch}
+              setPipelinePage={setDocumentPage}
+              filterStatus={documentFilter}
+              setFilterStatus={setDocumentFilter}
+              currentPipeDocs={currentOfficeDocuments}
+              filteredPipelineDocs={filteredOfficeDocuments}
+              pipelineDocs={pipelineDocs}
+              pipelinePage={documentPage}
+              totalPipePages={totalOfficeDocumentPages}
+              handleOpenPipelineDetails={handleOpenDetails}
+              setActiveTab={setActiveTab}
+              setIsIncomingModalOpen={handleOpenIncomingModal}
+            />
+          )}
+
+          {activeTab === 'submissions' && <OfficeSubmissionsTab officeId={gsoOfficeId} processTypes={processTypes} onOpenChat={handleNavigateToChat} />}
+          {activeTab === 'shared-submissions' && <CollaborativeSubmissionsTab mode="shared" onOpenChat={handleNavigateToChat} />}
+          {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={handleNavigateToChat} />}
+          {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
+          {activeTab === 'department-submissions' && <SubmissionOverviewTab type="department" scopes={submissionAccess.departments} />}
           {activeTab === 'resources' && (
-              <ResourceManagementTab
+              <ResourceManagementTab key={resourceRevision}
                 onOpenRequest={(request) => {
                   setActiveTab('procurement');
                   setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
@@ -792,40 +808,35 @@ export default function GSOAdminDashboard() {
           )}
 
           {activeTab === 'analytics' && (
-            <OperationalAnalyticsTab
-              auditStartDate={auditStartDate} setAuditStartDate={setAuditStartDate}
-              auditEndDate={auditEndDate} setAuditEndDate={setAuditEndDate}
-              handleGenerateAuditReport={handleGenerateAuditReport}
-              isAnalyticsLoading={isAnalyticsLoading}
-              bottleneckSearch={bottleneckSearch} setBottleneckSearch={setBottleneckSearch}
-              bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
-              processedBottleneckData={processedBottleneckData}
-              equipmentInventory={equipmentInventory}
-              demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
-              chartReadyDemandData={chartReadyDemandData} transitionDate={transitionDate}
-              systemHealth={systemHealth} routePerf={routePerf}
-            />
+            <Suspense fallback={<div className="flex min-h-[420px] items-center justify-center text-sm font-bold text-neutral-500">Loading analytics workspace…</div>}>
+              <OperationalAnalyticsTab
+                auditStartDate={auditStartDate} setAuditStartDate={setAuditStartDate}
+                auditEndDate={auditEndDate} setAuditEndDate={setAuditEndDate}
+                handleGenerateAuditReport={handleGenerateAuditReport}
+                isAnalyticsLoading={isAnalyticsLoading}
+                bottleneckSearch={bottleneckSearch} setBottleneckSearch={setBottleneckSearch}
+                bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
+                processedBottleneckData={processedBottleneckData}
+                equipmentInventory={equipmentInventory}
+                demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
+                chartReadyDemandData={chartReadyDemandData}
+                systemHealth={systemHealth} routePerf={routePerf}
+                administrativeInsights={administrativeInsights}
+              />
+            </Suspense>
+          )}
+
+          {activeTab === 'manage-bookings' && (
+            <ManageBookingsTab key={`${manageRefreshKey}-${resourceRevision}`} onAssignVehicle={setAssignmentRequest} />
           )}
 
           {activeTab === 'history' && (
-            <GSOHistoryTab
-              historyFilter={historyFilter} setHistoryFilter={setHistoryFilter}
-              search={search} setSearch={setSearch}
-              historyPage={historyPage} setHistoryPage={setHistoryPage}
-              currentHistoryPageRows={currentHistoryPageRows} totalHistoryTabPages={totalHistoryTabPages}
-              filteredHistoryLogs={filteredHistoryLogs} handleOpenDetails={handleOpenDetails}
+            <SubmissionActivityHistoryTab
+              includeOfficeActivity
+              onOpenChat={handleNavigateToChat}
             />
           )}
 
-          {activeTab === 'messages' && (
-            <OfficeChatHub 
-              userId={userId} 
-              roleId={2} 
-              officeId={gsoOfficeId} 
-              targetDoc={chatTargetDoc}
-              onClearTargetDoc={() => setChatTargetDoc(null)}
-            />
-          )}
 
           {activeTab === 'profile' && (
             <UserProfileTab
@@ -842,14 +853,29 @@ export default function GSOAdminDashboard() {
         {/* FLOATING QR SCANNER BUTTON */}
         <button 
           onClick={() => { setScanMode('time-in'); setShowScannerModal(true); }}
-          className="absolute bottom-6 right-6 md:bottom-8 md:right-8 w-12 h-12 md:w-14 md:h-14 bg-red-800 hover:bg-red-900 text-white rounded-2xl shadow-xl flex items-center justify-center transition-transform hover:scale-105 z-40"
+          aria-label="Open QR scanner"
+          className="absolute bottom-24 right-4 md:bottom-28 md:right-7 w-12 h-12 md:w-14 md:h-14 bg-red-800 hover:bg-red-900 text-white rounded-2xl shadow-xl flex items-center justify-center transition-transform hover:scale-105 z-40"
         >
           <QrCode size={22} />
         </button>
       </div>
 
       {/* RENDER MODALS */}
-      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={fetchProcurementData} />}
+      <AnalyticsReportModal
+        open={showAnalyticsReport}
+        onClose={() => setShowAnalyticsReport(false)}
+        scope="gso"
+        startDate={auditStartDate}
+        setStartDate={setAuditStartDate}
+        endDate={auditEndDate}
+        setEndDate={setAuditEndDate}
+        data={{ peakDemandData, equipmentInventory, systemHealth }}
+      />
+      <FloatingChat isOpen={isChatOpen} onOpenChange={setIsChatOpen}
+        hasUnread={hasUnreadChats} onUnreadCleared={() => setHasUnreadChats(false)}
+        userId={userId} officeId={gsoOfficeId}
+        targetDoc={chatTargetDoc} onClearTargetDoc={() => setChatTargetDoc(null)} label="Chat Inbox" />
+      {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={async () => { await fetchProcurementData(); setManageRefreshKey(value => value + 1); }} />}
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}
         scanMode={scanMode} setScanMode={setScanMode}
@@ -916,6 +942,16 @@ export default function GSOAdminDashboard() {
         documents={incomingDocsList}
         isLoading={isIncomingLoading}
       />
+
+      {showCompanionModal && (
+        <CompanionScannerModal 
+          onClose={() => setShowCompanionModal(false)}
+          onScanSuccess={() => {
+            // Insert your data refresh function here
+            // e.g., gsoData.fetchGsoMeta()
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { resourceApi, confirmResourceAction, resourceSuccess, resourceError } from '../resourceActions';
 import { dateKey, blockOnDay } from '../../../../utils/resourceSchedule';
+import { publicReference } from '../../../../utils/publicReference';
 
 const control = 'border border-gray-300 rounded-xl px-3 py-2 text-xs font-medium bg-white focus:outline-none focus:ring-1 focus:ring-red-700';
 
@@ -36,7 +37,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
     ...filteredRequests.filter(r => dateKey(r.reservation_date) === date).map(r => ({
       kind: 'request',
       record: r,
-      label: r.status === 'Confirmed' ? 'Confirmed' : 'Pending'
+      label: ['Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned'].includes(r.status) ? 'Approved' : 'Pending'
     })),
     ...filteredBlocks.filter(b => blockOnDay(b, date)).map(b => ({
       kind: 'block',
@@ -60,13 +61,13 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
   };
 
   const colors = {
-    Confirmed: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    Approved: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     Pending: 'bg-amber-50 text-amber-800 border-amber-200',
     Blocked: 'bg-rose-50 text-rose-800 border-rose-200'
   };
 
   const eventColors = {
-    Confirmed: 'bg-emerald-100 text-emerald-950 border-emerald-600',
+    Approved: 'bg-emerald-100 text-emerald-950 border-emerald-600',
     Pending: 'bg-amber-100 text-amber-950 border-amber-500',
     Blocked: 'bg-rose-100 text-rose-950 border-rose-600'
   };
@@ -150,8 +151,8 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
 
           <select aria-label="Filter status" className={control} value={status} onChange={e => setStatus(e.target.value)}>
             <option value="All">All Requests & Blocks</option>
-            <option value="Reserved">Pending</option>
-            <option value="Confirmed">Confirmed</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
             <option value="Blocked">Blocked</option>
           </select>
         </div>
@@ -182,7 +183,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
       <div className="flex items-center gap-3 text-xs">
         <span className="font-bold text-gray-500">Legend:</span>
         <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Confirmed
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Approved
         </span>
         <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md text-[10px]">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Pending
@@ -358,7 +359,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
                   {item.kind === 'request' ? (
                     <div className="space-y-2">
                       <div className="flex justify-between gap-2 font-bold text-xs">
-                        <span>Request #{item.record.booking_id} · {item.record.requestor}</span>
+                        <span>{publicReference('REQ', item.record.booking_id)} · {item.record.requestor}</span>
                         <span className="uppercase">{item.label}</span>
                       </div>
                       <p className="text-xs">{item.record.start_time?.slice(0, 5)} - {item.record.end_time?.slice(0, 5)} · {item.record.asset_name}</p>
