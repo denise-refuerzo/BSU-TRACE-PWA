@@ -44,9 +44,9 @@ export default function AdminDashboard() {
   const [isSystemManagementOpen, setIsSystemManagementOpen] = useState(false);
   const [systemManagementSection, setSystemManagementSection] = useState('offices');
 
-  const { data: dashboardData } = useAdminDashboard();
-  const accountProps = useAccountManagement();
-  const matrixProps = useRolesPermissions();
+  const { data: dashboardData } = useAdminDashboard(activeSidebar === 'dashboard');
+  const accountProps = useAccountManagement(activeSidebar === 'accounts');
+  const matrixProps = useRolesPermissions(activeSidebar === 'matrix');
 
   const accountSectionTitles = {
     registry: 'Account Registry',

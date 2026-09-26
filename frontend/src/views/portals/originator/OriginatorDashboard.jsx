@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, FileText, School, User, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, School, User, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList, History } from 'lucide-react';
 import { endSession } from '../../../api';
 
 // Custom Hook
@@ -18,6 +18,8 @@ import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
 import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
+import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
 
 // Modals
 import DocumentSubmissionModal from './modals/DocumentSubmissionModal';
@@ -63,7 +65,7 @@ export default function OriginatorDashboard() {
   };
 
   const openDocumentsMenu = () => {
-    const documentTabs = ['documents', 'office-submissions', 'department-submissions'];
+    const documentTabs = ['documents', 'shared-submissions', 'archived-submissions', 'office-submissions', 'department-submissions'];
     setDocumentsExpanded(current => documentTabs.includes(activeTab) ? !current : true);
     if (!documentTabs.includes(activeTab)) setActiveTab('documents');
   };
@@ -126,11 +128,13 @@ export default function OriginatorDashboard() {
               <LayoutDashboard size={18} /> Home
             </button>
             <div>
-              <button onClick={openDocumentsMenu} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${['documents', 'office-submissions', 'department-submissions'].includes(activeTab) ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
+              <button onClick={openDocumentsMenu} aria-expanded={documentsExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${['documents', 'shared-submissions', 'archived-submissions', 'office-submissions', 'department-submissions'].includes(activeTab) ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
                 <span className="flex items-center gap-3"><FileText size={18} /> Documents</span><ChevronDown size={15} className={`transition-transform ${documentsExpanded ? 'rotate-180' : ''}`} />
               </button>
               {documentsExpanded && <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
                 <button onClick={() => handleTabSelect('documents')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab === 'documents' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Personal Submissions</button>
+                <button onClick={() => handleTabSelect('shared-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab === 'shared-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Shared With Me</button>
+                <button onClick={() => handleTabSelect('archived-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab === 'archived-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Archived</button>
                 {submissionAccess.offices.length > 0 && <button onClick={() => handleTabSelect('office-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab === 'office-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Office Submissions</button>}
                 {submissionAccess.departments.length > 0 && <button onClick={() => handleTabSelect('department-submissions')} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold ${activeTab === 'department-submissions' ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>Department Submissions</button>}
               </div>}
@@ -155,6 +159,7 @@ export default function OriginatorDashboard() {
                 </div>
               )}
             </div>
+            <button onClick={() => handleTabSelect('submission-history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'submission-history' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><History size={18}/> History</button>
           </nav>
         </div>
 
@@ -180,7 +185,7 @@ export default function OriginatorDashboard() {
             </button>
             <div className="min-w-0">
               <h2 className="truncate text-base font-black text-neutral-900 md:text-lg">
-                {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Personal Submissions' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
+                {activeTab === 'resource-gym' ? 'Request Gymnasium' : activeTab === 'resource-room' ? 'Request a Room' : activeTab === 'resource-vehicle' ? 'Request a Vehicle' : activeTab === 'resource-requests' ? 'Submitted Facility Requests' : activeTab === 'documents' ? 'Personal Submissions' : activeTab === 'shared-submissions' ? 'Shared With Me' : activeTab === 'archived-submissions' ? 'Archived Submissions' : activeTab === 'submission-history' ? 'History' : activeTab === 'office-submissions' ? 'Office Submissions' : activeTab === 'department-submissions' ? 'Department Submissions' : activeTab === 'profile' ? 'Profile Management' : 'Home'}
               </h2>
               <p className="truncate text-[10px] font-bold uppercase tracking-wide text-neutral-400">
                 Assigned: {profile.departmentName || 'Campus Office'}
@@ -231,6 +236,9 @@ export default function OriginatorDashboard() {
 
           {activeTab === 'office-submissions' && <SubmissionOverviewTab type="office" scopes={submissionAccess.offices} />}
           {activeTab === 'department-submissions' && <SubmissionOverviewTab type="department" scopes={submissionAccess.departments} />}
+          {activeTab === 'shared-submissions' && <CollaborativeSubmissionsTab mode="shared" onOpenChat={handleOpenChatWithDoc} />}
+          {activeTab === 'archived-submissions' && <CollaborativeSubmissionsTab mode="archived" onOpenChat={handleOpenChatWithDoc} />}
+          {activeTab === 'submission-history' && <SubmissionActivityHistoryTab onOpenChat={handleOpenChatWithDoc} />}
 
           {activeTab === 'profile' && (
             <UserProfileTab 
@@ -260,7 +268,6 @@ export default function OriginatorDashboard() {
         hasUnread={hasUnreadChats}
         onUnreadCleared={() => setHasUnreadChats(false)}
         userId={userId}
-        roleId={1}
         targetDoc={targetChatDoc}
         onClearTargetDoc={() => setTargetChatDoc(null)}
         label="Chat with Offices"

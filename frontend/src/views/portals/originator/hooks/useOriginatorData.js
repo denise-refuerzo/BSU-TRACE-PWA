@@ -160,9 +160,12 @@ export default function useOriginatorData() {
       reconnection: true
     });
 
+    let connectedOnce = false;
+
     socketRef.current.on('connect', () => {
       socketRef.current.emit('join-user-room', userId);
-      checkChatBadgeStatus();
+      if (connectedOnce) checkChatBadgeStatus();
+      connectedOnce = true;
     });
 
     const checkChatBadgeStatus = async () => {

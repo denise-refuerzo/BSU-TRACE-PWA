@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Filter, Search, Inbox, FileText } from 'lucide-react';
 
-export default function ProcessorPipelineTab({
+export default function OfficeDocumentsTab({
   resolveOfficeStatus,
   search,
   setSearch,
@@ -33,7 +33,7 @@ export default function ProcessorPipelineTab({
       }
       if (onClearTargetDocId) onClearTargetDocId();
     }
-  }, [targetDocId, pipelineDocs]);
+  }, [targetDocId, pipelineDocs, handleOpenPipelineDetails, onClearTargetDocId]);
 
   const handleFilterChange = (val) => {
     if (val === 'Incoming') {

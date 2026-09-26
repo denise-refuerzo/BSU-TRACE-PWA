@@ -1,20 +1,20 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { fetchWithAuth } from '../../../../api';
-import { io } from 'socket.io-client';
+import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 import DocumentSubmissionModal from '../../originator/modals/DocumentSubmissionModal';
 import OfficeDocumentModal from '../../../shared/modals/DocumentTrackingModal';
 import { formatPhilippineDateTime, formatPhilippineDate } from '../../../../utils/philippineTime';
 import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Filter, MoreVertical } from 'lucide-react';
 
-const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
-export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} }) {
+export default function OfficeSubmissionsTab({ officeId, processTypes: providedProcessTypes = [], onProcessed = () => {}, onOpenChat }) {
   const userId = localStorage.getItem('userId');
 
   // --- STATE ---
   const [estimateBase, setEstimateBase] = useState(() => Date.now());
   const [documents, setDocuments] = useState([]);
-  const [processTypes, setProcessTypes] = useState([]);
+  const [processTypes, setProcessTypes] = useState(providedProcessTypes);
   const [loading, setLoading] = useState(true);
   const [isDocsLoading, setIsDocsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,16 +45,30 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
     const data = await res.json(); if (!res.ok) throw new Error(data.error); return data;
   }).then(data => { setDocuments(data); setError(''); }).catch(err => setError(err.message)).finally(() => setIsDocsLoading(false)), [userId]);
 
-  const workflows = useCallback(() => fetchWithAuth('/api/process-types').then(async res => {
+  const workflows = useCallback(() => {
+    if (providedProcessTypes.length) {
+      setProcessTypes(providedProcessTypes);
+      setLoading(false);
+      return Promise.resolve();
+    }
+    return fetchWithAuth('/api/process-types').then(async res => {
     const data = await res.json(); if (!res.ok) throw new Error(data.error); return data;
-  }).then(data => { setProcessTypes(data); setWorkflowError(''); }).catch(err => setWorkflowError(err.message)).finally(() => setLoading(false)), []);
+    }).then(data => { setProcessTypes(data); setWorkflowError(''); }).catch(err => setWorkflowError(err.message)).finally(() => setLoading(false));
+  }, [providedProcessTypes]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(workflows, 0);
+    return () => window.clearTimeout(timer);
+  }, [workflows]);
 
   // --- REAL-TIME WEBSOCKET EFFECT (Replaces setInterval) ---
-  useEffect(() => { 
-    load(); 
-    workflows(); 
-    
-    if (!officeId) return;
+  useEffect(() => {
+    if (!officeId) return undefined;
 
     const socket = io(SOCKET_URL, { 
       secure: true, 
@@ -64,16 +78,18 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
     socket.on('connect', () => {
       // Listen to this specific office's updates
       socket.emit('join-office-room', officeId);
+      socket.emit('join-user-room', userId);
     });
 
     socket.on('pipeline-updated', () => {
       load(); // Instantly refresh table when a document changes
     });
+    socket.on('document-updated', load);
 
     return () => {
       socket.disconnect();
     };
-  }, [officeId, load, workflows]);
+  }, [officeId, userId, load]);
 
   useEffect(() => { 
     let cancelled = false; 
@@ -131,6 +147,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
   const getStatusStyles = (status) => {
     const s = status?.toLowerCase() || '';
     if (s.includes('completed') || s.includes('finalized')) return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    if (s.includes('cancelled')) return 'bg-neutral-100 text-neutral-700 border border-neutral-300';
     if (s.includes('action required') || s.includes('halted')) return 'bg-red-50 text-[#D32F2F] border border-red-200';
     return 'bg-amber-50 text-amber-700 border border-amber-200';
   };
@@ -193,6 +210,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                 <option value="Pending">Pending</option>
                 <option value="In Transit">In Transit</option>
                 <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
             </div>
 
@@ -288,7 +306,8 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
                     </td>
                     <td className="p-4 align-middle">
                       <span className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
-                        {d.status?.toLowerCase() === 'completed' ? 'Completed' : 
+                        {d.status?.toLowerCase() === 'completed' ? 'Completed' :
+                          d.status?.toLowerCase() === 'cancelled' ? 'Cancelled' :
                           d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
                       </span>
                     </td>
@@ -370,6 +389,7 @@ export default function OfficeSubmissionsTab({ officeId, onProcessed = () => {} 
           isHistoryDetails 
           onClose={() => setSelected(null)} 
           onRefresh={load} 
+          onOpenChat={onOpenChat}
         />
       )}
 

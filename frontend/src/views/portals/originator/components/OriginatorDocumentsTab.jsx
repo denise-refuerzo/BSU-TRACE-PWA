@@ -178,7 +178,8 @@ export default function OriginatorDocumentsTab({
             <div className="flex flex-col items-start md:items-end gap-2">
               <span className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm border ${
                 selectedDoc.status?.toLowerCase() === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
-                selectedDoc.status?.toLowerCase() === 'action required' ? 'bg-red-50 text-[#D32F2F] border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                selectedDoc.status?.toLowerCase() === 'action required' ? 'bg-red-50 text-[#D32F2F] border-red-200' :
+                selectedDoc.status?.toLowerCase() === 'cancelled' ? 'bg-neutral-100 text-neutral-700 border-neutral-300' : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}>
                 {selectedDoc.status || 'Active Path'}
               </span>
@@ -329,6 +330,7 @@ export default function OriginatorDocumentsTab({
                 <option value="In Verification">In Verification</option>
                 <option value="Action Required">Action Required</option>
                 <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
             </div>
 
@@ -399,11 +401,14 @@ export default function OriginatorDocumentsTab({
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
                       doc.status?.toLowerCase() === 'completed' 
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                        : doc.status?.toLowerCase() === 'cancelled'
+                          ? 'bg-neutral-100 text-neutral-700 border border-neutral-300'
                         : doc.status?.toLowerCase() === 'action required'
                           ? 'bg-red-50 text-[#D32F2F] border border-red-200'
                           : 'bg-amber-50 text-amber-700 border border-amber-200'
                     }`}>
-                      {doc.status?.toLowerCase() === 'completed' ? 'Completed' : 
+                      {doc.status?.toLowerCase() === 'completed' ? 'Completed' :
+                       doc.status?.toLowerCase() === 'cancelled' ? 'Cancelled' :
                        doc.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (doc.current_office || 'Origin Unit')}
                     </span>
                   </td>
@@ -462,6 +467,7 @@ export default function OriginatorDocumentsTab({
         <DocumentTrackingModal
           selectedDoc={activeDetailsDoc}
           onClose={() => setShowDetailsModal(false)}
+          onRefresh={fetchDashboardLedger}
           onOpenChat={onOpenChatWithDoc}
           readOnly
         />
