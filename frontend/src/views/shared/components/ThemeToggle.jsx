@@ -4,7 +4,7 @@ import { Moon } from 'lucide-react';
 export default function ThemeToggle() {
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
-      // Default to system preference if no theme is explicitly saved in localStorage[cite: 2]
+      // Default to system preference if no theme is explicitly saved in localStorage
       return localStorage.getItem('theme') === 'dark' ||
         (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
     }

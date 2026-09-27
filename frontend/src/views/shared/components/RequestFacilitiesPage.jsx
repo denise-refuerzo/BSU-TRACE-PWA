@@ -255,7 +255,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
   if (view === 'requests') {
     return (
       <div className="space-y-5 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
-        <div className="trace-section-banner rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-5 shadow-sm sm:p-6">
+        <div className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-5 shadow-sm sm:p-6">
           <p className="text-sm text-gray-500 dark:text-gray-400">Track the latest review status and assignment details for facility and vehicle requests from this account.</p>
         </div>
 
@@ -316,9 +316,9 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
   return (
     <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
       
-      <div className="trace-section-banner bg-white dark:bg-[#180e10] p-5 sm:p-6 rounded-2xl border border-gray-200 dark:border-[#42292f] shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+      <div className="bg-white dark:bg-[#180e10] p-5 sm:p-6 rounded-2xl border border-gray-200 dark:border-[#42292f] shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-5">
         <div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Check open times, blocked periods, and existing requests before submitting to GSO.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-300">Check open times, blocked periods, and existing requests before submitting to GSO.</p>
         </div>
         {!facility && (
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-gray-100/80 dark:bg-[#1c1113] p-1.5 text-xs font-bold shadow-inner">
