@@ -52,7 +52,7 @@ export default function SubmissionOverviewTab({ type, scopes }) {
   return (
     <div className="mx-auto max-w-8xl space-y-5 text-left animate-in fade-in duration-200">
       <div className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-5 shadow-sm sm:p-6">
-        <p className="text-sm text-gray-500 dark:text-gray-400">View documents submitted by staff in the {isOffice ? 'offices' : 'departments'} assigned to you[cite: 29].</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">View documents submitted by staff in the {isOffice ? 'offices' : 'departments'} assigned to you.</p>
       </div>
 
       <div className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-sm overflow-hidden">
