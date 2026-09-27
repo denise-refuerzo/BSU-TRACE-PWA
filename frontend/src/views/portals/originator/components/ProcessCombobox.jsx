@@ -95,14 +95,14 @@ export default function ProcessCombobox({ processTypes, value, onChange }) {
     <div onBlur={handleContainerBlur}>
       
       {/* Category Select */}
-      <label htmlFor={`${id}-category`} className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+      <label htmlFor={`${id}-category`} className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
         Category (optional)
       </label>
       <select 
         id={`${id}-category`} 
         value={category} 
         onChange={handleCategoryChange} 
-        className="w-full border bg-white rounded-lg px-3 py-2 text-xs border-neutral-300 mb-3"
+        className="w-full border bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg px-3 py-2 text-xs border-neutral-300 dark:border-gray-700 mb-3 outline-none cursor-pointer"
       >
         <option value="">All categories</option>
         {categories.map(([key, name]) => (
@@ -111,7 +111,7 @@ export default function ProcessCombobox({ processTypes, value, onChange }) {
       </select>
 
       {/* Process Type Combobox Input */}
-      <label htmlFor={id} className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+      <label htmlFor={id} className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
         Process Type
       </label>
       <input 
@@ -127,7 +127,7 @@ export default function ProcessCombobox({ processTypes, value, onChange }) {
         required 
         value={selected ? selected.process_name : query}
         placeholder="Search document pipelines..." 
-        className="w-full border rounded-lg px-3 py-2 text-xs border-neutral-300 focus:ring-1 focus:ring-red-700 outline-none"
+        className="w-full border rounded-lg px-3 py-2 text-xs border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white focus:ring-1 focus:ring-red-700 outline-none"
         onFocus={() => setOpen(true)} 
         onClick={() => setOpen(true)}
         onChange={handleInputChange}
@@ -140,14 +140,14 @@ export default function ProcessCombobox({ processTypes, value, onChange }) {
           id={`${id}-list`} 
           role="listbox" 
           aria-label="Matching pipelines" 
-          className="max-h-48 overflow-y-auto border border-neutral-200 rounded-lg mt-1 bg-white"
+          className="max-h-48 overflow-y-auto custom-scrollbar border border-neutral-200 dark:border-gray-700 rounded-lg mt-1 bg-white dark:bg-[#180e10]"
         >
           {matches.map((p, i) => (
             <li key={p.p_id} role="presentation">
               
               {/* Category Header */}
               {(i === 0 || matches[i - 1].category_id !== p.category_id) && (
-                <div role="presentation" className="px-3 py-1.5 bg-neutral-100 text-[10px] font-bold text-red-800">
+                <div role="presentation" className="px-3 py-1.5 bg-neutral-100 dark:bg-[#1c1113] text-[10px] font-bold text-red-800 dark:text-red-400 border-y border-neutral-200 dark:border-gray-800">
                   {p.category_name}
                 </div>
               )}
@@ -161,7 +161,7 @@ export default function ProcessCombobox({ processTypes, value, onChange }) {
                 ref={node => handleScrollIntoView(node, i)}
                 onMouseDown={e => e.preventDefault()} 
                 onClick={() => choose(p)}
-                className={`px-3 py-2 text-xs cursor-pointer hover:bg-red-50 ${i === cursor ? 'bg-red-100' : ''}`}
+                className={`px-3 py-2 text-xs cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/30 text-neutral-800 dark:text-gray-200 ${i === cursor ? 'bg-red-100 dark:bg-red-900/40' : ''}`}
               >
                 {p.process_name}
               </div>
@@ -170,7 +170,7 @@ export default function ProcessCombobox({ processTypes, value, onChange }) {
           
           {/* Empty State */}
           {!matches.length && (
-            <li role="presentation" className="p-3 text-xs text-gray-500">
+            <li role="presentation" className="p-3 text-xs text-gray-500 dark:text-gray-400">
               No matching pipelines. Try another keyword or category.
             </li>
           )}
@@ -178,7 +178,7 @@ export default function ProcessCombobox({ processTypes, value, onChange }) {
       )}
 
       {/* Helper Text */}
-      <p id={`${id}-help`} className="text-[10px] text-gray-500 mt-1">
+      <p id={`${id}-help`} className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
         {selected ? `Selected: ${selected.category_name}` : 'Choose a suggestion to load its route. Use ↑ / ↓ and Enter to select.'}
       </p>
       
