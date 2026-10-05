@@ -730,7 +730,13 @@ export default function GSOAdminDashboard() {
               )}
             </div>
 
-            <button onClick={() => { setPreviousTab(activeTab); setActiveTab('profile'); }} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] transition-colors border dark:border-gray-700 text-xs font-bold text-neutral-800 dark:text-gray-300">
+            <button 
+              onClick={() => { 
+                if (activeTab !== 'profile') setPreviousTab(activeTab); 
+                setActiveTab(activeTab === 'profile' ? previousTab : 'profile'); 
+              }} 
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] transition-colors border dark:border-gray-700 text-xs font-bold text-neutral-800 dark:text-gray-300"
+            >
               <User size={16} />
               <span className="hidden sm:inline">GSO Admin Portal</span>
             </button>

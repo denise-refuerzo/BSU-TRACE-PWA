@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { endSession } from '../../../api';
-import { BarChart3, Building2, ChevronDown, FileText, GitBranch, Landmark, LayoutDashboard, Link2, LogOut, Menu, Network, UserPlus, Users, X } from 'lucide-react';
+import { BarChart3, Building2, ChevronDown, FileText, GitBranch, Landmark, LayoutDashboard, Link2, LogOut, Menu, Network, UserPlus, Users, X, User } from 'lucide-react';
 
 // --- CUSTOM HOOKS ---
 import { useAdminDashboard } from './hooks/useAdminDashboard';
@@ -19,10 +19,12 @@ import RegistrationManagementTab from './components/RegistrationManagementTab';
 // --- MODALS ---
 import ManageAccountModal from './modals/ManageAccountModal';
 import OfficeEditModal from './modals/OfficeEditModal';
+import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 
 // -- Shared Component --
 import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
-import ThemeToggle from '../../shared/components/ThemeToggle'; // Added ThemeToggle import
+import ThemeToggle from '../../shared/components/ThemeToggle'; 
+import UserProfileTab from '../../shared/components/UserProfileTab';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -40,10 +42,17 @@ export default function AdminDashboard() {
   const adminName = localStorage.getItem('user') || 'Admin User';
   
   const [activeSidebar, setActiveSidebar] = useState('dashboard');
+  const [previousTab, setPreviousTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAccountsManagementOpen, setIsAccountsManagementOpen] = useState(false);
   const [isSystemManagementOpen, setIsSystemManagementOpen] = useState(false);
   const [systemManagementSection, setSystemManagementSection] = useState('offices');
+
+  // Password Modal States
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const { data: dashboardData } = useAdminDashboard(activeSidebar === 'dashboard');
   const accountProps = useAccountManagement(activeSidebar === 'accounts');
@@ -68,6 +77,7 @@ export default function AdminDashboard() {
       case 'accounts': return accountSectionTitles[accountProps.activeTab] || 'Accounts Management';
       case 'matrix': return systemSectionTitles[systemManagementSection] || 'System Management';
       case 'analytics': return 'Operational Analytics';
+      case 'profile': return 'Profile Management';
       default: return 'Operations Control Center';
     }
   };
@@ -253,6 +263,15 @@ export default function AdminDashboard() {
 
           <div className="flex items-center gap-3 md:gap-4">
             <ThemeToggle />
+            <button 
+              onClick={() => { 
+                if (activeSidebar !== 'profile') setPreviousTab(activeSidebar); 
+                setActiveSidebar(activeSidebar === 'profile' ? previousTab : 'profile'); 
+              }}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${activeSidebar === 'profile' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400' : 'hover:bg-neutral-100 dark:hover:bg-[#2b1317]'}`}
+            >
+              <User size={20} />
+            </button>
             <div className="flex items-center gap-2 border-l pl-3 md:pl-4 border-neutral-200 dark:border-gray-700 text-xs text-neutral-600 dark:text-gray-300">
               <span className="font-bold text-neutral-900 dark:text-white truncate max-w-[120px] md:max-w-none">{adminName}</span>
               <span className="bg-neutral-100 dark:bg-gray-800 px-2 py-0.5 rounded text-[10px] uppercase text-neutral-500 dark:text-gray-400 font-bold">ICT Root</span>
@@ -268,6 +287,25 @@ export default function AdminDashboard() {
           {activeSidebar === 'matrix' && <SystemManagementTab key={systemManagementSection} matrixProps={matrixProps} section={systemManagementSection} />}
 
           {activeSidebar === 'analytics' && <OperationalAnalytics />}
+
+          {activeSidebar === 'profile' && (
+            <UserProfileTab 
+              profileName={adminName}
+              setProfileName={() => {}}
+              profileEmail="ict.admin@bsu.edu.ph"
+              setProfileEmail={() => {}}
+              facultyId="ICT-ROOT"
+              officeName="ICT Administration"
+              twoFaEnabled={false}
+              toggle2FA={() => {}}
+              handleUpdateProfile={(e) => {
+                e.preventDefault();
+                minimalSwal.fire({ icon: 'info', title: 'System Managed', text: 'ICT Admin profiles are managed externally.' });
+              }}
+              setShowPassModal={setShowPassModal}
+              handleBack={() => setActiveSidebar(previousTab)}
+            />
+          )}
         </main>
       </div>
 
@@ -279,11 +317,25 @@ export default function AdminDashboard() {
         departments={accountProps.departments}
         accounts={accountProps.accounts}
       />
+      
       <OfficeEditModal
         office={matrixProps.editingOffice}
         offices={matrixProps.offices}
         onClose={() => matrixProps.setEditingOffice(null)}
         onSave={matrixProps.saveOfficeEdit}
+      />
+
+      <ChangePasswordModal 
+        isOpen={showPassModal}
+        onClose={() => setShowPassModal(false)}
+        currentPassword={currentPassword} setCurrentPassword={setCurrentPassword}
+        newPassword={newPassword} setNewPassword={setNewPassword}
+        confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
+        handleUpdatePassword={(e) => {
+          e.preventDefault();
+          minimalSwal.fire({ icon: 'info', title: 'Action Unavailable', text: 'Root passwords must be reset via database administration.' });
+          setShowPassModal(false);
+        }}
       />
     </div>
   );

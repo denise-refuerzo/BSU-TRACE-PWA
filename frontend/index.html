@@ -9,6 +9,13 @@
     <meta name="theme-color" content="#0f172a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
+    <!-- SEO Description (Fixes Lighthouse SEO Penalty) -->
+    <meta name="description" content="BSU-Trace: Batangas State University Smart Campus Resource Management System" />
+    
+    <!-- Preload critical LCP assets (Fixes Largest Contentful Paint) -->
+    <link rel="preload" as="image" href="/bsu-logo.png" />
+
     <script>
     // Immediately check localStorage or system preference and apply the class before rendering
     (function() {
@@ -21,7 +28,7 @@
         document.documentElement.classList.remove('dark');
       }
     })();
-  </script>
+    </script>
     <title>BSU-Trace</title>
   </head>
   <body>
