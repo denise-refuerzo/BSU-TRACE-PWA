@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'app_logo_192.png', 'app_logo_512.png', 'bsu-logo.png'],
+      includeAssets: ['favicon.svg', 'app_logo_192.png', 'app_logo_512.png'],
       manifest: {
         name: 'BSU-Trace Resource Management',
         short_name: 'BSU-Trace',
@@ -42,22 +42,8 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
-        // Increase cache limit to 4MB so split vendor chunks (like lucide-react) are successfully cached offline
-        maximumFileSizeToCacheInBytes: 4000000 
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}']
       }
     })
   ],
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-charts': ['chart.js', 'react-chartjs-2'],
-          'vendor-scanner': ['html5-qrcode', '@yudiel/react-qr-scanner'],
-          'vendor-ui': ['lucide-react', 'sweetalert2']
-        }
-      }
-    }
-  }
 })
