@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { LayoutDashboard, FileText, History, User, Camera, Link2, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
@@ -10,10 +10,6 @@ import { useProcessorData } from "./hooks/useProcessorData";
 // --- EXTRACTED COMPONENTS ---
 import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
 import RegistrationManagementPage from './components/RegistrationManagementPage';
-
-// --- EXTRACTED MODALS ---
-import ScannerModal from "./modals/ScannerModal";
-import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
 import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
 
@@ -25,15 +21,16 @@ import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
 import { formatOfficeLabel } from '../../../utils/officeLabel';
 import NotificationDropdown from '../../shared/components/NotificationDropdown';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
-import CompanionScannerModal from '../../shared/modals/CompanionScannerModal';
 import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
 import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
 import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
 import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
-
-// NEW: Theme Toggle Component
 import ThemeToggle from '../../shared/components/ThemeToggle';
+import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
+
+const ScannerModal = lazy(() => import('./modals/ScannerModal'));
+const CompanionScannerModal = lazy(() => import('../../shared/modals/CompanionScannerModal'));
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -58,6 +55,7 @@ export default function ProcessorDashboard() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
+  const [previousTab, setPreviousTab] = useState('dashboard');
 
   // --- MODAL & ACTION STATE ---
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -78,6 +76,10 @@ export default function ProcessorDashboard() {
   const processorData = useProcessorData(userId);
   const submissionAccess = useSubmissionAccess(userId);
   const documentTabs = ['documents', 'submissions', 'office-submissions', 'department-submissions', 'shared-submissions', 'archived-submissions'];
+
+  useEffect(() => {
+    document.title = `BSU-Trace | ${activeTab.replace('-', ' ').toUpperCase()}`;
+  }, [activeTab]);
 
   useEffect(() => {
     if (!userId || userId === 'undefined') {
@@ -131,31 +133,26 @@ export default function ProcessorDashboard() {
     setShowPipelineModal(true);
   };
 
-  // Row click transition: switches view to 'documents' and opens the Document Verification Detail modal
   const handleRowDocumentClick = (doc) => {
     setActiveTab('documents');
     handleOpenPipelineDetails(doc, false);
   };
 
-  // Notification click: switches view to 'documents' and deep-links to that specific document's modal
   const handleNotificationClick = async (notif) => {
     setActiveTab('documents');
     const targetIniId = notif.ini_id;
     const allKnownDocs = processorData.pipelineDocs || [];
 
-    // 1. Try finding in loaded pipeline documents
     let matchedDoc = allKnownDocs.find(d => 
       (targetIniId && d.ini_id === targetIniId) ||
       (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
     );
 
-    // 2. If found, open the verification modal immediately
     if (matchedDoc) {
       handleOpenPipelineDetails(matchedDoc, false);
       return;
     }
 
-    // 3. Fallback: If the document isn't in pipelineDocs yet, fetch it directly
     if (targetIniId) {
       try {
         const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
@@ -312,7 +309,6 @@ export default function ProcessorDashboard() {
       
       <PWAInstallBanner />
 
-      {/* Mobile Backdrop */}
       {isSidebarOpen && (
         <div 
           onClick={() => setIsSidebarOpen(false)} 
@@ -320,14 +316,15 @@ export default function ProcessorDashboard() {
         />
       )}
 
-      {/* SIDEBAR NAVIGATION */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#2D1F1E] text-neutral-300 flex flex-col justify-between p-4 flex-shrink-0 text-left transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div>
           <div className="flex items-center justify-between border-b border-neutral-700 pb-4 mb-6">
             <div className="flex items-center gap-3">
               <img 
                 src="/bsu-logo.png" 
-                alt="Batangas State University Logo" 
+                alt="Batangas State University Logo"
+                width="43"
+                height="40" 
                 className="h-10 w-auto object-contain drop-shadow-sm" 
               />
               <div>
@@ -337,6 +334,7 @@ export default function ProcessorDashboard() {
             </div>
             <button 
               onClick={() => setIsSidebarOpen(false)}
+              aria-label="Close menu"
               className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 md:hidden cursor-pointer"
             >
               <X size={20} />
@@ -397,7 +395,6 @@ export default function ProcessorDashboard() {
         </div>
 
         <div className="space-y-3">
-          {/* COMPANION SCANNER BUTTON */}
           <button 
             onClick={() => { setShowCompanionModal(true); setIsSidebarOpen(false); }}
             className="w-full py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md uppercase tracking-wider cursor-pointer"
@@ -420,16 +417,13 @@ export default function ProcessorDashboard() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        
-        {/* HEADER */}
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         <header className="h-16 border-b border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#1c1113] px-4 md:px-8 flex items-center justify-between shadow-xs flex-shrink-0 relative">
           <div className="flex items-center gap-3 text-left">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-neutral-600 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-[#2b1317] md:hidden cursor-pointer"
               aria-label="Open menu"
+              className="p-2 -ml-2 rounded-lg text-neutral-600 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-[#2b1317] md:hidden cursor-pointer"
             >
               <Menu size={22} />
             </button>
@@ -451,7 +445,11 @@ export default function ProcessorDashboard() {
             />
             
             <button 
-              onClick={() => setActiveTab(activeTab === 'profile' ? 'dashboard' : 'profile')}
+              onClick={() => { 
+                if (activeTab !== 'profile') setPreviousTab(activeTab); 
+                setActiveTab(activeTab === 'profile' ? previousTab : 'profile'); 
+              }}
+              aria-label="User Profile"
               className={`p-2 rounded-full transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400' : 'hover:bg-neutral-100 dark:hover:bg-[#2b1317]'}`}
             >
               <User size={20} />
@@ -459,7 +457,6 @@ export default function ProcessorDashboard() {
           </div>
         </header>
 
-        {/* TAB RENDERING */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'dashboard' && (
             <ProcessorOverviewTab 
@@ -502,6 +499,7 @@ export default function ProcessorDashboard() {
               toggle2FA={toggle2FA}
               setShowPassModal={setShowPassModal}
               roleLabel="Office Staff"
+              handleBack={() => setActiveTab(previousTab)}
             />
           )}
         </div>
@@ -519,21 +517,23 @@ export default function ProcessorDashboard() {
         label="Chat Inbox"
       />
 
-      {/* MODALS RENDERING */}
-      {showScannerModal && (
-        <ScannerModal 
-          setShowScannerModal={setShowScannerModal}
-          scanMode={scanMode} setScanMode={setScanMode}
-          simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload}
-          executeSimulatedScanner={executeSimulatedScanner}
-        />
-      )}
-      {showCompanionModal && (
-        <CompanionScannerModal 
-          onClose={() => setShowCompanionModal(false)} 
-          onScanSuccess={processorData.fetchProcessorMeta} 
-        />
-      )}
+      <Suspense fallback={<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center text-white font-bold">Loading...</div>}>
+        {showScannerModal && (
+          <ScannerModal 
+            setShowScannerModal={setShowScannerModal}
+            scanMode={scanMode} setScanMode={setScanMode}
+            simulatedQrInput={simulatedQrInput} setSimulatedQrPayload={setSimulatedQrPayload}
+            executeSimulatedScanner={executeSimulatedScanner}
+          />
+        )}
+        {showCompanionModal && (
+          <CompanionScannerModal 
+            onClose={() => setShowCompanionModal(false)} 
+            onScanSuccess={processorData.fetchProcessorMeta} 
+          />
+        )}
+      </Suspense>
+
       {showPipelineModal && selectedDoc && (
         <DocumentTrackingModal
           selectedDoc={selectedDoc}

@@ -34,6 +34,7 @@ export default function OriginatorDashboard() {
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [previousTab, setPreviousTab] = useState('dashboard');
 
   const {
     userId, userName, navigate,
@@ -200,7 +201,6 @@ export default function OriginatorDashboard() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 text-neutral-600 dark:text-gray-300">
-            {/* NEW TOGGLE BUTTON HERE */}
             <ThemeToggle />
             
             <NotificationDropdown 
@@ -208,7 +208,13 @@ export default function OriginatorDashboard() {
               notifications={notifications}
               onNotificationClick={handleNotificationClick}
             />
-            <button onClick={() => setActiveTab('profile')} className={`p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-neutral-100 dark:bg-[#2b1317] text-red-800 dark:text-red-400' : ''}`}>
+            <button 
+              onClick={() => { 
+                if (activeTab !== 'profile') setPreviousTab(activeTab); 
+                setActiveTab(activeTab === 'profile' ? previousTab : 'profile'); 
+              }} 
+              className={`p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] transition-colors cursor-pointer ${activeTab === 'profile' ? 'bg-neutral-100 dark:bg-[#2b1317] text-red-800 dark:text-red-400' : ''}`}
+            >
               <User size={20} />
             </button>
           </div>
@@ -261,6 +267,7 @@ export default function OriginatorDashboard() {
               toggle2FA={toggleTwoFactorAuth}
               handleUpdateProfile={saveProfileChanges}
               setShowPassModal={setShowPassModal}
+              handleBack={() => setActiveTab(previousTab)}
             />
           )}
 
