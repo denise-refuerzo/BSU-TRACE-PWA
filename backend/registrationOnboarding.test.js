@@ -143,6 +143,57 @@ test('public registration atomically consumes the approved link and records its 
   assert.equal(approved.rows[0].max_registrations, 2);
   assert.equal(approved.rows[0].hash_length, 64);
 
+  const createDirect = routes.get('POST /api/admin/registration-links');
+  const directRequest = {
+    app, user: { u_id: 2, a_id: 5 },
+    body: { accountType: 2, targetId: 1, maxRegistrations: 2,
+      expiresAt: new Date(Date.now() + 3600000).toISOString(), requestNote: 'ICT created' }
+  };
+  const forbidden = responseRecorder();
+  await createDirect({ ...directRequest, user: { u_id: 1, a_id: 2 } }, forbidden);
+  assert.equal(forbidden.statusCode, 403);
+  const invalidArea = responseRecorder();
+  await createDirect({ ...directRequest, body: { ...directRequest.body, targetId: 999 } }, invalidArea);
+  assert.equal(invalidArea.statusCode, 400);
+  const directResponse = responseRecorder();
+  await createDirect(directRequest, directResponse);
+  assert.equal(directResponse.statusCode, 201);
+  assert.match(directResponse.body.registrationPath, /^\/register\//);
+  const directLink = await db.query(`
+    SELECT requested_by,approved_by,status,max_registrations,token_hash
+    FROM public.registration_links WHERE public_id=$1
+  `, [directResponse.body.linkId]);
+  assert.equal(directLink.rows[0].status, 'active');
+  assert.equal(directLink.rows[0].requested_by, 2);
+  assert.equal(directLink.rows[0].approved_by, 2);
+  assert.equal(directLink.rows[0].max_registrations, 2);
+  assert.equal(directLink.rows[0].token_hash.trim(), crypto.createHash('sha256').update(buildRegistrationToken(directResponse.body.linkId)).digest('hex'));
+
+  const listDirect = responseRecorder();
+  await routes.get('GET /api/admin/registration-links')({ app, user: { u_id: 2, a_id: 5 } }, listDirect);
+  assert.equal(listDirect.body.find(link => link.link_id === directResponse.body.linkId).created_by_ict, true);
+
+  const directSignup = responseRecorder();
+  await routes.get('POST /api/public/registration-links/:token/register')({
+    app, params: { token: buildRegistrationToken(directResponse.body.linkId) },
+    body: { username: 'directstaff', password: 'Secure-pass-123!', fullName: 'Direct Staff', email: 'directstaff@g.batstate-u.edu.ph' }
+  }, directSignup);
+  assert.equal(directSignup.statusCode, 201);
+  const directOrigin = await db.query(`
+    SELECT rl.requested_by AS sponsor_id, origin.link_id, rl.registration_count
+    FROM public."User" u
+    JOIN public.account_registration_origins origin ON origin.u_id=u.u_id
+    JOIN public.registration_links rl ON rl.link_id=origin.link_id
+    WHERE u.username='directstaff'
+  `);
+  assert.equal(directOrigin.rows[0].sponsor_id, 2);
+  assert.equal(directOrigin.rows[0].registration_count, 1);
+  const updatedManagement = responseRecorder();
+  await routes.get('GET /api/admin/registration-links')({ app, user: { u_id: 2, a_id: 5 } }, updatedManagement);
+  const managedDirectLink = updatedManagement.body.find(link => link.link_id === directResponse.body.linkId);
+  assert.equal(managedDirectLink.registration_count, 1);
+  assert.equal(managedDirectLink.registered_accounts[0].fullName, 'Direct Staff');
+
   const handler = routes.get('POST /api/public/registration-links/:token/register');
   const req = {
     params: { token }, app,

@@ -82,6 +82,7 @@ const baseListSql = `
          rl.requested_max_registrations,rl.requested_expires_at,rl.max_registrations,
          rl.registration_count,rl.expires_at,rl.status,rl.request_note,rl.decision_note,
          rl.created_at,rl.approved_at,requester.public_id AS requester_id,
+         (rl.requested_by = rl.approved_by) AS created_by_ict,
          requester.full_name AS requested_by,approver.full_name AS approved_by,
          o.office_name,d.department_name,a.account_type AS account_type_name,
          COALESCE((
@@ -174,6 +175,55 @@ module.exports = function registerRegistrationLinkRoutes(app, pool, requireAuth,
       console.error('Unable to request registration link:', error);
       res.status(500).json({ error: 'Unable to submit the registration link request.' });
     }
+  });
+
+  app.post('/api/admin/registration-links', requestLimiter, requireAuth, async (req, res) => {
+    if (!requireIct(req, res)) return;
+    const accountType = Number(req.body.accountType);
+    const targetId = Number(req.body.targetId);
+    const maxRegistrations = Number(req.body.maxRegistrations);
+    const expiresAt = new Date(req.body.expiresAt);
+    const requestNote = String(req.body.requestNote || '').trim().slice(0, 500) || null;
+    const scopeType = accountType === 1 ? 'department' : accountType === 2 ? 'office' : null;
+    if (!scopeType || !Number.isInteger(targetId) || targetId < 1) return res.status(400).json({ error: 'Choose a valid account type and assigned area.' });
+    if (!Number.isInteger(maxRegistrations) || maxRegistrations < 1 || maxRegistrations > 100) return res.status(400).json({ error: 'Registration limit must be between 1 and 100 accounts.' });
+    const now = Date.now();
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= now || expiresAt.getTime() > now + 90 * 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ error: 'Expiration must be in the future and no more than 90 days away.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const areaTable = scopeType === 'office' ? 'public.offices' : 'public.department';
+      const areaIdColumn = scopeType === 'office' ? 'o_id' : 'd_id';
+      const area = await client.query(`SELECT 1 FROM ${areaTable} WHERE ${areaIdColumn}=$1`, [targetId]);
+      if (!area.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'The assigned area does not exist.' });
+      }
+      const publicId = crypto.randomUUID();
+      const token = buildRegistrationToken(publicId);
+      const created = await client.query(`
+        INSERT INTO public.registration_links
+          (public_id,requested_by,approved_by,account_type,office_id,department_id,
+           requested_max_registrations,requested_expires_at,max_registrations,expires_at,
+           request_note,token_hash,status,approved_at)
+        VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$6,$7,$8,$9,'active',now())
+        RETURNING link_id
+      `, [publicId, req.user.u_id, accountType,
+        scopeType === 'office' ? targetId : null, scopeType === 'department' ? targetId : null,
+        maxRegistrations, expiresAt, requestNote, sha256(token)]);
+      await audit(client, { actorUserId: req.user.u_id, linkId: created.rows[0].link_id,
+        action: 'registration_link_created_by_ict', details: { accountType, scopeType, targetId, maxRegistrations, expiresAt: expiresAt.toISOString() } });
+      await client.query('COMMIT');
+      emitRegistrationUpdate(req, req.user.public_id);
+      res.status(201).json({ message: 'Registration link created.', linkId: publicId, registrationPath: registrationPath(publicId) });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Unable to create ICT registration link:', error);
+      res.status(500).json({ error: 'Unable to create the registration link.' });
+    } finally { client.release(); }
   });
 
   app.get('/api/registration-links/my', requireAuth, async (req, res) => {

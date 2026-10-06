@@ -87,13 +87,13 @@ export default function RegistrationManagementTab() {
 
   return <div className="space-y-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <p className="text-sm text-gray-500">Approve secure registration batches and monitor every account created from them.</p>
+      <p className="text-sm text-gray-500">Create, approve, and monitor registration links and the accounts created from them.</p>
       <div className="flex gap-2">
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"><option value="">All statuses</option>{['pending','active','exhausted','expired','revoked','rejected'].map(status => <option key={status} value={status}>{status[0].toUpperCase()+status.slice(1)}</option>)}</select>
         <button type="button" onClick={load} className="rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50" aria-label="Refresh"><RefreshCw size={18}/></button>
       </div>
     </div>
-    {loading ? <p className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">Loading registration requests...</p> : filtered.length === 0 ? <p className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">No registration requests match this filter.</p> : <div className="space-y-4">
+    {loading ? <p className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">Loading registration links...</p> : filtered.length === 0 ? <p className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">No registration links match this filter.</p> : <div className="space-y-4">
       {displayedLinks.map(link => {
         const draft = drafts[link.link_id] || {};
         return <article key={link.link_id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -101,13 +101,13 @@ export default function RegistrationManagementTab() {
             <div>
               <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${statusClass(link.status)}`}>{link.status}</span><span className="text-xs font-bold text-gray-500">{link.account_type_name}</span></div>
               <h3 className="mt-2 text-lg font-black text-gray-900">{link.office_name || link.department_name}</h3>
-              <p className="mt-1 text-sm text-gray-600">Requested by <strong>{link.requested_by}</strong> · {new Date(link.created_at).toLocaleString()}</p>
+              <p className="mt-1 text-sm text-gray-600">{link.created_by_ict ? 'Created by' : 'Requested by'} <strong>{link.requested_by}</strong> · {new Date(link.created_at).toLocaleString()}</p>
               {link.request_note && <p className="mt-2 rounded-lg bg-gray-50 p-2 text-xs text-gray-600">{link.request_note}</p>}
             </div>
             <div className="min-w-56 rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
               <p><strong>Usage:</strong> {link.registration_count} / {link.max_registrations || link.requested_max_registrations}</p>
               <p className="mt-1"><strong>Expires:</strong> {new Date(link.expires_at || link.requested_expires_at).toLocaleString()}</p>
-              {link.approved_by && <p className="mt-1"><strong>Approved by:</strong> {link.approved_by}</p>}
+              {link.approved_by && !link.created_by_ict && <p className="mt-1"><strong>Approved by:</strong> {link.approved_by}</p>}
             </div>
           </div>
           {link.status === 'pending' && <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4 md:grid-cols-3">
@@ -122,7 +122,7 @@ export default function RegistrationManagementTab() {
         </article>;
       })}
       {filtered.length > PAGE_SIZE && <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
-        <span>Page <strong className="text-gray-900">{currentPage}</strong> of <strong className="text-gray-900">{pageCount}</strong> · {filtered.length} requests</span>
+        <span>Page <strong className="text-gray-900">{currentPage}</strong> of <strong className="text-gray-900">{pageCount}</strong> · {filtered.length} links</span>
         <div className="flex gap-2">
           <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Previous page"><ChevronLeft size={17}/></button>
           <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage === pageCount} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Next page"><ChevronRight size={17}/></button>
