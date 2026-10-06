@@ -88,7 +88,7 @@ export default function RegistrationManagementTab() {
   return (
     <div className="space-y-5 text-left animate-in fade-in duration-200">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <p className="text-sm text-gray-500 dark:text-gray-400">Approve secure registration batches and monitor every account created from them.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Create, approve, and monitor registration links and the accounts created from them.</p>
         <div className="flex gap-2">
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2 text-sm cursor-pointer">
             <option value="">All statuses</option>
@@ -98,9 +98,9 @@ export default function RegistrationManagementTab() {
         </div>
       </div>
       {loading ? (
-        <p className="rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-8 text-center text-sm text-gray-500 dark:text-gray-400">Loading registration requests...</p>
+        <p className="rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-8 text-center text-sm text-gray-500 dark:text-gray-400">Loading registration links...</p>
       ) : filtered.length === 0 ? (
-        <p className="rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-8 text-center text-sm text-gray-500 dark:text-gray-400">No registration requests match this filter.</p>
+        <p className="rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-8 text-center text-sm text-gray-500 dark:text-gray-400">No registration links match this filter.</p>
       ) : (
         <div className="space-y-4">
           {displayedLinks.map(link => {
@@ -114,13 +114,13 @@ export default function RegistrationManagementTab() {
                       <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{link.account_type_name}</span>
                     </div>
                     <h3 className="mt-2 text-lg font-black text-gray-900 dark:text-white">{link.office_name || link.department_name}</h3>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Requested by <strong>{link.requested_by}</strong> · {new Date(link.created_at).toLocaleString()}</p>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{link.created_by_ict ? 'Created by' : 'Requested by'} <strong>{link.requested_by}</strong> · {new Date(link.created_at).toLocaleString()}</p>
                     {link.request_note && <p className="mt-2 rounded-lg bg-gray-50 dark:bg-[#1c1113] p-2 text-xs text-gray-600 dark:text-gray-300">{link.request_note}</p>}
                   </div>
                   <div className="min-w-56 rounded-xl bg-gray-50 dark:bg-[#1c1113] p-3 text-xs text-gray-600 dark:text-gray-300 border border-gray-100 dark:border-gray-800">
                     <p><strong>Usage:</strong> {link.registration_count} / {link.max_registrations || link.requested_max_registrations}</p>
                     <p className="mt-1"><strong>Expires:</strong> {new Date(link.expires_at || link.requested_expires_at).toLocaleString()}</p>
-                    {link.approved_by && <p className="mt-1"><strong>Approved by:</strong> {link.approved_by}</p>}
+                    {link.approved_by && !link.created_by_ict && <p className="mt-1"><strong>Approved by:</strong> {link.approved_by}</p>}
                   </div>
                 </div>
                 {link.status === 'pending' && (
@@ -159,7 +159,7 @@ export default function RegistrationManagementTab() {
           })}
           {filtered.length > PAGE_SIZE && (
             <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-              <span>Page <strong className="text-gray-900 dark:text-white">{currentPage}</strong> of <strong className="text-gray-900 dark:text-white">{pageCount}</strong> · {filtered.length} requests</span>
+              <span>Page <strong className="text-gray-900 dark:text-white">{currentPage}</strong> of <strong className="text-gray-900 dark:text-white">{pageCount}</strong> · {filtered.length} links</span>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1} className="rounded-lg border border-gray-300 dark:border-gray-700 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer text-gray-700 dark:text-gray-300" aria-label="Previous page"><ChevronLeft size={17}/></button>
                 <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage === pageCount} className="rounded-lg border border-gray-300 dark:border-gray-700 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer text-gray-700 dark:text-gray-300" aria-label="Next page"><ChevronRight size={17}/></button>

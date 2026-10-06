@@ -167,9 +167,12 @@ export default function AccountManagementTab({
         {/* PANEL CONTEXT 2: CREATE BLOCK */}
         {activeTab === 'create' && (
           <div className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl p-6 md:p-8 shadow-sm animate-in fade-in duration-200">
-            <div className="mb-8">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Create New Account</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Enter credentials and assign institutional roles and sector scopes.</p>
+            <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Create New Account</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Enter credentials and assign institutional roles and sector scopes.</p>
+              </div>
+              <button type="button" onClick={() => setCreateLinkOpen(true)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 px-4 py-2.5 text-sm font-bold text-red-800 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 cursor-pointer"><Link2 size={16} /> Create registration link</button>
             </div>
 
             {message.text && (
