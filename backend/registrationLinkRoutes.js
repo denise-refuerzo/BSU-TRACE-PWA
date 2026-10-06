@@ -113,8 +113,17 @@ module.exports = function registerRegistrationLinkRoutes(app, pool, requireAuth,
   };
 
   app.get('/api/registration-links/context', requireAuth, async (req, res) => {
-    if (![2, 3].includes(Number(req.user.a_id))) return res.status(403).json({ error: 'Only authorized office accounts can request registration links.' });
+    if (![2, 3, 4].includes(Number(req.user.a_id))) return res.status(403).json({ error: 'Only authorized office accounts can request registration links.' });
     try {
+      if (Number(req.user.a_id) === 4) {
+        const ownOffice = await pool.query(`
+          SELECT u.o_id AS office_id,o.office_name
+          FROM public."User" u JOIN public.offices o ON o.o_id=u.o_id
+          WHERE u.u_id=$1 AND u.a_id=4 AND u.is_active IS TRUE
+        `, [req.user.u_id]);
+        return res.json({ canRequest: ownOffice.rowCount > 0,
+          offices: ownOffice.rows.map(row => ({ ...row, scope_type: 'office', can_request_registration: true })), departments: [] });
+      }
       const result = await pool.query(`
         SELECT aa.scope_type,aa.office_id,aa.department_id,o.office_name,d.department_name
         FROM public.account_access_assignments aa
@@ -140,7 +149,7 @@ module.exports = function registerRegistrationLinkRoutes(app, pool, requireAuth,
   const publicWriteLimiter = limiters.publicWrite || passThrough;
 
   app.post('/api/registration-links/requests', requestLimiter, requireAuth, async (req, res) => {
-    if (![2, 3].includes(Number(req.user.a_id))) return res.status(403).json({ error: 'Only authorized office accounts can request registration links.' });
+    if (![2, 3, 4].includes(Number(req.user.a_id))) return res.status(403).json({ error: 'Only authorized office accounts can request registration links.' });
     const accountType = Number(req.body.accountType);
     const targetId = Number(req.body.targetId);
     const requestedLimit = Number(req.body.maxRegistrations);
@@ -148,18 +157,22 @@ module.exports = function registerRegistrationLinkRoutes(app, pool, requireAuth,
     const requestNote = String(req.body.requestNote || '').trim().slice(0, 500) || null;
     const scopeType = accountType === 1 ? 'department' : accountType === 2 ? 'office' : null;
     if (!scopeType || !Number.isInteger(targetId) || targetId < 1) return res.status(400).json({ error: 'Choose a valid account type and assigned area.' });
+    if (Number(req.user.a_id) === 4 && scopeType !== 'office') return res.status(403).json({ error: 'GSO can request links only for its assigned office.' });
     if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 100) return res.status(400).json({ error: 'Registration limit must be between 1 and 100 accounts.' });
     const now = Date.now();
     if (Number.isNaN(requestedExpiresAt.getTime()) || requestedExpiresAt.getTime() <= now || requestedExpiresAt.getTime() > now + 90 * 24 * 60 * 60 * 1000) {
       return res.status(400).json({ error: 'Expiration must be in the future and no more than 90 days away.' });
     }
     try {
-      const allowed = await pool.query(`
-        SELECT 1 FROM public.account_access_assignments aa
-        WHERE aa.u_id=$1 AND aa.scope_type=$2
-          AND ${scopeType === 'office' ? 'aa.office_id' : 'aa.department_id'}=$3
-          AND aa.can_request_registration IS TRUE AND ${ACTIVE_ASSIGNMENT_SQL}
-      `, [req.user.u_id, scopeType, targetId]);
+      const allowed = Number(req.user.a_id) === 4
+        ? await pool.query(`SELECT 1 FROM public."User" u
+            WHERE u.u_id=$1 AND u.a_id=4 AND u.o_id=$2 AND u.is_active IS TRUE`, [req.user.u_id, targetId])
+        : await pool.query(`
+            SELECT 1 FROM public.account_access_assignments aa
+            WHERE aa.u_id=$1 AND aa.scope_type=$2
+              AND ${scopeType === 'office' ? 'aa.office_id' : 'aa.department_id'}=$3
+              AND aa.can_request_registration IS TRUE AND ${ACTIVE_ASSIGNMENT_SQL}
+          `, [req.user.u_id, scopeType, targetId]);
       if (!allowed.rowCount) return res.status(403).json({ error: 'You are not authorized to request registrations for that area.' });
       const created = await pool.query(`
         INSERT INTO public.registration_links

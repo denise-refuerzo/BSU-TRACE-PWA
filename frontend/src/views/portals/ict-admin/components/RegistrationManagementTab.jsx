@@ -17,14 +17,19 @@ const statusClass = status => ({
   expired: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300', exhausted: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400'
 }[status] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300');
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 4;
+const COLUMNS = [
+  { id: 'pending', title: 'Pending review', description: 'Waiting for ICT', statuses: ['pending'], accent: 'bg-amber-500' },
+  { id: 'active', title: 'Ready to share', description: 'Approved and usable', statuses: ['active'], accent: 'bg-emerald-600' },
+  { id: 'closed', title: 'Closed', description: 'Completed or unavailable', statuses: ['exhausted', 'expired', 'revoked', 'rejected'], accent: 'bg-neutral-500' }
+];
 
 export default function RegistrationManagementTab() {
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [closedFilter, setClosedFilter] = useState('');
   const [drafts, setDrafts] = useState({});
-  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState({ pending: 1, active: 1, closed: 1 });
 
   const load = useCallback(async () => {
     try {
@@ -58,10 +63,11 @@ export default function RegistrationManagementTab() {
     return () => socket.disconnect();
   }, [load]);
 
-  const filtered = useMemo(() => links.filter(link => !statusFilter || link.status === statusFilter), [links, statusFilter]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const displayedLinks = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const columns = useMemo(() => COLUMNS.map(column => {
+    const allLinks = links.filter(link => column.statuses.includes(link.status));
+    return { ...column, count: allLinks.length,
+      links: column.id === 'closed' && closedFilter ? allLinks.filter(link => link.status === closedFilter) : allLinks };
+  }), [links, closedFilter]);
   const patchStatus = async (link, action) => {
     const draft = drafts[link.link_id] || {};
     const endpoint = action === 'approve'
@@ -90,24 +96,32 @@ export default function RegistrationManagementTab() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">Create, approve, and monitor registration links and the accounts created from them.</p>
         <div className="flex gap-2">
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2 text-sm cursor-pointer">
-            <option value="">All statuses</option>
-            {['pending','active','exhausted','expired','revoked','rejected'].map(status => <option key={status} value={status}>{status[0].toUpperCase()+status.slice(1)}</option>)}
-          </select>
           <button type="button" onClick={load} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer" aria-label="Refresh"><RefreshCw size={18}/></button>
         </div>
       </div>
       {loading ? (
         <p className="rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-8 text-center text-sm text-gray-500 dark:text-gray-400">Loading registration links...</p>
-      ) : filtered.length === 0 ? (
-        <p className="rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-8 text-center text-sm text-gray-500 dark:text-gray-400">No registration links match this filter.</p>
       ) : (
-        <div className="space-y-4">
+        <div className="grid gap-4 xl:grid-cols-3">
+          {columns.map(column => {
+            const pageCount = Math.max(1, Math.ceil(column.links.length / PAGE_SIZE));
+            const currentPage = Math.min(pages[column.id] || 1, pageCount);
+            const displayedLinks = column.links.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+            return <section key={column.id} aria-label={`${column.title} registration links`} className="min-w-0 rounded-2xl border border-gray-200 dark:border-[#42292f] bg-gray-50 dark:bg-[#1c1113] p-3">
+              <div className="mb-3 flex items-center justify-between gap-2 px-1">
+                <div className="flex min-w-0 items-center gap-2"><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${column.accent}`} /><div><h3 className="text-sm font-black text-gray-900 dark:text-white">{column.title}</h3><p className="text-[10px] text-gray-500 dark:text-gray-400">{column.description}</p></div></div>
+                <span className="rounded-full bg-white dark:bg-[#180e10] px-2 py-1 text-[10px] font-black text-gray-600 dark:text-gray-300">{column.count}</span>
+              </div>
+              {column.id === 'closed' && <select aria-label="Filter closed links by status" value={closedFilter} onChange={event => { setClosedFilter(event.target.value); setPages(current => ({ ...current, closed: 1 })); }} className="mb-3 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3 py-2 text-xs text-gray-800 dark:text-gray-200">
+                <option value="">All closed statuses</option>
+                {['exhausted','expired','revoked','rejected'].map(status => <option key={status} value={status}>{status[0].toUpperCase()+status.slice(1)}</option>)}
+              </select>}
+              <div className="space-y-3">
           {displayedLinks.map(link => {
             const draft = drafts[link.link_id] || {};
             return (
-              <article key={link.link_id} className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-5 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <article key={link.link_id} className="min-w-0 rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-4 shadow-sm">
+                <div className="flex flex-col gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${statusClass(link.status)}`}>{link.status}</span>
@@ -117,18 +131,18 @@ export default function RegistrationManagementTab() {
                     <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{link.created_by_ict ? 'Created by' : 'Requested by'} <strong>{link.requested_by}</strong> · {new Date(link.created_at).toLocaleString()}</p>
                     {link.request_note && <p className="mt-2 rounded-lg bg-gray-50 dark:bg-[#1c1113] p-2 text-xs text-gray-600 dark:text-gray-300">{link.request_note}</p>}
                   </div>
-                  <div className="min-w-56 rounded-xl bg-gray-50 dark:bg-[#1c1113] p-3 text-xs text-gray-600 dark:text-gray-300 border border-gray-100 dark:border-gray-800">
+                  <div className="rounded-xl bg-gray-50 dark:bg-[#1c1113] p-3 text-xs text-gray-600 dark:text-gray-300 border border-gray-100 dark:border-gray-800">
                     <p><strong>Usage:</strong> {link.registration_count} / {link.max_registrations || link.requested_max_registrations}</p>
                     <p className="mt-1"><strong>Expires:</strong> {new Date(link.expires_at || link.requested_expires_at).toLocaleString()}</p>
                     {link.approved_by && !link.created_by_ict && <p className="mt-1"><strong>Approved by:</strong> {link.approved_by}</p>}
                   </div>
                 </div>
                 {link.status === 'pending' && (
-                  <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-900/20 p-4 md:grid-cols-3">
+                  <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-900/20 p-3">
                     <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Registration limit<input type="number" min="1" max="100" value={draft.maxRegistrations || ''} onChange={e => setDrafts({...drafts,[link.link_id]:{...draft,maxRegistrations:e.target.value}})} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2 text-sm"/></label>
                     <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Expiration<input type="datetime-local" value={draft.expiresAt || ''} onChange={e => setDrafts({...drafts,[link.link_id]:{...draft,expiresAt:e.target.value}})} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2 text-sm"/></label>
                     <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Decision note<input maxLength={500} value={draft.decisionNote || ''} onChange={e => setDrafts({...drafts,[link.link_id]:{...draft,decisionNote:e.target.value}})} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2 text-sm" placeholder="Optional"/></label>
-                    <div className="flex gap-2 md:col-span-3">
+                    <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => patchStatus(link,'approve')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 dark:bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800 cursor-pointer"><Check size={15}/> Approve &amp; generate</button>
                       <button type="button" onClick={() => patchStatus(link,'rejected')} className="inline-flex items-center gap-2 rounded-lg border border-red-200 dark:border-red-900 bg-white dark:bg-[#1c1113] px-4 py-2 text-xs font-bold text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer"><ShieldX size={15}/> Reject</button>
                     </div>
@@ -157,15 +171,17 @@ export default function RegistrationManagementTab() {
               </article>
             );
           })}
-          {filtered.length > PAGE_SIZE && (
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-              <span>Page <strong className="text-gray-900 dark:text-white">{currentPage}</strong> of <strong className="text-gray-900 dark:text-white">{pageCount}</strong> · {filtered.length} links</span>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1} className="rounded-lg border border-gray-300 dark:border-gray-700 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer text-gray-700 dark:text-gray-300" aria-label="Previous page"><ChevronLeft size={17}/></button>
-                <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage === pageCount} className="rounded-lg border border-gray-300 dark:border-gray-700 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer text-gray-700 dark:text-gray-300" aria-label="Next page"><ChevronRight size={17}/></button>
+          {column.links.length === 0 && <p className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white/60 dark:bg-[#180e10]/60 px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">No links match this stage or filter.</p>}
               </div>
-            </div>
-          )}
+              {pageCount > 1 && <div className="mt-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-3 text-xs text-gray-600 dark:text-gray-400">
+                <span>{currentPage} of {pageCount} · {column.links.length} links</span>
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => setPages(current => ({ ...current, [column.id]: currentPage - 1 }))} disabled={currentPage === 1} className="rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] p-1 disabled:opacity-40" aria-label={`Previous ${column.title} page`}><ChevronLeft size={16}/></button>
+                  <button type="button" onClick={() => setPages(current => ({ ...current, [column.id]: currentPage + 1 }))} disabled={currentPage === pageCount} className="rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] p-1 disabled:opacity-40" aria-label={`Next ${column.title} page`}><ChevronRight size={16}/></button>
+                </div>
+              </div>}
+            </section>;
+          })}
         </div>
       )}
     </div>

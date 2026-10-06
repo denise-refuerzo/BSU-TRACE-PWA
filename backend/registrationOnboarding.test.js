@@ -97,6 +97,12 @@ test('public registration atomically consumes the approved link and records its 
   `);
   await db.exec(await fs.readFile(path.join(__dirname, 'migrations', '004_account_access.sql'), 'utf8'));
   await db.exec(await fs.readFile(path.join(__dirname, 'migrations', '008_registration_onboarding.sql'), 'utf8'));
+  await db.exec(`
+    INSERT INTO public.account VALUES (4,'GSO Admin');
+    INSERT INTO public.offices(office_name) VALUES ('General Services');
+    INSERT INTO public."User"(a_id,o_id,username,password,full_name,uni_email)
+    VALUES (4,2,'gso','hash','GSO Admin','gso@g.batstate-u.edu.ph');
+  `);
   const linkId = '123e4567-e89b-42d3-a456-426614174000';
   const token = buildRegistrationToken(linkId);
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -124,6 +130,27 @@ test('public registration atomically consumes the approved link and records its 
     publicRead: (_req, _res, next) => next(),
     publicWrite: (_req, _res, next) => next()
   });
+
+  const gsoContext = responseRecorder();
+  await routes.get('GET /api/registration-links/context')({ user: { u_id: 3, a_id: 4 } }, gsoContext);
+  assert.equal(gsoContext.body.offices[0].office_id, 2);
+  assert.deepEqual(gsoContext.body.departments, []);
+  const requestLink = routes.get('POST /api/registration-links/requests');
+  const gsoRequest = { app, user: { u_id: 3, a_id: 4 }, body: { accountType: 2, targetId: 2,
+    maxRegistrations: 2, expiresAt: new Date(Date.now() + 3600000).toISOString() } };
+  const wrongOffice = responseRecorder();
+  await requestLink({ ...gsoRequest, body: { ...gsoRequest.body, targetId: 1 } }, wrongOffice);
+  assert.equal(wrongOffice.statusCode, 403);
+  const wrongScope = responseRecorder();
+  await requestLink({ ...gsoRequest, body: { ...gsoRequest.body, accountType: 1, targetId: 1 } }, wrongScope);
+  assert.equal(wrongScope.statusCode, 403);
+  const gsoCreated = responseRecorder();
+  await requestLink(gsoRequest, gsoCreated);
+  assert.equal(gsoCreated.statusCode, 201);
+  const gsoLink = await db.query('SELECT status,office_id,requested_by FROM public.registration_links WHERE public_id=$1', [gsoCreated.body.requestId]);
+  assert.equal(gsoLink.rows[0].status, 'pending');
+  assert.equal(gsoLink.rows[0].office_id, 2);
+  assert.equal(gsoLink.rows[0].requested_by, 3);
 
   const pendingId = '223e4567-e89b-42d3-a456-426614174000';
   await db.query(`

@@ -9,7 +9,7 @@ import { useProcessorData } from "./hooks/useProcessorData";
 
 // --- EXTRACTED COMPONENTS ---
 import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
-import RegistrationManagementPage from './components/RegistrationManagementPage';
+import RegistrationManagementPage from '../../shared/components/RegistrationManagementPage';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
 import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
 
