@@ -41,22 +41,22 @@ export default function PWAInstallBanner() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-[#2D1F1E] text-white p-4 rounded-2xl shadow-2xl border border-neutral-700 animate-in slide-in-from-bottom-5 duration-300">
+    <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-[#2D1F1E] dark:bg-[#180e10] text-white p-4 rounded-2xl shadow-2xl border border-neutral-700 dark:border-[#42292f] animate-in slide-in-from-bottom-5 duration-300">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-red-800 rounded-xl text-white flex-shrink-0">
+          <div className="p-2.5 bg-red-800 dark:bg-red-700 rounded-xl text-white flex-shrink-0">
             <Download size={20} />
           </div>
           <div>
             <h4 className="text-sm font-black text-white">Install BSU-Trace</h4>
-            <p className="text-[11px] text-neutral-300 font-medium mt-0.5 leading-snug">
+            <p className="text-[11px] text-neutral-300 dark:text-gray-400 font-medium mt-0.5 leading-snug">
               Install the app on your device for faster access and offline capabilities.
             </p>
           </div>
         </div>
         <button
           onClick={handleDismiss}
-          className="text-neutral-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+          className="text-neutral-400 dark:text-gray-400 hover:text-white dark:hover:text-gray-200 p-1 rounded-lg transition-colors cursor-pointer"
           aria-label="Dismiss banner"
         >
           <X size={16} />
@@ -66,13 +66,13 @@ export default function PWAInstallBanner() {
       <div className="mt-3 flex items-center justify-end gap-2">
         <button
           onClick={handleDismiss}
-          className="px-3 py-1.5 text-xs text-neutral-300 hover:text-white font-bold transition-colors cursor-pointer"
+          className="px-3 py-1.5 text-xs text-neutral-300 dark:text-gray-400 hover:text-white dark:hover:text-white font-bold transition-colors cursor-pointer"
         >
           Maybe Later
         </button>
         <button
           onClick={handleInstall}
-          className="px-4 py-1.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl uppercase tracking-wide transition-all shadow-sm cursor-pointer"
+          className="px-4 py-1.5 bg-red-700 dark:bg-red-800 hover:bg-red-800 dark:hover:bg-red-700 text-white font-bold text-xs rounded-xl uppercase tracking-wide transition-all shadow-sm cursor-pointer"
         >
           Install Now
         </button>

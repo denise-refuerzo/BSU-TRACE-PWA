@@ -79,14 +79,14 @@ export default function OperationalAnalyticsTab() {
     .slice(0, 5), [bottleneckData, bottleneckSearch, bottleneckSort]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 text-left">
       {loadError && (
-        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between">
           <span>{loadError}</span>
-          <button type="button" onClick={() => setRefreshKey(value => value + 1)} className="w-fit rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold hover:bg-amber-100">Retry analytics</button>
+          <button type="button" onClick={() => setRefreshKey(value => value + 1)} className="w-fit rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-[#1c1113] px-3 py-1.5 text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer">Retry analytics</button>
         </div>
       )}
-      <Suspense fallback={<div className="flex min-h-96 items-center justify-center text-sm font-bold text-gray-500">Loading analytics workspace…</div>}>
+      <Suspense fallback={<div className="flex min-h-96 items-center justify-center text-sm font-bold text-gray-500 dark:text-gray-400">Loading analytics workspace…</div>}>
         <GSOOperationalAnalyticsTab
           auditStartDate={auditStartDate}
           setAuditStartDate={setAuditStartDate}

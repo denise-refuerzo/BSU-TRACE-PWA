@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Pencil, Trash2, Plus, Users, Car, Building2, Search } from 'lucide-react';
 import { resourceApi, confirmResourceAction, resourceError, resourceSuccess } from '../resourceActions';
 
-const input = 'w-full mt-1 rounded-xl border border-gray-300 px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-red-800 outline-none';
-const button = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-3 py-2 text-xs font-bold shadow-2xs transition-colors hover:bg-gray-50 cursor-pointer disabled:opacity-50';
+const input = 'w-full mt-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] px-3 py-2 text-xs font-medium text-gray-900 dark:text-white focus:ring-1 focus:ring-red-800 outline-none';
+const button = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-300 dark:border-gray-700 px-3 py-2 text-xs font-bold shadow-2xs transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer disabled:opacity-50 text-gray-700 dark:text-gray-300';
 
 export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 'facilities' }) {
   const [editor, setEditor] = useState(null);
@@ -117,7 +117,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
   return (
     <div className="space-y-4">
       {/* TOOLBAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-gray-50/50 dark:bg-[#1c1113] p-4 rounded-xl border border-gray-100 dark:border-[#42292f]">
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
           <input
@@ -125,7 +125,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
             placeholder="Search records..."
             value={search}
             onChange={e => handleSearchChange(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-xl bg-white outline-none focus:ring-1 focus:ring-red-800"
+            className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-[#180e10] text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-red-800"
           />
         </div>
 
@@ -133,7 +133,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
           {viewMode === 'facilities' && (
             <button
               onClick={() => setEditor({ kind: 'assets', name: '', quantity: 1, assetTypeId: '1' })}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-800 hover:bg-red-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-800 dark:bg-red-700 hover:bg-red-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
             >
               <Plus size={14} /> Add Facility
             </button>
@@ -141,7 +141,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
           {viewMode === 'vehicles' && (
             <button
               onClick={() => setEditor({ kind: 'vehicles', name: '', number: '', active: true })}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-800 hover:bg-red-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-800 dark:bg-red-700 hover:bg-red-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
             >
               <Plus size={14} /> Register Vehicle
             </button>
@@ -149,7 +149,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
           {viewMode === 'drivers' && (
             <button
               onClick={() => setEditor({ kind: 'drivers', name: '', number: '', active: true })}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-800 hover:bg-red-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-800 dark:bg-red-700 hover:bg-red-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
             >
               <Plus size={14} /> Register Driver
             </button>
@@ -161,20 +161,20 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left border-collapse">
           <thead>
-            <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+            <tr className="bg-gray-50/80 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
               <th className="px-4 py-3">{viewMode === 'drivers' ? 'Driver Name' : 'Asset / Resource'}</th>
               <th className="px-4 py-3">{viewMode === 'drivers' ? 'License Number' : 'Type / Details'}</th>
               <th className="px-4 py-3">Availability</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 font-medium">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-medium">
             {paginatedRows.map(row => (
-              <tr key={`${row.kind}-${row.id}`} className="hover:bg-gray-50/80 transition-colors">
-                <td className="px-4 py-3.5 font-semibold text-gray-900">
+              <tr key={`${row.kind}-${row.id}`} className="hover:bg-gray-50/80 dark:hover:bg-[#2b1317]/50 transition-colors">
+                <td className="px-4 py-3.5 font-semibold text-gray-900 dark:text-white">
                   <div className="flex items-center gap-2.5">
                     <span className={`p-2 rounded-lg shrink-0 ${
-                      viewMode === 'drivers' ? 'bg-blue-50 text-blue-600' : viewMode === 'vehicles' ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-800'
+                      viewMode === 'drivers' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : viewMode === 'vehicles' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-400'
                     }`}>
                       {viewMode === 'drivers' ? <Users size={15} /> : viewMode === 'vehicles' ? <Car size={15} /> : <Building2 size={15} />}
                     </span>
@@ -182,13 +182,13 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
                   </div>
                 </td>
 
-                <td className="px-4 py-3.5 text-xs text-gray-600">
+                <td className="px-4 py-3.5 text-xs text-gray-600 dark:text-gray-400">
                   {row.number || row.type}
                 </td>
 
                 <td className="px-4 py-3.5">
                   <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
-                    row.status === 'Available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
+                    row.status === 'Available' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border-amber-200 dark:border-amber-800'
                   }`}>
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     {row.status}
@@ -211,7 +211,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
                     <button
                       disabled={busy}
                       title="Edit"
-                      className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer"
+                      className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer"
                       onClick={() => setEditor({ ...row })}
                     >
                       <Pencil size={15} />
@@ -219,7 +219,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
                     <button
                       disabled={busy}
                       title="Delete"
-                      className="p-1.5 text-gray-400 hover:text-red-700 rounded-lg hover:bg-red-50 cursor-pointer"
+                      className="p-1.5 text-gray-400 hover:text-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer"
                       onClick={() => remove(row)}
                     >
                       <Trash2 size={15} />
@@ -231,7 +231,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
 
             {rows.length === 0 && (
               <tr>
-                <td colSpan="4" className="p-8 text-center text-xs text-gray-500 bg-gray-50/50">
+                <td colSpan="4" className="p-8 text-center text-xs text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-[#1c1113]">
                   No records found matching your search.
                 </td>
               </tr>
@@ -242,25 +242,25 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
 
       {/* PAGINATION CONTROLS */}
       {totalPages > 1 && (
-        <div className="flex justify-between items-center p-4 border-t border-gray-100 bg-white text-xs">
-          <span className="text-gray-500 font-medium">
-            Showing <span className="font-bold text-gray-900">{paginatedRows.length}</span> of <span className="font-bold text-gray-900">{rows.length}</span> records
+        <div className="flex justify-between items-center p-4 border-t border-gray-100 dark:border-[#42292f] bg-white dark:bg-[#180e10] text-xs">
+          <span className="text-gray-500 dark:text-gray-400 font-medium">
+            Showing <span className="font-bold text-gray-900 dark:text-white">{paginatedRows.length}</span> of <span className="font-bold text-gray-900 dark:text-white">{rows.length}</span> records
           </span>
           <div className="flex gap-2">
             <button 
               disabled={page <= 1} 
               onClick={() => setPage(page - 1)} 
-              className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white disabled:opacity-40 hover:bg-gray-50 font-bold text-gray-700 shadow-2xs cursor-pointer transition-colors"
+              className="px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-[#1c1113] disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 font-bold text-gray-700 dark:text-gray-300 shadow-2xs cursor-pointer transition-colors"
             >
               Previous
             </button>
-            <span className="px-3 py-1.5 border border-gray-200 rounded-lg bg-gray-50 font-black text-gray-900">
+            <span className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-[#2b1317] font-black text-gray-900 dark:text-white">
               {page} / {totalPages}
             </span>
             <button 
               disabled={page >= totalPages} 
               onClick={() => setPage(page + 1)} 
-              className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white disabled:opacity-40 hover:bg-gray-50 font-bold text-gray-700 shadow-2xs cursor-pointer transition-colors"
+              className="px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-[#1c1113] disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 font-bold text-gray-700 dark:text-gray-300 shadow-2xs cursor-pointer transition-colors"
             >
               Next
             </button>
@@ -271,40 +271,40 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
       {/* MODAL */}
       {editor && (
         <div className="fixed inset-0 z-[130] bg-black/40 backdrop-blur-xs flex justify-center items-center p-4">
-          <form role="dialog" onSubmit={save} className="w-full max-w-md bg-white shadow-xl rounded-2xl p-6 space-y-4 text-left">
-            <h3 className="font-bold text-base text-gray-900">
+          <form role="dialog" onSubmit={save} className="w-full max-w-md bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] shadow-xl rounded-2xl p-6 space-y-4 text-left">
+            <h3 className="font-bold text-base text-gray-900 dark:text-white">
               {editor.id ? 'Edit Information' : viewMode === 'drivers' ? 'Register Driver' : viewMode === 'vehicles' ? 'Register Vehicle' : 'Add Facility'}
             </h3>
 
             <fieldset disabled={busy} className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Name</label>
+                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Name</label>
                 <input required maxLength={editor.kind === 'assets' ? 100 : 255} value={editor.name} onChange={e => setEditor({ ...editor, name: e.target.value })} className={input} />
               </div>
 
               {editor.kind === 'assets' ? (
                 <>
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">Type</label>
+                    <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Type</label>
                     <select value={editor.assetTypeId} onChange={e => setEditor({ ...editor, assetTypeId: e.target.value })} className={input}>
                       <option value="1">Room</option>
                       <option value="2">Gymnasium</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">Room Capacity / Quantity</label>
+                    <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Room Capacity / Quantity</label>
                     <input required type="number" min="1" step="1" value={editor.quantity} onChange={e => setEditor({ ...editor, quantity: e.target.value })} className={input} />
                   </div>
                 </>
               ) : (
                 <>
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">{editor.kind === 'vehicles' ? 'Plate Number' : 'License Number'}</label>
+                    <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">{editor.kind === 'vehicles' ? 'Plate Number' : 'License Number'}</label>
                     <input required value={editor.number} onChange={e => setEditor({ ...editor, number: e.target.value })} className={input} />
                   </div>
                   {editor.id && (
                     <div>
-                      <label className="block font-bold text-gray-700 mb-1">Availability Status</label>
+                      <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Availability Status</label>
                       <select value={String(editor.active)} onChange={e => setEditor({ ...editor, active: e.target.value === 'true' })} className={input}>
                         <option value="true">Available</option>
                         <option value="false">Unavailable</option>
@@ -315,11 +315,11 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
               )}
             </fieldset>
 
-            <footer className="flex justify-end gap-2 border-t pt-4">
-              <button disabled={busy} type="button" onClick={() => setEditor(null)} className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50">
+            <footer className="flex justify-end gap-2 border-t dark:border-[#42292f] pt-4">
+              <button disabled={busy} type="button" onClick={() => setEditor(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
                 Cancel
               </button>
-              <button disabled={busy} className="px-4 py-2 bg-red-800 hover:bg-red-900 text-white rounded-xl text-xs font-bold">
+              <button disabled={busy} className="px-4 py-2 bg-red-800 dark:bg-red-700 hover:bg-red-900 text-white rounded-xl text-xs font-bold">
                 {busy ? 'Saving...' : 'Save'}
               </button>
             </footer>

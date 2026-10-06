@@ -70,7 +70,6 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
         setSelectedDoc(previous => String(previous?.ini_id) === String(doc.ini_id) ? { ...previous, canViewAllChannels, viewerRole } : previous);
         setChannels(data);
 
-        // Processing offices use their station. Submitters and collaborators can choose any station.
         if (!canViewAllChannels && officeId) {
           const targetOfficeChannel = data.find(c => c.officeId === parseInt(officeId));
           if (targetOfficeChannel) {
@@ -207,7 +206,6 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
     };
     socket.on('new-chat-message', receive);
     socket.on('connect', join);
-    // Reconnection runs join again and retrieves any messages missed offline.
     if (!socket.connected) loadMessages();
     return () => {
       cancelled = true;
@@ -229,21 +227,21 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
   const adHocDetourChannel = !usesChannelPicker && channels.find(c => c.officeId !== parseInt(officeId));
 
   return (
-    <div className={`${compact ? 'h-full w-full' : 'max-w-6xl mx-auto h-[calc(100vh-10rem)] md:h-[calc(100vh-12rem)]'} border border-gray-200 bg-white ${compact ? 'rounded-none border-0' : 'rounded-2xl shadow-sm'} flex overflow-hidden text-left relative`}>
+    <div className={`${compact ? 'h-full w-full' : 'max-w-6xl mx-auto h-[calc(100vh-10rem)] md:h-[calc(100vh-12rem)]'} border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] ${compact ? 'rounded-none border-0' : 'rounded-2xl shadow-sm'} flex overflow-hidden text-left relative`}>
       
-      {/* 1. DOCUMENT LIST (Full width on mobile if no doc selected) */}
-      <div className={`flex-col min-h-0 flex-shrink-0 w-full ${compact ? '' : 'md:w-72 lg:w-80'} border-r border-gray-200 bg-gray-50/50 ${
+      {/* 1. DOCUMENT LIST */}
+      <div className={`flex-col min-h-0 flex-shrink-0 w-full ${compact ? '' : 'md:w-72 lg:w-80'} border-r border-gray-200 dark:border-[#42292f] bg-gray-50/50 dark:bg-[#1c1113] ${
         selectedDoc ? (compact ? 'hidden' : 'hidden md:flex') : 'flex'
       }`}>
-        <div className="p-4 border-b border-gray-200 bg-white space-y-3 shrink-0">
+        <div className="p-4 border-b border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] space-y-3 shrink-0">
           <div className="flex justify-between items-center">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
               <FileText size={14} className="text-[#D32F2F]" />
               Document References
             </h4>
             <button 
               onClick={fetchActiveDirectory} 
-              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 transition-colors cursor-pointer"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md text-gray-500 dark:text-gray-400 transition-colors cursor-pointer"
               title="Refresh Directory"
             >
               <RefreshCw size={14} className={loadingDirectory ? 'animate-spin' : ''} />
@@ -257,27 +255,27 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
               placeholder="Search by file name..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs border border-gray-300 rounded-lg bg-white outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] shadow-xs transition-all" 
+              className="w-full pl-9 pr-3 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-[#180e10] text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-[#D32F2F] shadow-xs transition-all" 
             />
           </div>
         </div>
         
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-          {error && !selectedDoc && <p role="alert" className="p-2 text-xs text-red-700">{error}</p>}
+          {error && !selectedDoc && <p role="alert" className="p-2 text-xs text-red-700 dark:text-red-400">{error}</p>}
           {filteredDirectory.map(doc => (
             <button 
               key={doc.ini_id} 
               onClick={() => handleSelectDocument(doc, false)}
               className={`w-full p-3.5 text-left rounded-xl transition-all flex flex-col gap-1.5 relative border group cursor-pointer ${
                 selectedDoc?.ini_id === doc.ini_id 
-                  ? 'bg-white border-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/20' 
+                  ? 'bg-white dark:bg-[#1c1113] border-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/20' 
                   : doc.hasAnyChat 
-                    ? 'bg-amber-50/60 border-amber-200 hover:bg-white hover:border-amber-300' 
-                    : 'bg-white hover:bg-gray-50 border-gray-200 hover:border-gray-300 shadow-2xs'
+                    ? 'bg-amber-50/60 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 hover:bg-white dark:hover:bg-[#1c1113]' 
+                    : 'bg-white dark:bg-[#1c1113] hover:bg-gray-50 dark:hover:bg-[#2b1317]/50 border-gray-200 dark:border-[#42292f] shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between w-full">
-                <p className={`text-xs font-bold truncate pr-2 ${selectedDoc?.ini_id === doc.ini_id ? 'text-[#D32F2F]' : 'text-gray-900 group-hover:text-[#D32F2F] transition-colors'}`}>
+                <p className={`text-xs font-bold truncate pr-2 ${selectedDoc?.ini_id === doc.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-900 dark:text-white group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors'}`}>
                   {doc.title}
                 </p>
                 {doc.hasAnyChat && <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shrink-0 animate-pulse"></span>}
@@ -297,21 +295,20 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
         </div>
       </div>
 
-      {/* Submitters and collaborators choose among the document's office channels. */}
       {usesChannelPicker && selectedDoc && (
-        <div className={`flex-col min-h-0 flex-shrink-0 w-full ${compact ? '' : 'md:w-64'} border-r border-gray-200 bg-white ${
+        <div className={`flex-col min-h-0 flex-shrink-0 w-full ${compact ? '' : 'md:w-64'} border-r border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] ${
           activeChannel ? (compact ? 'hidden' : 'hidden md:flex') : 'flex'
         }`}>
-          <div className="p-4 border-b border-gray-200 bg-gray-50/70 shrink-0 flex items-center justify-between">
+          <div className="p-4 border-b border-gray-200 dark:border-[#42292f] bg-gray-50/70 dark:bg-[#1c1113] shrink-0 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => { selectionVersion.current += 1; setSelectedDoc(null); setLoading(false); }}
-                className={`${compact ? '' : 'md:hidden'} p-1.5 -ml-1 text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer`}
+                className={`${compact ? '' : 'md:hidden'} p-1.5 -ml-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg cursor-pointer`}
                 title="Back to Documents"
               >
                 <ArrowLeft size={16} />
               </button>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
                 <Hash size={14} className="text-gray-400" />
                 Station Channels
               </h4>
@@ -319,17 +316,17 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
             <span className="text-[10px] font-bold text-gray-400 max-w-[90px] truncate">{selectedDoc.title}</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 bg-gray-50/30">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 bg-gray-50/30 dark:bg-[#120b0c]">
             {channels.map(chan => (
               <button 
                 key={chan.officeId} 
                 onClick={() => handleActivateChannel(selectedDoc.ini_id, chan)}
                 className={`w-full p-3 text-left rounded-xl border transition-all flex flex-col gap-2 relative group cursor-pointer ${
                   activeChannel?.officeId === chan.officeId 
-                    ? 'bg-gray-900 border-gray-900 text-white shadow-md' 
+                    ? 'bg-gray-900 dark:bg-gray-800 border-gray-900 dark:border-gray-700 text-white shadow-md' 
                     : chan.hasChat 
-                      ? 'bg-amber-50 border-amber-200 text-gray-800 hover:bg-white' 
-                      : 'bg-white hover:border-gray-300 border-gray-200 text-gray-800'
+                      ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-gray-800 dark:text-gray-200 hover:bg-white dark:hover:bg-[#1c1113]' 
+                      : 'bg-white dark:bg-[#1c1113] hover:border-gray-300 dark:hover:border-gray-600 border-gray-200 dark:border-[#42292f] text-gray-800 dark:text-gray-200'
                 }`}
               >
                 <div className="flex items-center justify-between w-full">
@@ -340,7 +337,7 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${activeChannel?.officeId === chan.officeId ? 'bg-red-400' : chan.isLocked ? 'bg-gray-400' : 'bg-emerald-500'}`}></span>
-                  <span className={`text-[9px] font-bold uppercase tracking-wider ${activeChannel?.officeId === chan.officeId ? 'text-gray-300' : chan.isLocked ? 'text-gray-500' : 'text-emerald-700'}`}>
+                  <span className={`text-[9px] font-bold uppercase tracking-wider ${activeChannel?.officeId === chan.officeId ? 'text-gray-300' : chan.isLocked ? 'text-gray-500' : 'text-emerald-700 dark:text-emerald-400'}`}>
                     {chan.statusMessage}
                   </span>
                 </div>
@@ -355,44 +352,42 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
         </div>
       )}
 
-      {/* Office users have one relevant channel, so resolve it without showing the channel picker. */}
       {!usesChannelPicker && selectedDoc && !activeChannel && (
-        <div className="flex min-h-0 w-full flex-1 flex-col bg-white">
-          <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50/70 p-4">
+        <div className="flex min-h-0 w-full flex-1 flex-col bg-white dark:bg-[#180e10]">
+          <div className="flex items-center gap-2 border-b border-gray-200 dark:border-[#42292f] bg-gray-50/70 dark:bg-[#1c1113] p-4">
             <button
               type="button"
               onClick={() => { selectionVersion.current += 1; setSelectedDoc(null); setLoading(false); setError(''); }}
-              className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-200"
+              className="rounded-lg p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800"
               aria-label="Back to documents"
             >
               <ArrowLeft size={17} />
             </button>
-            <p className="min-w-0 truncate text-xs font-bold text-gray-800">{selectedDoc.title}</p>
+            <p className="min-w-0 truncate text-xs font-bold text-gray-800 dark:text-white">{selectedDoc.title}</p>
           </div>
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             {loading ? (
               <>
                 <RefreshCw size={24} className="animate-spin text-[#D32F2F]" />
-                <div><p role="status" className="text-sm font-bold text-gray-800">Opening conversation…</p><p className="mt-1 text-xs text-gray-400">Connecting to your office channel.</p></div>
+                <div><p role="status" className="text-sm font-bold text-gray-800 dark:text-white">Opening conversation…</p><p className="mt-1 text-xs text-gray-400">Connecting to your office channel.</p></div>
               </>
             ) : (
               <>
                 <MessageSquare size={24} className="text-gray-300" />
-                <div><p className="text-sm font-bold text-gray-800">Conversation unavailable</p><p role="alert" className="mt-1 text-xs text-gray-500">{error || 'This document has no conversation for your office.'}</p></div>
+                <div><p className="text-sm font-bold text-gray-800 dark:text-white">Conversation unavailable</p><p role="alert" className="mt-1 text-xs text-gray-500">{error || 'This document has no conversation for your office.'}</p></div>
               </>
             )}
           </div>
         </div>
       )}
 
-      {/* 3. ACTIVE CHAT WORKSPACE (Full width on mobile when channel is active) */}
-      <div className={`flex-col min-h-0 min-w-0 flex-1 w-full bg-gray-50/50 ${
+      {/* 3. ACTIVE CHAT WORKSPACE */}
+      <div className={`flex-col min-h-0 min-w-0 flex-1 w-full bg-gray-50/50 dark:bg-[#120b0c] ${
         activeChannel ? 'flex' : (compact ? 'hidden' : 'hidden md:flex')
       }`}>
         {activeChannel ? (
           <>
-            {/* Header with Mobile Back Button */}
-            <div className="p-3.5 md:p-4 border-b border-gray-200 bg-white flex flex-col gap-3 shrink-0 shadow-xs z-10">
+            <div className="p-3.5 md:p-4 border-b border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] flex flex-col gap-3 shrink-0 shadow-xs z-10">
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => {
@@ -401,29 +396,28 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                     setActiveChannel(null);
                     if (!usesChannelPicker) setSelectedDoc(null);
                   }}
-                  className={`${compact ? '' : 'md:hidden'} p-1.5 -ml-1 text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer`}
+                  className={`${compact ? '' : 'md:hidden'} p-1.5 -ml-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg cursor-pointer`}
                   title="Back"
                 >
                   <ArrowLeft size={18} />
                 </button>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <Hash size={15} className="text-[#D32F2F] shrink-0" />
-                    <h4 className="text-sm md:text-base font-bold text-gray-900 truncate">{activeChannel.officeName}</h4>
+                    <Hash size={15} className="text-[#D32F2F] dark:text-red-400 shrink-0" />
+                    <h4 className="text-sm md:text-base font-bold text-gray-900 dark:text-white truncate">{activeChannel.officeName}</h4>
                   </div>
-                  <p className="text-xs text-gray-500 font-medium truncate mt-0.5">
-                    Subject: <span className="text-gray-900 font-bold">{selectedDoc?.title}</span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">
+                    Subject: <span className="text-gray-900 dark:text-gray-200 font-bold">{selectedDoc?.title}</span>
                   </p>
                 </div>
               </div>
 
-              {/* Ad-hoc station switcher for processing-office participants. */}
               {!usesChannelPicker && adHocDetourChannel && (
-                <div className="flex bg-gray-100 p-1 rounded-lg text-xs font-bold w-full overflow-x-auto">
+                <div className="flex bg-gray-100 dark:bg-[#1c1113] p-1 rounded-lg text-xs font-bold w-full overflow-x-auto">
                   <button 
                     onClick={() => handleSelectDocument(selectedDoc, false)}
                     className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 flex-1 justify-center cursor-pointer ${
-                      activeChannel.officeId === parseInt(officeId) ? 'bg-white text-[#D32F2F] shadow-xs' : 'text-gray-600'
+                      activeChannel.officeId === parseInt(officeId) ? 'bg-white dark:bg-[#2b1317] text-[#D32F2F] dark:text-red-400 shadow-xs' : 'text-gray-600 dark:text-gray-400'
                     }`}
                   >
                     Submitter channel
@@ -431,7 +425,7 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                   <button 
                     onClick={() => handleActivateChannel(selectedDoc.ini_id, adHocDetourChannel)}
                     className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 flex-1 justify-center cursor-pointer ${
-                      activeChannel.officeId !== parseInt(officeId) ? 'bg-white text-purple-700 shadow-xs' : 'text-gray-600'
+                      activeChannel.officeId !== parseInt(officeId) ? 'bg-white dark:bg-[#2b1317] text-purple-700 dark:text-purple-400 shadow-xs' : 'text-gray-600 dark:text-gray-400'
                     }`}
                   >
                     Detour ({adHocDetourChannel.officeName.split(' ')[0]})
@@ -440,8 +434,7 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
               )}
             </div>
 
-            {/* Messages Feed */}
-            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 bg-gray-50/70">
+            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 bg-gray-50/70 dark:bg-[#120b0c]">
               {messages.map(msg => {
                 const isMe = String(msg.sender_id) === String(userId);
                 return (
@@ -456,8 +449,8 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                     </span>
                     <div className={`p-3 md:p-3.5 rounded-2xl text-xs md:text-sm font-medium leading-relaxed shadow-xs break-words ${
                       isMe 
-                        ? 'bg-[#D32F2F] text-white rounded-tr-xs' 
-                        : 'bg-white border border-gray-200 text-gray-800 rounded-tl-xs'
+                        ? 'bg-[#D32F2F] dark:bg-red-800 text-white rounded-tr-xs' 
+                        : 'bg-white dark:bg-[#1c1113] border border-gray-200 dark:border-[#42292f] text-gray-800 dark:text-gray-200 rounded-tl-xs'
                     }`}>
                       {msg.message_text}
                     </div>
@@ -473,26 +466,25 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
               <div ref={messageEndRef} className="h-2" />
             </div>
 
-            {/* Input Bar or Locked Status */}
-            {error && <p role="alert" className="px-4 py-2 text-xs text-red-700 bg-red-50">{error}</p>}
+            {error && <p role="alert" className="px-4 py-2 text-xs text-red-700 bg-red-50 dark:bg-red-900/20">{error}</p>}
             {activeChannel.isLocked ? (
-              <div className="p-3.5 border-t border-gray-200 bg-gray-100 flex items-center justify-center gap-2 text-gray-500 font-bold text-xs select-none">
+              <div className="p-3.5 border-t border-gray-200 dark:border-[#42292f] bg-gray-100 dark:bg-[#1c1113] flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400 font-bold text-xs select-none">
                 <Lock size={14} className="text-gray-400" /> {activeChannel.statusMessage}
               </div>
             ) : (
-              <form onSubmit={handleSendMessage} className="p-3 md:p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
+              <form onSubmit={handleSendMessage} className="p-3 md:p-4 border-t border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] flex gap-2 shrink-0">
                 <input 
                   type="text" 
                   placeholder="Type your message..." 
                   value={textInput} 
                   onChange={e => setTextInput(e.target.value)}
-                  className="min-w-0 flex-1 border border-gray-300 px-3.5 py-2.5 text-base md:text-sm rounded-xl outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] bg-gray-50 focus:bg-white transition-all shadow-2xs"
+                  className="min-w-0 flex-1 border border-gray-300 dark:border-gray-700 px-3.5 py-2.5 text-base md:text-sm rounded-xl outline-none focus:ring-1 focus:ring-[#D32F2F] bg-gray-50 dark:bg-[#1c1113] text-gray-900 dark:text-white transition-all shadow-2xs"
                 />
                 <button 
                   type="submit" 
                   disabled={!textInput.trim() || sending}
                   aria-label="Send message"
-                  className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white rounded-xl shadow-xs transition-all disabled:opacity-40 cursor-pointer flex items-center justify-center"
+                  className="px-4 py-2.5 bg-[#D32F2F] dark:bg-red-800 hover:bg-[#b71c1c] dark:hover:bg-red-700 text-white rounded-xl shadow-xs transition-all disabled:opacity-40 cursor-pointer flex items-center justify-center"
                 >
                   <Send size={16} />
                 </button>
@@ -500,12 +492,12 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
             )}
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 select-none bg-white p-6">
-            <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center border border-gray-100 shadow-xs">
-              <MessageSquare size={24} className="text-gray-300" />
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 select-none bg-white dark:bg-[#180e10] p-6">
+            <div className="w-14 h-14 bg-gray-50 dark:bg-[#1c1113] rounded-full flex items-center justify-center border border-gray-100 dark:border-gray-800 shadow-xs">
+              <MessageSquare size={24} className="text-gray-300 dark:text-gray-600" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-bold text-gray-700">No Chat Selected</p>
+              <p className="text-sm font-bold text-gray-700 dark:text-gray-200">No Chat Selected</p>
               <p className="text-xs font-medium text-gray-400 mt-1">Select a document reference on the left to start a thread.</p>
             </div>
           </div>

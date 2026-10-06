@@ -20,22 +20,22 @@ const defaultExpiry = () => {
 };
 
 const statusClass = status => ({
-  pending: 'bg-amber-100 text-amber-800',
-  active: 'bg-emerald-100 text-emerald-800',
-  rejected: 'bg-red-100 text-red-800',
-  revoked: 'bg-red-100 text-red-800',
-  expired: 'bg-gray-200 text-gray-700',
-  exhausted: 'bg-blue-100 text-blue-800'
-}[status] || 'bg-gray-100 text-gray-700');
+  pending: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400',
+  active: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400',
+  rejected: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400',
+  revoked: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400',
+  expired: 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+  exhausted: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400'
+}[status] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300');
 
 function Pagination({ page, pageCount, onPageChange, label }) {
   if (pageCount <= 1) return null;
   return (
-    <div className="flex items-center justify-between border-t border-neutral-200 pt-3 text-xs text-neutral-500">
+    <div className="flex items-center justify-between border-t border-neutral-200 dark:border-[#42292f] pt-3 text-xs text-neutral-500 dark:text-gray-400">
       <span>{label ? `${label} · ` : ''}{page} of {pageCount}</span>
       <div className="flex gap-1">
-        <button type="button" onClick={() => onPageChange(page - 1)} disabled={page === 1} className="rounded-md border border-neutral-300 bg-white p-1 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Previous page"><ChevronLeft size={15} /></button>
-        <button type="button" onClick={() => onPageChange(page + 1)} disabled={page === pageCount} className="rounded-md border border-neutral-300 bg-white p-1 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Next page"><ChevronRight size={15} /></button>
+        <button type="button" onClick={() => onPageChange(page - 1)} disabled={page === 1} className="rounded-md border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-1 disabled:cursor-not-allowed disabled:opacity-40 text-neutral-700 dark:text-gray-300" aria-label="Previous page"><ChevronLeft size={15} /></button>
+        <button type="button" onClick={() => onPageChange(page + 1)} disabled={page === pageCount} className="rounded-md border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-1 disabled:cursor-not-allowed disabled:opacity-40 text-neutral-700 dark:text-gray-300" aria-label="Next page"><ChevronRight size={15} /></button>
       </div>
     </div>
   );
@@ -43,20 +43,20 @@ function Pagination({ page, pageCount, onPageChange, label }) {
 
 function LinkCard({ link, onCopy }) {
   return (
-    <article className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm">
+    <article className="rounded-xl border border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${statusClass(link.status)}`}>{link.status}</span>
-        <span className="text-[10px] font-semibold text-neutral-400">{link.registration_count} / {link.max_registrations || link.requested_max_registrations} used</span>
+        <span className="text-[10px] font-semibold text-neutral-400 dark:text-gray-500">{link.registration_count} / {link.max_registrations || link.requested_max_registrations} used</span>
       </div>
-      <h4 className="mt-2 text-sm font-black text-neutral-900">{link.account_type_name}</h4>
-      <p className="mt-0.5 truncate text-xs text-neutral-600" title={link.office_name || link.department_name}>{link.office_name || link.department_name}</p>
-      <dl className="mt-3 space-y-1 border-t border-neutral-100 pt-2 text-[10px] text-neutral-500">
+      <h4 className="mt-2 text-sm font-black text-neutral-900 dark:text-white">{link.account_type_name}</h4>
+      <p className="mt-0.5 truncate text-xs text-neutral-600 dark:text-gray-400" title={link.office_name || link.department_name}>{link.office_name || link.department_name}</p>
+      <dl className="mt-3 space-y-1 border-t border-neutral-100 dark:border-[#42292f] pt-2 text-[10px] text-neutral-500 dark:text-gray-400">
         <div className="flex justify-between gap-2"><dt>Requested</dt><dd className="text-right">{new Date(link.created_at).toLocaleDateString()}</dd></div>
         <div className="flex justify-between gap-2"><dt>Expires</dt><dd className="text-right">{new Date(link.expires_at || link.requested_expires_at).toLocaleString()}</dd></div>
       </dl>
-      {link.decision_note && <p className="mt-2 line-clamp-2 rounded-lg bg-neutral-50 px-2 py-1.5 text-[10px] text-neutral-600" title={link.decision_note}>ICT: {link.decision_note}</p>}
+      {link.decision_note && <p className="mt-2 line-clamp-2 rounded-lg bg-neutral-50 dark:bg-[#1c1113] px-2 py-1.5 text-[10px] text-neutral-600 dark:text-gray-300" title={link.decision_note}>ICT: {link.decision_note}</p>}
       {link.status === 'active' && (
-        <button type="button" onClick={() => onCopy(link)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-[11px] font-bold text-white hover:bg-neutral-800">
+        <button type="button" onClick={() => onCopy(link)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 dark:bg-gray-800 px-3 py-2 text-[11px] font-bold text-white hover:bg-neutral-800 dark:hover:bg-gray-700">
           <Clipboard size={14} /> Copy link
         </button>
       )}
@@ -155,16 +155,16 @@ export default function RegistrationManagementPage({ userId, access }) {
   return (
     <div className="mx-auto max-w-8xl space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <p className="text-sm text-neutral-500">Request controlled registration batches and monitor the accounts created under you.</p>
-        <button type="button" onClick={() => setRequestOpen(true)} className="inline-flex w-fit items-center gap-2 rounded-lg bg-red-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-900">
+        <p className="text-sm text-neutral-500 dark:text-gray-400">Request controlled registration batches and monitor the accounts created under you.</p>
+        <button type="button" onClick={() => setRequestOpen(true)} className="inline-flex w-fit items-center gap-2 rounded-lg bg-red-800 dark:bg-red-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-900 cursor-pointer">
           <Plus size={17} /> Request a link
         </button>
       </div>
 
       <section aria-labelledby="my-links-heading">
         <div className="mb-3 flex items-center justify-between">
-          <h3 id="my-links-heading" className="flex items-center gap-2 font-black text-neutral-900"><Link2 size={18} /> My registration links</h3>
-          <span className="text-xs text-neutral-500">{links.length} total</span>
+          <h3 id="my-links-heading" className="flex items-center gap-2 font-black text-neutral-900 dark:text-white"><Link2 size={18} /> My registration links</h3>
+          <span className="text-xs text-neutral-500 dark:text-gray-400">{links.length} total</span>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           {linksByColumn.map(column => {
@@ -172,17 +172,17 @@ export default function RegistrationManagementPage({ userId, access }) {
             const page = Math.min(linkPages[column.id] || 1, pageCount);
             const displayedLinks = column.links.slice((page - 1) * LINKS_PER_COLUMN, page * LINKS_PER_COLUMN);
             return (
-              <div key={column.id} className="rounded-2xl border border-neutral-200 bg-neutral-100/70 p-3">
+              <div key={column.id} className="rounded-2xl border border-neutral-200 dark:border-[#42292f] bg-neutral-100/70 dark:bg-[#1c1113] p-3">
                 <div className="mb-3 flex items-center justify-between gap-3 px-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${column.accent}`} />
-                    <div className="min-w-0"><h4 className="text-sm font-black text-neutral-900">{column.title}</h4><p className="text-[10px] text-neutral-500">{column.description}</p></div>
+                    <div className="min-w-0"><h4 className="text-sm font-black text-neutral-900 dark:text-white">{column.title}</h4><p className="text-[10px] text-neutral-500 dark:text-gray-400">{column.description}</p></div>
                   </div>
-                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-neutral-600">{column.links.length}</span>
+                  <span className="rounded-full bg-white dark:bg-[#180e10] px-2 py-1 text-[10px] font-black text-neutral-600 dark:text-gray-300">{column.links.length}</span>
                 </div>
                 <div className="space-y-2">
                   {displayedLinks.map(link => <LinkCard key={link.link_id} link={link} onCopy={copyLink} />)}
-                  {column.links.length === 0 && <p className="rounded-xl border border-dashed border-neutral-300 bg-white/60 px-3 py-8 text-center text-xs text-neutral-400">No links in this stage.</p>}
+                  {column.links.length === 0 && <p className="rounded-xl border border-dashed border-neutral-300 dark:border-gray-700 bg-white/60 dark:bg-[#180e10]/60 px-3 py-8 text-center text-xs text-neutral-400 dark:text-gray-500">No links in this stage.</p>}
                 </div>
                 <div className="mt-3">
                   <Pagination page={page} pageCount={pageCount} onPageChange={nextPage => setLinkPages(current => ({ ...current, [column.id]: nextPage }))} label={`${column.links.length} links`} />
@@ -193,31 +193,31 @@ export default function RegistrationManagementPage({ userId, access }) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm" aria-labelledby="registered-accounts-heading">
+      <section className="rounded-2xl border border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-4 shadow-sm" aria-labelledby="registered-accounts-heading">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h3 id="registered-accounts-heading" className="flex items-center gap-2 font-black text-neutral-900"><Users size={18} /> Accounts registered under me</h3>
-            <p className="mt-1 text-xs text-neutral-500">Accounts created through registration links that you requested.</p>
+            <h3 id="registered-accounts-heading" className="flex items-center gap-2 font-black text-neutral-900 dark:text-white"><Users size={18} /> Accounts registered under me</h3>
+            <p className="mt-1 text-xs text-neutral-500 dark:text-gray-400">Accounts created through registration links that you requested.</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative block">
               <span className="sr-only">Search registered accounts by name</span>
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-              <input value={accountQuery} onChange={event => { setAccountQuery(event.target.value); setAccountPage(1); }} placeholder="Search by name" className="w-full rounded-lg border border-neutral-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 sm:w-56" />
+              <input value={accountQuery} onChange={event => { setAccountQuery(event.target.value); setAccountPage(1); }} placeholder="Search by name" className="w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white py-2 pl-9 pr-3 text-sm outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 sm:w-56" />
             </label>
-            <select aria-label="Sort registered accounts" value={accountSort} onChange={event => { setAccountSort(event.target.value); setAccountPage(1); }} className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700">
+            <select aria-label="Sort registered accounts" value={accountSort} onChange={event => { setAccountSort(event.target.value); setAccountPage(1); }} className="rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2 text-sm outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700">
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
             </select>
           </div>
         </div>
 
-        <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200">
+        <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200 dark:border-[#42292f]">
           <table className="w-full min-w-[620px] text-left text-sm">
-            <thead className="bg-neutral-50 text-[10px] uppercase tracking-wide text-neutral-500"><tr><th className="p-3">Account</th><th className="p-3">Type / Area</th><th className="p-3">Registered</th></tr></thead>
-            <tbody className="divide-y divide-neutral-100">
-              {displayedAccounts.map(account => <tr key={account.userId} className="hover:bg-neutral-50/70"><td className="p-3"><strong>{account.fullName}</strong><span className="block text-xs text-neutral-500">{account.email}</span></td><td className="p-3 text-xs">{account.link.account_type_name}<span className="block text-neutral-500">{account.link.office_name || account.link.department_name}</span></td><td className="p-3 text-xs text-neutral-500">{new Date(account.registeredAt).toLocaleString()}</td></tr>)}
-              {displayedAccounts.length === 0 && <tr><td colSpan="3" className="p-8 text-center text-neutral-500">{accountQuery ? 'No registered accounts match that name.' : 'No accounts have registered through your links yet.'}</td></tr>}
+            <thead className="bg-neutral-50 dark:bg-[#1c1113] text-[10px] uppercase tracking-wide text-neutral-500 dark:text-gray-400"><tr><th className="p-3">Account</th><th className="p-3">Type / Area</th><th className="p-3">Registered</th></tr></thead>
+            <tbody className="divide-y divide-neutral-100 dark:divide-gray-800">
+              {displayedAccounts.map(account => <tr key={account.userId} className="hover:bg-neutral-50/70 dark:hover:bg-[#2b1317]/40"><td className="p-3"><strong className="text-gray-900 dark:text-white">{account.fullName}</strong><span className="block text-xs text-neutral-500 dark:text-gray-400">{account.email}</span></td><td className="p-3 text-xs text-gray-800 dark:text-gray-200">{account.link.account_type_name}<span className="block text-neutral-500 dark:text-gray-400">{account.link.office_name || account.link.department_name}</span></td><td className="p-3 text-xs text-neutral-500 dark:text-gray-400">{new Date(account.registeredAt).toLocaleString()}</td></tr>)}
+              {displayedAccounts.length === 0 && <tr><td colSpan="3" className="p-8 text-center text-neutral-500 dark:text-gray-400">{accountQuery ? 'No registered accounts match that name.' : 'No accounts have registered through your links yet.'}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -228,33 +228,33 @@ export default function RegistrationManagementPage({ userId, access }) {
 
       {requestOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onMouseDown={event => { if (event.target === event.currentTarget && !submitting) setRequestOpen(false); }}>
-          <div role="dialog" aria-modal="true" aria-labelledby="request-link-title" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between border-b border-neutral-200 px-5 py-4">
-              <div><h3 id="request-link-title" className="font-black text-neutral-900">Request a registration link</h3><p className="mt-1 text-xs text-neutral-500">ICT will review the requested limit and expiration.</p></div>
-              <button type="button" onClick={() => setRequestOpen(false)} disabled={submitting} className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 disabled:opacity-50" aria-label="Close request form"><X size={19} /></button>
+          <div role="dialog" aria-modal="true" aria-labelledby="request-link-title" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] shadow-2xl">
+            <div className="flex items-start justify-between border-b border-neutral-200 dark:border-[#42292f] px-5 py-4">
+              <div><h3 id="request-link-title" className="font-black text-neutral-900 dark:text-white">Request a registration link</h3><p className="mt-1 text-xs text-neutral-500 dark:text-gray-400">ICT will review the requested limit and expiration.</p></div>
+              <button type="button" onClick={() => setRequestOpen(false)} disabled={submitting} className="rounded-lg p-1.5 text-neutral-500 dark:text-gray-400 hover:bg-neutral-100 dark:hover:bg-gray-800 disabled:opacity-50" aria-label="Close request form"><X size={19} /></button>
             </div>
             <form onSubmit={submit} className="p-5">
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="text-xs font-bold text-neutral-700">Account type
-                  <select value={form.accountType} onChange={event => setForm({ ...form, accountType: Number(event.target.value), targetId: '' })} className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm font-normal"><option value="2">Regular Office Staff</option><option value="1">Faculty Staff</option></select>
+                <label className="text-xs font-bold text-neutral-700 dark:text-gray-300">Account type
+                  <select value={form.accountType} onChange={event => setForm({ ...form, accountType: Number(event.target.value), targetId: '' })} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal"><option value="2">Regular Office Staff</option><option value="1">Faculty Staff</option></select>
                 </label>
-                <label className="text-xs font-bold text-neutral-700">Assigned {form.accountType === 1 ? 'department' : 'office'}
-                  <select required value={effectiveTargetId} onChange={event => setForm({ ...form, targetId: event.target.value })} className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm font-normal"><option value="">Choose...</option>{scopes.map(scope => <option key={targetFor(scope)} value={targetFor(scope)}>{scope.department_name || scope.office_name}</option>)}</select>
-                  {scopes.length === 0 && <span className="mt-1 block font-normal text-amber-700">ICT has not assigned registration authority for this scope type.</span>}
+                <label className="text-xs font-bold text-neutral-700 dark:text-gray-300">Assigned {form.accountType === 1 ? 'department' : 'office'}
+                  <select required value={effectiveTargetId} onChange={event => setForm({ ...form, targetId: event.target.value })} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal"><option value="">Choose...</option>{scopes.map(scope => <option key={targetFor(scope)} value={targetFor(scope)}>{scope.department_name || scope.office_name}</option>)}</select>
+                  {scopes.length === 0 && <span className="mt-1 block font-normal text-amber-700 dark:text-amber-400">ICT has not assigned registration authority for this scope type.</span>}
                 </label>
-                <label className="text-xs font-bold text-neutral-700">Requested account limit
-                  <input required type="number" min="1" max="100" value={form.maxRegistrations} onChange={event => setForm({ ...form, maxRegistrations: event.target.value })} className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm font-normal" />
+                <label className="text-xs font-bold text-neutral-700 dark:text-gray-300">Requested account limit
+                  <input required type="number" min="1" max="100" value={form.maxRegistrations} onChange={event => setForm({ ...form, maxRegistrations: event.target.value })} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal" />
                 </label>
-                <label className="text-xs font-bold text-neutral-700">Requested expiration
-                  <input required type="datetime-local" value={form.expiresAt} onChange={event => setForm({ ...form, expiresAt: event.target.value })} className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm font-normal" />
+                <label className="text-xs font-bold text-neutral-700 dark:text-gray-300">Requested expiration
+                  <input required type="datetime-local" value={form.expiresAt} onChange={event => setForm({ ...form, expiresAt: event.target.value })} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal" />
                 </label>
-                <label className="text-xs font-bold text-neutral-700 md:col-span-2">Reason or note <span className="font-normal text-neutral-400">(optional)</span>
-                  <textarea maxLength={500} value={form.requestNote} onChange={event => setForm({ ...form, requestNote: event.target.value })} className="mt-1 min-h-24 w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm font-normal" />
+                <label className="text-xs font-bold text-neutral-700 dark:text-gray-300 md:col-span-2">Reason or note <span className="font-normal text-neutral-400 dark:text-gray-500">(optional)</span>
+                  <textarea maxLength={500} value={form.requestNote} onChange={event => setForm({ ...form, requestNote: event.target.value })} className="mt-1 min-h-24 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal" />
                 </label>
               </div>
               <div className="mt-5 flex justify-end gap-2">
-                <button type="button" onClick={() => setRequestOpen(false)} disabled={submitting} className="rounded-lg border border-neutral-300 px-4 py-2.5 text-sm font-bold text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancel</button>
-                <button disabled={submitting || !effectiveTargetId} className="inline-flex items-center gap-2 rounded-lg bg-red-800 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-900 disabled:opacity-50"><Send size={16} />{submitting ? 'Sending...' : 'Send to ICT'}</button>
+                <button type="button" onClick={() => setRequestOpen(false)} disabled={submitting} className="rounded-lg border border-neutral-300 dark:border-gray-700 px-4 py-2.5 text-sm font-bold text-neutral-600 dark:text-gray-300 hover:bg-neutral-50 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
+                <button disabled={submitting || !effectiveTargetId} className="inline-flex items-center gap-2 rounded-lg bg-red-800 dark:bg-red-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-900 disabled:opacity-50 cursor-pointer"><Send size={16} />{submitting ? 'Sending...' : 'Send to ICT'}</button>
               </div>
             </form>
           </div>

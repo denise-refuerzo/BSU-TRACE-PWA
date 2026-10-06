@@ -74,34 +74,34 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
     <div className="max-w-8xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
       
       {/* HEADER */}
-      <header className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs flex items-center gap-4">
-        <div className="p-3 bg-red-50 border border-red-100 text-red-800 rounded-xl">
+      <header className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl p-6 shadow-xs flex items-center gap-4">
+        <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 text-red-800 dark:text-red-400 rounded-xl">
           <Building2 size={24} />
         </div>
-        <p className="text-sm text-gray-500">Manage campus facilities, vehicles, drivers, and inventory availability.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Manage campus facilities, vehicles, drivers, and inventory availability.</p>
       </header>
 
       {error && (
-        <div role="alert" className="p-4 bg-red-50 text-red-800 rounded-xl text-xs font-semibold">
+        <div role="alert" className="p-4 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 rounded-xl text-xs font-semibold">
           {error}
           <button onClick={refresh} className="underline ml-3 cursor-pointer">Retry</button>
         </div>
       )}
 
       {/* UNIFIED CONTAINER */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl shadow-xs overflow-hidden flex flex-col">
         
         {/* TABS */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex items-center overflow-x-auto">
-          <div className="flex items-center gap-1.5 p-1 bg-neutral-200/60 rounded-xl">
+        <div className="p-4 border-b border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] flex items-center overflow-x-auto">
+          <div className="flex items-center gap-1.5 p-1 bg-neutral-200/60 dark:bg-gray-800 rounded-xl">
             {navTabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveSection(tab.id)}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   activeSection === tab.id
-                    ? 'bg-white text-gray-900 shadow-xs'
-                    : 'text-neutral-500 hover:text-neutral-900'
+                    ? 'bg-white dark:bg-[#2b1317] text-gray-900 dark:text-white shadow-xs'
+                    : 'text-neutral-500 dark:text-gray-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 {tab.icon}
@@ -128,9 +128,9 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
 
           {activeSection === 'supplies' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-                <div><p className="text-sm font-bold text-gray-900">Equipment inventory</p><p className="mt-0.5 text-xs text-gray-500">Register equipment and manage its lending stock.</p></div>
-                <button onClick={() => setEquipmentForm({name:'',quantity:1})} className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-red-900">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] p-4">
+                <div><p className="text-sm font-bold text-gray-900 dark:text-white">Equipment inventory</p><p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Register equipment and manage its lending stock.</p></div>
+                <button onClick={() => setEquipmentForm({name:'',quantity:1})} className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 dark:bg-red-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-red-900">
                   <Plus size={14}/> Add Equipment
                 </button>
               </div>
@@ -138,36 +138,36 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
                 {data.inventory.map(item => (
                   <div 
                     key={item.asd_id} 
-                    className="p-5 rounded-xl bg-white border border-gray-200 shadow-2xs flex flex-col justify-between hover:border-red-300 transition-colors"
+                    className="p-5 rounded-xl bg-white dark:bg-[#1c1113] border border-gray-200 dark:border-[#42292f] shadow-2xs flex flex-col justify-between hover:border-red-300 transition-colors"
                   >
                     <div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-red-50 text-red-800">
+                          <div className="p-2 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-400">
                             <Boxes size={18} />
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-gray-900">{item.asset_name}</h4>
-                            <p className="text-[10px] text-gray-400 font-mono mt-0.5">ID: {item.asd_id}</p>
+                            <h4 className="text-sm font-bold text-gray-900 dark:text-white">{item.asset_name}</h4>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-0.5">ID: {item.asd_id}</p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 divide-x divide-gray-200 rounded-xl bg-gray-50 mt-4 py-3 text-center border border-gray-100">
+                      <div className="grid grid-cols-2 divide-x divide-gray-200 dark:divide-gray-700 rounded-xl bg-gray-50 dark:bg-[#180e10] mt-4 py-3 text-center border border-gray-100 dark:border-gray-800">
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Available</p>
-                          <p className="text-2xl font-black text-red-800 mt-0.5">{item.current_stock}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Available</p>
+                          <p className="text-2xl font-black text-red-800 dark:text-red-400 mt-0.5">{item.current_stock}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Total Stock</p>
-                          <p className="text-2xl font-black text-gray-800 mt-0.5">{item.capacity}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total Stock</p>
+                          <p className="text-2xl font-black text-gray-800 dark:text-gray-200 mt-0.5">{item.capacity}</p>
                         </div>
                       </div>
                     </div>
 
                     <button
                       onClick={() => onSelectInventoryItem && onSelectInventoryItem(item)}
-                      className="mt-4 w-full py-2.5 px-3 bg-neutral-900 hover:bg-black text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs"
+                      className="mt-4 w-full py-2.5 px-3 bg-neutral-900 dark:bg-gray-800 hover:bg-black dark:hover:bg-gray-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs"
                     >
                       <ArrowRightLeft size={13} /> Lend or Return
                     </button>
@@ -176,9 +176,9 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
               </div>
 
               {!data.inventory.length && (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-12 text-center">
-                  <Package size={30} className="mx-auto text-gray-300 mb-2" />
-                  <p className="text-sm font-bold text-gray-600">No equipment found</p>
+                <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-[#1c1113] p-12 text-center">
+                  <Package size={30} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+                  <p className="text-sm font-bold text-gray-600 dark:text-gray-400">No equipment found</p>
                   <p className="text-xs text-gray-400 mt-1">Equipment and supplies registered in the system will display here.</p>
                 </div>
               )}
@@ -189,13 +189,13 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
 
       {equipmentForm && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <form onSubmit={addEquipment} role="dialog" aria-modal="true" aria-label="Add equipment" className="w-full max-w-md space-y-4 rounded-2xl border border-gray-200 bg-white p-6 text-left shadow-2xl">
-            <header className="flex items-start justify-between border-b border-gray-100 pb-3"><div><h3 className="font-bold text-gray-900">Add Equipment</h3><p className="mt-1 text-xs text-gray-500">Create a new Equipment & Stock inventory item.</p></div><button type="button" onClick={() => setEquipmentForm(null)} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:text-gray-700"><X size={18}/></button></header>
+          <form onSubmit={addEquipment} role="dialog" aria-modal="true" aria-label="Add equipment" className="w-full max-w-md space-y-4 rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-6 text-left shadow-2xl">
+            <header className="flex items-start justify-between border-b border-gray-100 dark:border-[#42292f] pb-3"><div><h3 className="font-bold text-gray-900 dark:text-white">Add Equipment</h3><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Create a new Equipment & Stock inventory item.</p></div><button type="button" onClick={() => setEquipmentForm(null)} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18}/></button></header>
             <fieldset disabled={equipmentBusy} className="space-y-3">
-              <label className="block text-xs font-bold text-gray-700">Equipment name<input autoFocus required maxLength="100" value={equipmentForm.name} onChange={event => setEquipmentForm({...equipmentForm,name:event.target.value})} placeholder="e.g., Projector" className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-red-800"/></label>
-              <label className="block text-xs font-bold text-gray-700">Initial total stock<input required type="number" min="1" step="1" value={equipmentForm.quantity} onChange={event => setEquipmentForm({...equipmentForm,quantity:event.target.value})} className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-red-800"/></label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">Equipment name<input autoFocus required maxLength="100" value={equipmentForm.name} onChange={event => setEquipmentForm({...equipmentForm,name:event.target.value})} placeholder="e.g., Projector" className="mt-1 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] px-3 py-2.5 text-xs text-gray-900 dark:text-white outline-none focus:border-red-800"/></label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">Initial total stock<input required type="number" min="1" step="1" value={equipmentForm.quantity} onChange={event => setEquipmentForm({...equipmentForm,quantity:event.target.value})} className="mt-1 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] px-3 py-2.5 text-xs text-gray-900 dark:text-white outline-none focus:border-red-800"/></label>
             </fieldset>
-            <footer className="flex justify-end gap-2 border-t border-gray-100 pt-4"><button type="button" disabled={equipmentBusy} onClick={() => setEquipmentForm(null)} className="rounded-xl border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700">Cancel</button><button disabled={equipmentBusy} className="rounded-xl bg-red-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{equipmentBusy?'Adding…':'Add Equipment'}</button></footer>
+            <footer className="flex justify-end gap-2 border-t border-gray-100 dark:border-[#42292f] pt-4"><button type="button" disabled={equipmentBusy} onClick={() => setEquipmentForm(null)} className="rounded-xl border border-gray-300 dark:border-gray-700 px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-300">Cancel</button><button disabled={equipmentBusy} className="rounded-xl bg-red-800 dark:bg-red-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{equipmentBusy?'Adding…':'Add Equipment'}</button></footer>
           </form>
         </div>
       )}

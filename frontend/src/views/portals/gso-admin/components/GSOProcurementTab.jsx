@@ -22,6 +22,7 @@ export default function GSOProcurementTab({
   targetSection,
   setTargetSection
 }) {
+
   // Category tabs: all, vehicle, multimedia, gym, logistics
   const [selectedCategory, setSelectedCategory] = useState('all');
 
@@ -96,7 +97,7 @@ export default function GSOProcurementTab({
         totalPages: logData.totalPages
       };
     }
-
+    
     // 'all' category: merge standard reservation items
     const combined = [
       ...vehicleData.filteredData.map(d => ({ ...d, _type: 'vehicle' })),
@@ -125,18 +126,18 @@ export default function GSOProcurementTab({
     <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
       
       {/* HEADER */}
-      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <p className="text-sm text-gray-500">Review, organize, and assign driver and room requests.</p>
+      <div className="bg-white dark:bg-[#180e10] p-6 rounded-2xl border border-gray-200 dark:border-[#42292f] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400">Review, organize, and assign driver and room requests.</p>
         <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={() => setShowPrintModal(true)} 
-            className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-bold text-xs uppercase tracking-wide rounded-xl shadow-xs transition-all border border-gray-300 flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2.5 bg-white dark:bg-[#1c1113] hover:bg-gray-50 dark:hover:bg-[#2b1317] text-gray-700 dark:text-gray-300 font-bold text-xs uppercase tracking-wide rounded-xl shadow-xs transition-all border border-gray-300 dark:border-gray-700 flex items-center gap-2 cursor-pointer"
           >
             <Download size={15} strokeWidth={2.5} /> Export Report
           </button>
           <button 
             onClick={() => setShowChecklistMakerModal(true)} 
-            className="px-4 py-2.5 bg-[#991b1b] hover:bg-red-900 text-white font-bold text-xs uppercase tracking-wide rounded-xl shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2.5 bg-[#991b1b] dark:bg-red-800 hover:bg-red-900 dark:hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wide rounded-xl shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
           >
             <Edit size={15} strokeWidth={2.5} /> Required Documents
           </button>
@@ -144,19 +145,20 @@ export default function GSOProcurementTab({
       </div>
 
       {/* CONTROLS & UNIFIED TABLE CARD */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl shadow-xs overflow-hidden flex flex-col">
         
         {/* TOP TOOLBAR: CATEGORY TOGGLES */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-1.5 p-1 bg-neutral-200/60 rounded-xl overflow-x-auto max-w-full">
+        <div className="p-4 border-b border-gray-100 dark:border-[#42292f] bg-gray-50/50 dark:bg-[#1c1113] flex flex-wrap items-center justify-between gap-4">
+          
+          <div className="flex items-center gap-1.5 p-1 bg-neutral-200/60 dark:bg-gray-800 rounded-xl overflow-x-auto max-w-full">
             {categoryTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setSelectedCategory(tab.id)}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   selectedCategory === tab.id
-                    ? 'bg-white text-neutral-900 shadow-xs'
-                    : 'text-neutral-500 hover:text-neutral-800'
+                    ? 'bg-white dark:bg-[#2b1317] text-neutral-900 dark:text-white shadow-xs'
+                    : 'text-neutral-500 dark:text-gray-400 hover:text-neutral-800 dark:hover:text-gray-200'
                 }`}
               >
                 {tab.icon}
@@ -174,16 +176,15 @@ export default function GSOProcurementTab({
                 placeholder="Search requestor or event..." 
                 value={currentSearch} 
                 onChange={e => handleSearchChange(e.target.value)} 
-                className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-xl bg-white outline-none focus:ring-1 focus:ring-red-700 focus:border-red-700 shadow-xs transition-all font-medium" 
+                className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-[#180e10] dark:text-white outline-none focus:ring-1 focus:ring-red-700 focus:border-red-700 shadow-xs transition-all font-medium" 
               />
             </div>
-
-            <div className="flex items-center gap-1.5 border border-gray-300 bg-white px-3 py-2 rounded-xl text-xs shadow-xs focus-within:ring-1 focus-within:ring-red-700 transition-all">
+            <div className="flex items-center gap-1.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3 py-2 rounded-xl text-xs shadow-xs focus-within:ring-1 focus-within:ring-red-700 transition-all">
               <Filter size={14} className="text-gray-400" />
               <select 
                 value={currentFilter} 
                 onChange={e => handleFilterChange(e.target.value)} 
-                className="bg-transparent font-medium text-gray-700 outline-none cursor-pointer pr-2"
+                className="bg-transparent font-medium text-gray-700 dark:text-gray-300 outline-none cursor-pointer pr-2"
               >
                 <option value="All">All Statuses</option>
                 {selectedCategory === 'logistics' ? (
@@ -206,7 +207,7 @@ export default function GSOProcurementTab({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse">
             <thead>
-              <tr className="bg-gray-50/80 border-b border-gray-200 font-bold uppercase text-[11px] text-gray-500 tracking-wider">
+              <tr className="bg-gray-50/80 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] font-bold uppercase text-[11px] text-gray-500 dark:text-gray-400 tracking-wider">
                 <th className="p-4">Requested By</th>
                 <th className="p-4">Request Type</th>
                 <th className="p-4">Purpose / Item</th>
@@ -215,34 +216,36 @@ export default function GSOProcurementTab({
                 <th className="p-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 font-medium">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50 font-medium">
               {items.map((row, idx) => {
                 const isLog = row._type === 'logistics';
                 const hasVehicleAssignment = Boolean(
                   (row.assigned_vehicle_id && row.assigned_driver_id) ||
                   (row.vehicle_to_be_used && row.designated_driver)
                 );
+
                 const dateObj = new Date(isLog ? row.borrowed_at : row.reservation_date);
                 const requestor = row.requestor || row.requestor_name || 'Anonymous';
                 
                 const typeLabels = {
-                  vehicle: { label: 'Vehicle', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-                  multimedia: { label: 'Multimedia Room', color: 'bg-purple-50 text-purple-700 border-purple-200' },
-                  gym: { label: 'Gymnasium', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-                  logistics: { label: 'Equipment', color: 'bg-teal-50 text-teal-700 border-teal-200' }
+                  vehicle: { label: 'Vehicle', color: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' },
+                  multimedia: { label: 'Multimedia Room', color: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800' },
+                  gym: { label: 'Gymnasium', color: 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800' },
+                  logistics: { label: 'Equipment', color: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800' }
                 };
-                const badge = typeLabels[row._type] || { label: 'General', color: 'bg-gray-100 text-gray-700 border-gray-200' };
+
+                const badge = typeLabels[row._type] || { label: 'General', color: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700' };
 
                 return (
-                  <tr key={row.booking_id || row.log_id || idx} className="hover:bg-gray-50/80 transition-colors">
+                  <tr key={row.booking_id || row.log_id || idx} className="hover:bg-gray-50/80 dark:hover:bg-[#2b1317]/50 transition-colors">
                     
                     {/* REQUESTOR */}
                     <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-neutral-100 text-neutral-600 flex items-center justify-center text-xs font-bold shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-[#2b1317] text-neutral-600 dark:text-gray-300 flex items-center justify-center text-xs font-bold shrink-0">
                           {requestor.charAt(0).toUpperCase()}
                         </div>
-                        <span className="font-bold text-gray-900">{requestor}</span>
+                        <span className="font-bold text-gray-900 dark:text-white">{requestor}</span>
                       </div>
                     </td>
 
@@ -254,10 +257,10 @@ export default function GSOProcurementTab({
                     </td>
 
                     {/* PURPOSE / ITEM */}
-                    <td className="p-4 text-gray-700 max-w-[220px] truncate" title={isLog ? row.asset_name : row.purpose}>
+                    <td className="p-4 text-gray-700 dark:text-gray-300 max-w-[220px] truncate" title={isLog ? row.asset_name : row.purpose}>
                       {isLog ? (
-                        <div className="font-bold text-gray-900">
-                          {row.asset_name} <span className="text-gray-400 font-normal">({row.qty_borrowed} units)</span>
+                        <div className="font-bold text-gray-900 dark:text-white">
+                          {row.asset_name} <span className="text-gray-400 dark:text-gray-500 font-normal">({row.qty_borrowed} units)</span>
                         </div>
                       ) : (
                         row.purpose || 'No description provided'
@@ -265,13 +268,13 @@ export default function GSOProcurementTab({
                     </td>
 
                     {/* SCHEDULE */}
-                    <td className="p-4 text-gray-600">
-                      <div className="flex items-center gap-1.5 font-bold text-gray-900 text-xs">
+                    <td className="p-4 text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-gray-200 text-xs">
                         <Calendar size={13} className="text-gray-400" />
                         {dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </div>
                       {!isLog && row.start_time && (
-                        <div className="text-[10px] text-gray-500 font-mono mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded inline-block">
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 font-mono mt-0.5 bg-gray-100 dark:bg-[#2b1317] px-1.5 py-0.5 rounded inline-block">
                           {row.start_time?.substring(0,5)} - {row.end_time?.substring(0,5)}
                         </div>
                       )}
@@ -281,8 +284,8 @@ export default function GSOProcurementTab({
                     <td className="p-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border shadow-2xs ${
                         row.status === 'Approved' || row.status === 'Returned'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                          ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' 
+                          : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
                           row.status === 'Approved' || row.status === 'Returned' ? 'bg-emerald-500' : 'bg-amber-500'
@@ -298,7 +301,7 @@ export default function GSOProcurementTab({
                           {/* 1. Checklist Button */}
                           <button 
                             onClick={() => handleViewChecklist(row)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-red-50 hover:text-red-800 hover:border-red-200 transition-all text-[11px] shadow-2xs cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#180e10] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-lg hover:bg-red-50 dark:hover:bg-[#2b1317] hover:text-red-800 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all text-[11px] shadow-2xs cursor-pointer"
                           >
                             <CheckSquare size={13} />
                             Checklist
@@ -309,17 +312,17 @@ export default function GSOProcurementTab({
                             hasVehicleAssignment ? (
                               /* Case A: Already Assigned -> Disabled "Assigned" Chip */
                               <span 
-                                title={`Assigned: ${row.vehicle_to_be_used || 'Vehicle'} · Driver: ${row.designated_driver || 'Driver'}`}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold rounded-lg text-[11px] select-none cursor-default"
+                                title={`Assigned: ${row.vehicle_to_be_used || 'Vehicle'} | Driver: ${row.designated_driver || 'Driver'}`}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-400 font-bold rounded-lg text-[11px] select-none cursor-default"
                               >
-                                <UserCheck size={13} className="text-emerald-600" />
+                                <UserCheck size={13} className="text-emerald-600 dark:text-emerald-500" />
                                 Assigned
                               </span>
                             ) : row.status === 'Approved' ? (
                               /* Case B: Approved but not assigned */
                               <button 
                                 onClick={() => handleAssignVehicle(row)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-800 hover:bg-red-900 text-white font-bold rounded-lg text-[11px] shadow-2xs cursor-pointer transition-colors"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-800 dark:bg-red-700 hover:bg-red-900 dark:hover:bg-red-800 text-white font-bold rounded-lg text-[11px] shadow-2xs cursor-pointer transition-colors"
                               >
                                 <UserCheck size={13} />
                                 Assign Driver
@@ -329,7 +332,7 @@ export default function GSOProcurementTab({
                               <button 
                                 disabled
                                 title="Complete the document checklist and approve the request before assigning a driver and vehicle."
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-400 font-bold rounded-lg text-[11px] cursor-not-allowed select-none opacity-80"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 font-bold rounded-lg text-[11px] cursor-not-allowed select-none opacity-80"
                               >
                                 <UserCheck size={13} />
                                 Assign Driver
@@ -338,7 +341,7 @@ export default function GSOProcurementTab({
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-400 font-medium italic">Auto-recorded</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 font-medium italic">Auto-recorded</span>
                       )}
                     </td>
                   </tr>
@@ -347,11 +350,11 @@ export default function GSOProcurementTab({
 
               {items.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="p-12 text-center bg-gray-50/50">
+                  <td colSpan="6" className="p-12 text-center bg-gray-50/50 dark:bg-[#1c1113]">
                     <div className="flex flex-col items-center justify-center">
-                      <Inbox className="w-9 h-9 text-gray-300 mb-2" />
-                      <p className="text-sm font-bold text-gray-700">No requests found</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Try searching with a different term or clearing your status filter.</p>
+                      <Inbox className="w-9 h-9 text-gray-300 dark:text-gray-600 mb-2" />
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">No requests found</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Try searching with a different term or clearing your status filter.</p>
                     </div>
                   </td>
                 </tr>
@@ -362,25 +365,25 @@ export default function GSOProcurementTab({
 
         {/* PAGINATION FOOTER */}
         {totalPages > 1 && (
-          <div className="flex justify-between items-center p-4 border-t border-gray-100 bg-white text-xs">
-            <span className="text-gray-500 font-medium">
-              Showing <span className="font-bold text-gray-900">{items.length}</span> of <span className="font-bold text-gray-900">{totalCount}</span> requests
+          <div className="flex justify-between items-center p-4 border-t border-gray-100 dark:border-[#42292f] bg-white dark:bg-[#180e10] text-xs">
+            <span className="text-gray-500 dark:text-gray-400 font-medium">
+              Showing <span className="font-bold text-gray-900 dark:text-white">{items.length}</span> of <span className="font-bold text-gray-900 dark:text-white">{totalCount}</span> requests
             </span>
             <div className="flex gap-2">
               <button 
                 disabled={currentPage <= 1} 
                 onClick={() => handlePageChange(currentPage - 1)} 
-                className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white disabled:opacity-40 hover:bg-gray-50 font-bold text-gray-700 shadow-2xs cursor-pointer transition-colors"
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-[#1c1113] disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-[#2b1317] font-bold text-gray-700 dark:text-gray-300 shadow-2xs cursor-pointer transition-colors"
               >
                 Previous
               </button>
-              <span className="px-3 py-1.5 border border-gray-200 rounded-lg bg-gray-50 font-black text-gray-900">
+              <span className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-[#2b1317] font-black text-gray-900 dark:text-white">
                 {currentPage} / {totalPages}
               </span>
               <button 
                 disabled={currentPage >= totalPages} 
                 onClick={() => handlePageChange(currentPage + 1)} 
-                className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white disabled:opacity-40 hover:bg-gray-50 font-bold text-gray-700 shadow-2xs cursor-pointer transition-colors"
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-[#1c1113] disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-[#2b1317] font-bold text-gray-700 dark:text-gray-300 shadow-2xs cursor-pointer transition-colors"
               >
                 Next
               </button>
@@ -388,7 +391,6 @@ export default function GSOProcurementTab({
           </div>
         )}
       </div>
-
     </div>
   );
 }

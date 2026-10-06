@@ -155,18 +155,50 @@ export default function AnalyticsReportModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="analytics-report-title" className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <header className="flex items-start justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
-          <div><h2 id="analytics-report-title" className="flex items-center gap-2 text-lg font-black text-gray-900"><FileText className="text-red-700" size={20} /> Build Analytics Report</h2><p className="mt-1 text-xs text-gray-500">Choose a date range and one or more report sections.</p></div>
-          <button type="button" onClick={closeModal} aria-label="Close report builder" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X size={20} /></button>
+      <section role="dialog" aria-modal="true" aria-labelledby="analytics-report-title" className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white dark:bg-[#180e10] border border-neutral-200 dark:border-[#42292f] shadow-2xl">
+        <header className="flex items-start justify-between border-b border-gray-100 dark:border-[#42292f] px-5 py-4 sm:px-6 bg-[#FDFBF9] dark:bg-[#1c1113]">
+          <div><h2 id="analytics-report-title" className="flex items-center gap-2 text-lg font-black text-gray-900 dark:text-white"><FileText className="text-red-700 dark:text-red-400" size={20} /> Build Analytics Report</h2><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Choose a date range and one or more report sections.</p></div>
+          <button type="button" onClick={closeModal} aria-label="Close report builder" className="rounded-lg p-1.5 text-gray-400 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer"><X size={20} /></button>
         </header>
-        <div className="overflow-y-auto p-5 sm:p-6">
-          <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-gray-700">Start date<input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2.5 font-normal" /></label><label className="text-xs font-bold text-gray-700">End date<input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2.5 font-normal" /></label></div>
-          <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-black text-gray-900">Report sections</h3><div className="flex gap-2"><button type="button" onClick={() => setSelected(sections.map(item => item.id))} className="text-xs font-bold text-red-700 hover:underline">Select all</button><span className="text-gray-300">|</span><button type="button" onClick={() => setSelected([])} className="text-xs font-bold text-gray-600 hover:underline">Clear</button></div></div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">{sections.map(item => { const checked = selectedSet.has(item.id); return <button key={item.id} type="button" onClick={() => toggle(item.id)} className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${checked ? 'border-red-200 bg-red-50/70' : 'border-gray-200 hover:bg-gray-50'}`}>{checked ? <CheckSquare className="mt-0.5 shrink-0 text-red-700" size={18} /> : <Square className="mt-0.5 shrink-0 text-gray-400" size={18} />}<span><span className="block text-xs font-bold text-gray-900">{item.label}</span><span className="mt-1 block text-[11px] leading-relaxed text-gray-500">{item.description}{item.snapshot ? ' Date range does not apply.' : ''}</span></span></button>; })}</div>
-          {error && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
+        <div className="overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Start date
+              <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 font-normal outline-none focus:ring-1 focus:ring-red-700" />
+            </label>
+            <label className="text-xs font-bold text-gray-700 dark:text-gray-300">End date
+              <input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 font-normal outline-none focus:ring-1 focus:ring-red-700" />
+            </label>
+          </div>
+          <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-black text-gray-900 dark:text-white">Report sections</h3><div className="flex gap-2"><button type="button" onClick={() => setSelected(sections.map(item => item.id))} className="text-xs font-bold text-red-700 dark:text-red-400 hover:underline cursor-pointer">Select all</button><span className="text-gray-300 dark:text-gray-700">|</span><button type="button" onClick={() => setSelected([])} className="text-xs font-bold text-gray-600 dark:text-gray-400 hover:underline cursor-pointer">Clear</button></div></div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {sections.map(item => { 
+              const checked = selectedSet.has(item.id); 
+              return (
+                <button 
+                  key={item.id} 
+                  type="button" 
+                  onClick={() => toggle(item.id)} 
+                  className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors cursor-pointer ${
+                    checked 
+                      ? 'border-red-200 dark:border-red-900 bg-red-50/70 dark:bg-red-900/30' 
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1113] hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  {checked ? <CheckSquare className="mt-0.5 shrink-0 text-red-700 dark:text-red-400" size={18} /> : <Square className="mt-0.5 shrink-0 text-gray-400 dark:text-gray-500" size={18} />}
+                  <span>
+                    <span className="block text-xs font-bold text-gray-900 dark:text-white">{item.label}</span>
+                    <span className="mt-1 block text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">{item.description}{item.snapshot ? ' Date range does not apply.' : ''}</span>
+                  </span>
+                </button>
+              ); 
+            })}
+          </div>
+          {error && <p role="alert" className="mt-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm text-red-800 dark:text-red-300">{error}</p>}
         </div>
-        <footer className="flex justify-end gap-3 border-t border-gray-100 px-5 py-4 sm:px-6"><button type="button" onClick={closeModal} className="rounded-lg border border-gray-300 px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50">Cancel</button><button type="button" disabled={generating || !selected.length} onClick={generateReport} className="rounded-lg bg-red-700 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50">{generating ? 'Generating…' : `Generate ${selected.length} section${selected.length === 1 ? '' : 's'}`}</button></footer>
+        <footer className="flex justify-end gap-3 border-t border-gray-100 dark:border-[#42292f] px-5 py-4 sm:px-6 bg-[#FDFBF9] dark:bg-[#1c1113]">
+          <button type="button" onClick={closeModal} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-4 py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">Cancel</button>
+          <button type="button" disabled={generating || !selected.length} onClick={generateReport} className="rounded-lg bg-red-800 dark:bg-red-700 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-red-900 dark:hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">{generating ? 'Generating…' : `Generate ${selected.length} section${selected.length === 1 ? '' : 's'}`}</button>
+        </footer>
       </section>
     </div>
   );
