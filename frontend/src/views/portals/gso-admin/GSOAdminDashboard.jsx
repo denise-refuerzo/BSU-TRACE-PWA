@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
   LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X,
-  ChevronDown, Boxes, CalendarClock
+  ChevronDown, Boxes, CalendarClock, Link2
 } from 'lucide-react';
 import { endSession, fetchWithAuth } from '../../../api';
 import { prepareDemandChart } from './demandAnalytics';
@@ -35,6 +35,7 @@ import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
 import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
 import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
 import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
+import RegistrationManagementPage from '../../shared/components/RegistrationManagementPage';
 
 // NEW: Theme Toggle
 import ThemeToggle from '../../shared/components/ThemeToggle';
@@ -223,6 +224,7 @@ export default function GSOAdminDashboard() {
     resources: 'Resource Inventory',
     procurement: 'List of Requests',
     'manage-bookings': 'Manage Bookings',
+    'registration-management': 'Registration Management',
     analytics: 'Operational Analytics',
     history: 'History',
     profile: 'Profile Management'
@@ -651,6 +653,10 @@ export default function GSOAdminDashboard() {
               )}
             </div>
 
+            <button onClick={() => handleTabSelect('registration-management')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'registration-management' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
+              <Link2 size={18} /> Registration Management
+            </button>
+
             <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
               <BarChart3 size={18} /> Operational Analytics
             </button>
@@ -824,6 +830,10 @@ export default function GSOAdminDashboard() {
               setTargetSection={setProcurementTargetSection}
             />
           )}
+
+          {activeTab === 'registration-management' && (gsoOfficeId
+            ? <RegistrationManagementPage userId={userId} officeOnly access={{ offices: [{ office_id: gsoOfficeId, office_name: gsoOfficeName, can_request_registration: true }], departments: [] }} />
+            : <p className="p-8 text-center text-sm text-neutral-500">Loading GSO office...</p>)}
 
           {activeTab === 'analytics' && (
             <Suspense fallback={<div className="flex min-h-[420px] items-center justify-center text-sm font-bold text-neutral-500">Loading analytics workspace...</div>}>

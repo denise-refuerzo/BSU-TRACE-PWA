@@ -1,4 +1,4 @@
-const expectedDocumentsSql = `SELECT idoc.ini_id,idoc.title,idoc.qr_code,idoc.created_at,pt.process_name,creator.full_name AS requestor_name,
+const expectedDocumentsSql = `SELECT idoc.public_id AS ini_id,idoc.title,idoc.qr_code,idoc.created_at,pt.process_name,creator.full_name AS requestor_name,
   COALESCE(curr_o.office_name,'Origin Station') AS current_office
   FROM public.initial_document idoc JOIN public.process_type pt ON idoc.p_id=pt.p_id
   JOIN public."User" creator ON idoc.u_id=creator.u_id
@@ -6,6 +6,7 @@ const expectedDocumentsSql = `SELECT idoc.ini_id,idoc.title,idoc.qr_code,idoc.cr
     ORDER BY (pd.time_out IS NULL) DESC,pd.pd_id DESC LIMIT 1) current_step ON TRUE
   LEFT JOIN public.offices curr_o ON current_step.current_office_id=curr_o.o_id
   WHERE $1=ANY(idoc.route_snapshot)
+    AND idoc.lifecycle_state <> 'cancelled'
     AND (SELECT s_id FROM public.processed_document latest WHERE latest.ini_id=idoc.ini_id ORDER BY pd_id DESC LIMIT 1) NOT IN (4,5)
     AND NOT EXISTS (SELECT 1 FROM public.processed_document received WHERE received.ini_id=idoc.ini_id
       AND received.current_office_id=$1 AND received.time_in IS NOT NULL)
@@ -16,19 +17,22 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT DISTINCT ON (idoc.ini_id)
-             idoc.ini_id, 
+             idoc.public_id AS ini_id,
              idoc.title, 
              idoc.edc, 
              idoc.qr_code, 
              idoc.created_at,
              idoc.submission_office_id,
              idoc.route_snapshot,
+             idoc.lifecycle_state,
+             idoc.cancelled_at,
+             idoc.cancellation_reason,
              (SELECT full_name FROM public."User" WHERE u_id=idoc.u_id) AS submitted_by,
              pdoc.time_out AS release_time,
              pt.process_name,
              curr_o.office_name as current_office, 
              next_o.office_name as next_office, 
-             st.current_status as status,
+             CASE WHEN idoc.lifecycle_state='cancelled' THEN 'Cancelled' ELSE st.current_status END as status,
              (
                SELECT action_type 
                FROM public.office_action_history 
@@ -39,7 +43,7 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
              (
               SELECT json_agg(json_build_object(
                 'office_name', off2.office_name,
-                'pd_id', p2.pd_id,
+                'pd_id', p2.public_id,
                 'current_office_id', p2.current_office_id,
                 's_id', p2.s_id,
                 'time_in', p2.time_in AT TIME ZONE 'Asia/Manila',
@@ -56,11 +60,11 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
       LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE (idoc.u_id = $1 OR ($2::integer IS NOT NULL AND idoc.submission_office_id=$2)) 
+      WHERE idoc.u_id = $1
+        AND NOT EXISTS (SELECT 1 FROM public.document_user_archives dua WHERE dua.ini_id=idoc.ini_id AND dua.user_id=$1)
       ORDER BY idoc.ini_id DESC, (pdoc.time_out IS NULL) DESC, pdoc.pd_id DESC;
     `;
-    if (Number(req.params.userId) !== Number(req.user.u_id)) return res.status(403).json({error:"Access denied."});
-    const result = await pool.query(query, [req.user.u_id, [2,3,4].includes(Number(req.user.a_id)) ? req.user.o_id : null]);
+    const result = await pool.query(query, [req.user.u_id]);
     res.json(result.rows.map(doc => ({...doc,
       history_logs: routeProgress(doc.route_snapshot || [],doc.history_logs || []).history
     })));
@@ -82,7 +86,7 @@ app.get('/api/processor/documents/:officeId', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT 
-        idoc.ini_id, 
+        idoc.public_id AS ini_id,
         idoc.title, 
         idoc.edc, 
         idoc.qr_code, 
@@ -105,7 +109,7 @@ app.get('/api/processor/documents/:officeId', requireAuth, async (req, res) => {
       LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE pdoc.current_office_id = $1 AND pdoc.time_out IS NULL
+      WHERE pdoc.current_office_id = $1 AND pdoc.time_out IS NULL AND idoc.lifecycle_state <> 'cancelled'
       ORDER BY pdoc.pd_id DESC;
     `;
     const result = await pool.query(query, [parseInt(officeId)]);
@@ -125,7 +129,7 @@ app.get('/api/processor/documents/pipeline/:officeId', requireAuth, async (req, 
   try {
     const query = `
       SELECT DISTINCT ON (idoc.ini_id)
-        idoc.ini_id, 
+        idoc.public_id AS ini_id,
         idoc.title, 
         idoc.edc, 
         idoc.qr_code, 
@@ -154,7 +158,7 @@ app.get('/api/processor/documents/pipeline/:officeId', requireAuth, async (req, 
       LEFT JOIN public.offices curr_o ON COALESCE(pdoc_active.current_office_id, pdoc_office.current_office_id) = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc_active.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON COALESCE(pdoc_active.s_id, pdoc_office.s_id) = st.s_id
-      WHERE pdoc_office.current_office_id = $1
+      WHERE pdoc_office.current_office_id = $1 AND idoc.lifecycle_state <> 'cancelled'
       ORDER BY idoc.ini_id DESC, pdoc_office.pd_id DESC;
     `;
     const result = await pool.query(query, [parseInt(officeId)]);
@@ -177,13 +181,13 @@ app.get('/api/processor/history/:officeId', requireAuth, async (req, res) => {
   try {
     const query = `
       SELECT 
-        h.history_id,
+        h.public_id AS history_id,
         h.action_type,
         CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp - INTERVAL '8 hours' ELSE h.action_timestamp END AS action_timestamp,
         u.full_name,
         idoc.title,
         idoc.qr_code,
-        idoc.ini_id,
+        idoc.public_id AS ini_id,
         idoc.edc,
         idoc.created_at, 
         pt.process_name,
@@ -230,8 +234,9 @@ app.get('/api/processor/documents/kpi-metrics/:officeId', requireAuth, async (re
 
   try {
     const incoming=await pool.query(expectedDocumentsSql,[officeId]);
-    const result=await pool.query(`WITH latest AS (SELECT DISTINCT ON(ini_id) * FROM public.processed_document
-      WHERE current_office_id=$1 ORDER BY ini_id,pd_id DESC)
+    const result=await pool.query(`WITH latest AS (SELECT DISTINCT ON(pd.ini_id) pd.* FROM public.processed_document pd
+      JOIN public.initial_document idoc ON idoc.ini_id=pd.ini_id
+      WHERE pd.current_office_id=$1 AND idoc.lifecycle_state <> 'cancelled' ORDER BY pd.ini_id,pd.pd_id DESC)
       SELECT count(*) FILTER(WHERE time_in IS NULL AND time_out IS NULL AND s_id=1)::int AS awaiting,
       count(*) FILTER(WHERE time_in IS NOT NULL AND time_out IS NULL AND s_id IN(1,2,3))::int AS pending,
       count(*) FILTER(WHERE time_out IS NULL AND s_id=2)::int AS verification,

@@ -6,15 +6,27 @@ const jwt = require('jwt-simple');
 const bcrypt = require('bcrypt');
 const pool = require('./db');
 const {lockSchedule, availability, assertConfirmable} = require('./resourceScheduling');
+const { resolveBookingSignatories } = require('./accountAccessRoutes');
+const { resolveChatDocument: resolveChatDocumentAccess, resolveChatRoom: resolveChatRoomAccess } = require('./chatAccess');
 const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require('./mailer');
 const crypto = require('crypto');
 const axios = require('axios');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 require('dotenv').config();
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET is required.');
+const SESSION_LIFETIME_MINUTES = Math.max(30, Number(process.env.SESSION_LIFETIME_MINUTES) || 480);
+const IDLE_TIMEOUT_MINUTES = Math.max(5, Number(process.env.IDLE_TIMEOUT_MINUTES) || 30);
+const sessionExpiry = () => new Date(Date.now() + SESSION_LIFETIME_MINUTES * 60 * 1000);
+const jwtExpiry = () => Math.floor(Date.now() / 1000) + SESSION_LIFETIME_MINUTES * 60;
 
 // ==========================================
 // 0. SERVER INITIALIZATION & SETUP
 // ==========================================
 const app = express();
+// Render and similar hosts forward the original address through one proxy.
+// This keeps public/auth limits from treating every visitor as the proxy itself.
+app.set('trust proxy', 1);
 const server = http.createServer(app); // 3. Wrap Express
 
 const allowedOrigins = [
@@ -31,10 +43,86 @@ app.use(cors({
     'http://localhost:5173',     
     'http://localhost:3000'
   ],
-  credentials: true
+  credentials: true,
+  // Authorization headers require a CORS preflight. Let browsers reuse a
+  // successful check briefly instead of sending a new OPTIONS request for
+  // every authenticated API call.
+  maxAge: 600
 }));
 
 app.use(express.json());
+
+const requestKey = req => {
+  const authorization = req.get('authorization');
+  if (authorization?.startsWith('Bearer ')) {
+    return `session:${crypto.createHash('sha256').update(authorization.slice(7)).digest('hex')}`;
+  }
+  return `ip:${ipKeyGenerator(req.ip)}`;
+};
+
+const rateLimitHandler = (req, res, _next, options) => {
+  const resetAt = req.rateLimit?.resetTime instanceof Date
+    ? req.rateLimit.resetTime.getTime()
+    : Date.now() + (options.windowMs || 60 * 1000);
+  const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+  const configuredMessage = options.message;
+  const baseMessage = typeof configuredMessage === 'object'
+    ? configuredMessage.error
+    : configuredMessage;
+  const error = `${baseMessage || 'Too many requests.'} Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`;
+
+  res.set('Retry-After', String(retryAfterSeconds));
+  return res.status(options.statusCode || 429).json({ error, retryAfterSeconds });
+};
+
+// Normal signed-in screens make several parallel reads and receive real-time
+// refresh events. Use a generous per-session ceiling while still containing
+// runaway clients and unauthenticated request floods.
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  limit: 1200,
+  keyGenerator: requestKey,
+  message: { error: 'This session is sending requests too quickly. Please wait a moment and try again.' },
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 180,
+  keyGenerator: requestKey,
+  message: { error: 'Too many changes were submitted in a short time. Please wait before trying again.' },
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  keyGenerator: requestKey,
+  message: { error: 'Messages are being sent too quickly. Please wait a moment.' },
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Strict Auth Limiter: 10 requests per 15 minutes per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  limit: 10,
+  keyGenerator: req => `auth:${ipKeyGenerator(req.ip)}`,
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many authentication attempts, please try again later.' },
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply global limiter to all standard API routes
+app.use('/api', globalLimiter);
+app.use('/api', (req, res, next) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? writeLimiter(req, res, next) : next());
 
 const io = new Server(server, {
   cors: {
@@ -49,36 +137,125 @@ const io = new Server(server, {
   }
 });
 
+// The companion scanner can connect without an account. Privileged room
+// subscriptions below are enabled only when this optional token is valid.
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next();
+  try {
+    const decoded = jwt.decode(token, JWT_SECRET);
+    const result = await pool.query(`SELECT u_id,public_id,a_id,o_id,d_id,session_token,is_active,session_expires_at,last_activity_at
+      FROM public."User" WHERE public_id=$1`, [decoded.sub]);
+    const user = result.rows[0];
+    const now = Date.now();
+    const idleDeadline = user?.last_activity_at ? new Date(user.last_activity_at).getTime() + IDLE_TIMEOUT_MINUTES * 60 * 1000 : 0;
+    if (user?.is_active && user.session_token === decoded.session_token && decoded.exp * 1000 > now &&
+        new Date(user.session_expires_at).getTime() > now && idleDeadline > now) socket.user = user;
+  } catch { /* Invalid optional tokens remain unauthenticated. */ }
+  next();
+});
+
 // ==========================================
 // 0.1 COMPANION SCANNER WEBSOCKET RELAYS
 // ==========================================
+app.set('io', io);
+
+const broadcastIctConfiguration = req => {
+  const socketServer = req.app.get('io');
+  socketServer?.to('ict_admin_room').emit('admin-configuration-updated');
+};
+
+const broadcastAccountRegistry = req => {
+  const socketServer = req.app.get('io');
+  socketServer?.to('ict_admin_room').emit('account-registry-updated');
+  socketServer?.to('ict_admin_room').emit('system-metrics-updated');
+  socketServer?.to('resource_updates_room').emit('account-access-updated');
+};
+
+const broadcastResourceUpdate = req => {
+  const socketServer = req.app.get('io');
+  socketServer?.to('resource_updates_room').emit('resource-schedule-updated');
+  socketServer?.to('gso_admin_room').emit('system-metrics-updated');
+};
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
-  // 1. Put both the PC and the Phone into the same private room
+  // Companion Scanner (existing)
   socket.on('join-companion-room', (roomId) => {
     socket.join(roomId);
-    // Tell the PC that the phone has successfully joined the room
     socket.to(roomId).emit('companion-device-joined');
   });
+  socket.on('forward-scan', (data) => socket.to(data.roomId).emit('forward-scan', data));
+  socket.on('scan-result', (data) => socket.to(data.roomId).emit('scan-result', data));
 
-  // 2. Receive the QR code from the phone and forward it to the PC
-  socket.on('forward-scan', (data) => {
-    // socket.to(roomId).emit(...) sends it to the PC in the room
-    socket.to(data.roomId).emit('forward-scan', data);
+  // --- NEW: Dynamic App Subscriptions ---
+  // 1. Office Staff Room (for pipeline, KPI, and office alerts)
+  socket.on('join-office-room', (officeId) => {
+    if (socket.user?.o_id && Number(officeId) === Number(socket.user.o_id)) {
+      socket.join(`office_${socket.user.o_id}`);
+    }
   });
 
-  // 3. Receive the API success/fail result from the PC and send it back to the phone
-  socket.on('scan-result', (data) => {
-    socket.to(data.roomId).emit('scan-result', data);
+  socket.on('join-submission-overview-rooms', async () => {
+    if (!socket.user) return;
+    try {
+      for (const room of socket.rooms) {
+        if (room.startsWith('overview_office_') || room.startsWith('overview_department_')) socket.leave(room);
+      }
+      const result = await pool.query(`
+        SELECT scope_type,office_id,department_id
+        FROM public.account_access_assignments aa
+        WHERE u_id=$1 AND can_view_submissions IS TRUE AND is_active IS TRUE
+          AND (starts_on IS NULL OR starts_on <= CURRENT_DATE)
+          AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)
+      `, [socket.user.u_id]);
+      result.rows.forEach(row => socket.join(row.scope_type === 'office'
+        ? `overview_office_${row.office_id}`
+        : `overview_department_${row.department_id}`));
+    } catch (error) {
+      console.error('Unable to join submission overview rooms:', error.message);
+    }
+  });
+
+  // 2. User Room (for personal document updates and notifications)
+  socket.on('join-user-room', (userId) => {
+    if (socket.user?.public_id && String(userId) === String(socket.user.public_id)) {
+      socket.join(`user_${socket.user.public_id}`);
+    }
+  });
+
+  // Resource calendars, current equipment counts, and request status updates.
+  socket.on('join-resource-room', () => {
+    if (socket.user) socket.join('resource_updates_room');
+  });
+
+  // 3. Document Chat Room
+  socket.on('join-chat-channel', async (roomId) => {
+    if (!socket.user || !roomId) return;
+    const room = await resolveChatRoom(roomId, socket.user).catch(() => null);
+    if (room) socket.join(`chat_room_${room.public_id}`);
+  });
+
+  socket.on('leave-chat-channel', (roomId) => {
+    if (roomId) {
+      socket.leave(`chat_room_${roomId}`);
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
   });
-});
+  
+  // 4. Global Admin Rooms
+  socket.on('join-ict-admin-room', () => {
+    if (Number(socket.user?.a_id) === 5) socket.join('ict_admin_room');
+  });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
+  socket.on('join-gso-admin-room', () => {
+    if (Number(socket.user?.a_id) === 4) socket.join('gso_admin_room');
+  });
+});
 
 const failed2faAttemptsTracker = {};
 const TWO_FA_WINDOW_MS = 10 * 60 * 1000;
@@ -94,16 +271,16 @@ const generateSixDigitCode = () => {
 // ==========================================
 // 1. LOGIN ENDPOINT (Conditional with 2FA)
 // ==========================================
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   try {
     const result = await pool.query(
-      `SELECT u.u_id, u.password, u.a_id, u.two_fa_enabled, u.is_active, u.uni_email, 
+      `SELECT u.u_id, u.public_id, u.password, u.a_id, u.two_fa_enabled, u.is_active, u.uni_email,
               a.account_type, d.department_name, u.full_name
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
-       JOIN public.department d ON u.d_id = d.d_id
+       LEFT JOIN public.department d ON u.d_id = d.d_id
        WHERE u.username = $1`,
       [username]
     );
@@ -142,7 +319,7 @@ app.post('/api/login', async (req, res) => {
       );
 
       return res.status(200).json({
-        u_id: user.u_id,
+        u_id: user.public_id,
         a_id: user.a_id,
         two_fa_enabled: true
         ,two_fa_expires_at: expiresAt.toISOString(), resend_after_seconds: 60
@@ -153,14 +330,15 @@ app.post('/api/login', async (req, res) => {
     // NORMAL LOGIC: If 2FA is OFF, generate token immediately
     // ----------------------------------------------------
     const sessionToken = crypto.randomBytes(32).toString('hex');
-    await pool.query('UPDATE public."User" SET session_token = $1 WHERE u_id = $2', [sessionToken, user.u_id]);
+    await pool.query('UPDATE public."User" SET session_token=$1,session_expires_at=$2,last_activity_at=NOW() WHERE u_id=$3', [sessionToken, sessionExpiry(), user.u_id]);
     
     // Maintain the JWT payload structure required by your middleware
     const token = jwt.encode({ 
-      u_id: user.u_id, 
+      sub: user.public_id,
       username: username, 
       a_id: user.a_id,
-      session_token: sessionToken 
+      session_token: sessionToken,
+      exp: jwtExpiry()
     }, JWT_SECRET);
 
     return res.status(200).json({
@@ -169,7 +347,7 @@ app.post('/api/login', async (req, res) => {
       role: user.a_id,
       roleName: user.account_type,
       fullName: user.full_name,
-      userId: user.u_id,
+      userId: user.public_id,
       two_fa_enabled: false,
       session_token: sessionToken 
     });
@@ -196,12 +374,21 @@ const requireAuth = async (req, res, next) => {
 
   try {
     const decoded = jwt.decode(token, JWT_SECRET);
+
+    // Tokens issued before the public-UUID migration contain only a numeric
+    // u_id. They represent an outdated session, not a deleted account.
+    if (typeof decoded.sub !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded.sub)) {
+      return res.status(401).json({
+        error: 'Your session was created before the security update. Please sign in again.',
+        forceLogout: true
+      });
+    }
     
     // Check the database to see if the session token matches the current one
-    const result = await pool.query('SELECT session_token,a_id,o_id,d_id,is_active FROM public."User" WHERE u_id = $1', [decoded.u_id]);
+    const result = await pool.query('SELECT u_id,session_token,a_id,o_id,d_id,is_active,public_id,session_expires_at,last_activity_at FROM public."User" WHERE public_id = $1', [decoded.sub]);
     
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'User account no longer exists.' });
+      return res.status(401).json({ error: 'User account no longer exists.', forceLogout: true });
     }
 
     const currentDbToken = result.rows[0].session_token;
@@ -214,28 +401,84 @@ const requireAuth = async (req, res, next) => {
       });
     }
 
+    const now = Date.now();
+    const lastActivity = result.rows[0].last_activity_at ? new Date(result.rows[0].last_activity_at).getTime() : 0;
+    const idleDeadline = lastActivity + IDLE_TIMEOUT_MINUTES * 60 * 1000;
+    const absoluteDeadline = result.rows[0].session_expires_at ? new Date(result.rows[0].session_expires_at).getTime() : 0;
+    if (!decoded.exp || decoded.exp * 1000 <= now || absoluteDeadline <= now || idleDeadline <= now) {
+      await pool.query('UPDATE public."User" SET session_token=NULL,session_expires_at=NULL,last_activity_at=NULL WHERE u_id=$1', [result.rows[0].u_id]);
+      return res.status(401).json({ error: 'Your session expired due to inactivity or reaching its maximum lifetime.', forceLogout: true });
+    }
+
     // If it matches, attach user info to req and proceed
     if (!result.rows[0].is_active) return res.status(403).json({error:'Account is inactive.'});
     req.user = {...decoded, ...result.rows[0]};
+    if (now - lastActivity > 60 * 1000) {
+      pool.query('UPDATE public."User" SET last_activity_at=NOW() WHERE u_id=$1 AND session_token=$2', [req.user.u_id, decoded.session_token]).catch(() => {});
+    }
     next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token.' });
+    return res.status(401).json({ error: 'Invalid or expired token.', forceLogout: true });
   }
 };
+
+app.post('/api/logout', requireAuth, async (req, res) => {
+  try {
+    await pool.query(`UPDATE public."User"
+      SET session_token=NULL,session_expires_at=NULL,last_activity_at=NULL
+      WHERE u_id=$1 AND session_token=$2`, [req.user.u_id, req.user.session_token]);
+    res.json({ message: 'Signed out successfully.' });
+  } catch (error) {
+    console.error('Logout failed:', error);
+    res.status(500).json({ error: 'Unable to end the session.' });
+  }
+});
+
+const publicRegistrationReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  keyGenerator: req => `registration:${ipKeyGenerator(req.ip)}`,
+  message: { error: 'Too many registration requests were received. Please wait before trying again.' },
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const publicRegistrationWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  keyGenerator: req => `registration-write:${ipKeyGenerator(req.ip)}`,
+  message: { error: 'Too many account registrations were attempted. Please wait before trying again.' },
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const registrationRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  keyGenerator: requestKey,
+  message: { error: 'Too many registration links were requested. Please wait before submitting another request.' },
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.post('/api/session/activity', requireAuth, (_req, res) => res.status(204).end());
 
 // ==========================================
 // 1.2 2FA VERIFICATION ENDPOINT
 // ==========================================
-app.post('/api/login/verify-2fa', async (req, res) => {
+app.post('/api/login/verify-2fa', authLimiter, async (req, res) => {
   const { userId, otpCode } = req.body;
 
   try {
     // 1. Fetch the user, their OTP, and the extra profile details needed for the frontend JWT
     const result = await pool.query(
-      `SELECT u.u_id, u.username, u.a_id, u.two_fa_enabled, u.two_fa_code, u.two_fa_code_expires, u.two_fa_attempts, u.is_active, u.full_name, a.account_type
+      `SELECT u.u_id, u.public_id, u.username, u.a_id, u.two_fa_enabled, u.two_fa_code, u.two_fa_code_expires, u.two_fa_attempts, u.is_active, u.full_name, a.account_type
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
-       WHERE u.u_id = $1`,
+       WHERE u.public_id = $1`,
       [userId]
     );
 
@@ -252,26 +495,26 @@ app.post('/api/login/verify-2fa', async (req, res) => {
     if (Number(user.two_fa_attempts || 0) >= TWO_FA_MAX_ATTEMPTS)
       return res.status(429).json({ error: 'Too many attempts. Request a new verification code.' });
     if (user.two_fa_code !== String(otpCode)) {
-      await pool.query('UPDATE public."User" SET two_fa_attempts = COALESCE(two_fa_attempts,0) + 1 WHERE u_id = $1', [userId]);
+      await pool.query('UPDATE public."User" SET two_fa_attempts = COALESCE(two_fa_attempts,0) + 1 WHERE u_id = $1', [user.u_id]);
       return res.status(401).json({ error: 'Invalid or expired verification code' });
     }
 
     // 3. If successful, generate the session token
-    const crypto = require('crypto');
     const sessionToken = crypto.randomBytes(32).toString('hex');
 
     // 4. Update the token in the DB and clear the temporary OTP code for security
     await pool.query(
-      'UPDATE public."User" SET session_token = $1, two_fa_code = NULL, two_fa_code_expires = NULL, two_fa_attempts = 0 WHERE u_id = $2',
-      [sessionToken, user.u_id]
+      'UPDATE public."User" SET session_token=$1,session_expires_at=$2,last_activity_at=NOW(),two_fa_code=NULL,two_fa_code_expires=NULL,two_fa_attempts=0 WHERE u_id=$3',
+      [sessionToken, sessionExpiry(), user.u_id]
     );
 
     // 5. Generate the JWT with the full payload
     const token = jwt.encode({ 
-      u_id: user.u_id, 
+      sub: user.public_id,
       username: user.username, 
       a_id: user.a_id,
-      session_token: sessionToken 
+      session_token: sessionToken,
+      exp: jwtExpiry()
     }, JWT_SECRET);
 
     // 6. Log the user in with the exact same payload structure as the standard login
@@ -281,7 +524,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
       role: user.a_id,
       roleName: user.account_type,
       fullName: user.full_name,
-      userId: user.u_id,
+      userId: user.public_id,
       session_token: sessionToken 
     });
 
@@ -295,7 +538,7 @@ app.post('/api/login/verify-2fa', async (req, res) => {
 // 1.3 VERIFY & ENABLE 2FA ENDPOINT
 // ==========================================
 app.post('/api/profile/:id/verify-enable-2fa', requireAuth, async (req, res) => {
-  const userId = req.params.id;
+  const userId = req.user.u_id;
   const { otpCode } = req.body;
 
   try {
@@ -336,7 +579,7 @@ app.post('/api/profile/:id/verify-enable-2fa', requireAuth, async (req, res) => 
 // 1.3.1 VERIFY & DISABLE 2FA ENDPOINT
 // ==========================================
 app.post('/api/profile/:id/verify-disable-2fa', requireAuth, async (req, res) => {
-  const userId = req.params.id;
+  const userId = req.user.u_id;
   const { otpCode } = req.body;
 
   try {
@@ -376,7 +619,7 @@ app.post('/api/profile/:id/verify-disable-2fa', requireAuth, async (req, res) =>
 // ==========================================
 // 1.4 FORGOT PASSWORD: IDENTIFY USER
 // ==========================================
-app.post('/api/auth/forgot-password/identify', async (req, res) => {
+app.post('/api/auth/forgot-password/identify', authLimiter, async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username is required.' });
 
@@ -411,7 +654,7 @@ app.post('/api/auth/forgot-password/identify', async (req, res) => {
 // ==========================================
 // 1.5 FORGOT PASSWORD: VERIFY EMAIL OTP
 // ==========================================
-app.post('/api/auth/forgot-password/verify-email', async (req, res) => {
+app.post('/api/auth/forgot-password/verify-email', authLimiter, async (req, res) => {
   const { username, fullEmail } = req.body;
   if (!username || !fullEmail) return res.status(400).json({ error: 'All fields are required.' });
 
@@ -455,7 +698,7 @@ app.post('/api/auth/forgot-password/verify-email', async (req, res) => {
 // ==========================================
 // 1.6 FORGOT PASSWORD: RESET PASSWORD
 // ==========================================
-app.post('/api/auth/forgot-password/reset', async (req, res) => {
+app.post('/api/auth/forgot-password/reset', authLimiter, async (req, res) => {
   const { username, code, newPassword } = req.body;
   if (!username || !code || !newPassword) return res.status(400).json({ error: 'All fields are required.' });
 
@@ -498,16 +741,31 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
 // 2. FETCH ALL ACCOUNTS ENDPOINT (ICT Admin)
 // ==========================================
 app.get('/api/accounts', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});
   try {
     const query = `
-                  SELECT u.u_id, u.username, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.a_id, u.d_id, u.o_id, u.is_active,
+                  SELECT u.public_id AS u_id, u.username, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.a_id, u.d_id, u.o_id, u.is_active,
                         a.account_type as role_name,
                         d.department_name,
-                        off.office_name
+                        off.office_name,
+                        CASE WHEN origin.origin_id IS NULL THEN 'ict' ELSE 'registration_link' END AS account_origin,
+                        sponsor.full_name AS sponsored_by,
+                        sponsor.public_id AS sponsor_id,
+                        rl.public_id AS registration_link_id,
+                        EXISTS (
+                          SELECT 1 FROM public.account_access_assignments aa
+                          WHERE aa.u_id=u.u_id AND aa.is_active IS TRUE
+                            AND (aa.starts_on IS NULL OR aa.starts_on <= CURRENT_DATE)
+                            AND (aa.ends_on IS NULL OR aa.ends_on >= CURRENT_DATE)
+                            AND (aa.can_recommend IS TRUE OR aa.can_approve IS TRUE OR aa.can_request_registration IS TRUE)
+                        ) AS is_assignatory
                   FROM public."User" u
                   JOIN public.account a ON u.a_id = a.a_id
-                  JOIN public.department d ON u.d_id = d.d_id
+                  LEFT JOIN public.department d ON u.d_id = d.d_id
                   LEFT JOIN public.offices off ON u.o_id = off.o_id
+                  LEFT JOIN public.account_registration_origins origin ON origin.u_id=u.u_id
+                  LEFT JOIN public.registration_links rl ON rl.link_id=origin.link_id
+                  LEFT JOIN public."User" sponsor ON sponsor.u_id=rl.requested_by
                   ORDER BY u.u_id DESC;
                 `;
     const result = await pool.query(query);
@@ -535,21 +793,61 @@ const findGsoOfficeId = async (db) => {
   return result.rows[0] ? Number(result.rows[0].o_id) : null;
 };
 
+const normalizeUniversityEmail = value => String(value || '').trim().toLowerCase();
+const isUniversityEmail = value => /^[a-z0-9._%+-]+@g\.batstate-u\.edu\.ph$/.test(value);
+const isPositiveId = value => Number.isInteger(Number(value)) && Number(value) > 0;
+
+app.get('/api/accounts/email-availability', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 5) return res.status(403).json({ error: 'Administrator access required.' });
+  const email = normalizeUniversityEmail(req.query.email);
+  if (!isUniversityEmail(email)) return res.json({ available: false, message: 'Use an official email ending in @g.batstate-u.edu.ph.' });
+  try {
+    const result = await pool.query('SELECT 1 FROM public."User" WHERE LOWER(BTRIM(uni_email))=$1 LIMIT 1', [email]);
+    res.json({ available: !result.rowCount, message: result.rowCount ? 'This email is already registered.' : 'This email is available.' });
+  } catch (error) {
+    console.error('Email availability check failed:', error);
+    res.status(500).json({ error: 'Unable to check this email right now.' });
+  }
+});
+
 app.post('/api/accounts', requireAuth, async (req, res) => {
-  const { username, password, fullName, email, departmentId, officeId } = req.body;
+  const { username, password, fullName, departmentId, officeId } = req.body;
+  const email = normalizeUniversityEmail(req.body.email);
   const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
+  const isAssignatory = req.body.isAssignatory === true;
+  const positionTitle = String(req.body.positionTitle || '').trim().slice(0, 120) || null;
+  const authorityMode = ['office', 'department', 'multiple'].includes(req.body.authorityMode) ? req.body.authorityMode : 'office';
+  const authorityOfficeIds = [...new Set((Array.isArray(req.body.authorityOfficeIds) ? req.body.authorityOfficeIds : []).map(Number).filter(id => Number.isInteger(id) && id > 0))];
+  const authorityDepartmentId = Number(req.body.authorityDepartmentId);
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});
   
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'Rejection: Password must be at least 6 characters long.' });
   }
+  if (!String(username || '').trim() || !String(fullName || '').trim()) return res.status(400).json({ error: 'Enter the staff member’s full name and username.' });
+  if (!isUniversityEmail(email)) {
+    return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+  }
+  if (![1, 2, 4, 5].includes(accountType)) return res.status(400).json({ error: 'Choose a valid account role.' });
+  if (accountType === 1 && !isPositiveId(departmentId)) {
+    return res.status(400).json({ error: 'Choose a department for Faculty Staff.' });
+  }
+  if (accountType === 2 && !isPositiveId(officeId)) {
+    return res.status(400).json({ error: 'Choose an office for Office Staff.' });
+  }
+  if (isAssignatory && accountType !== 2) return res.status(400).json({ error: 'Assignatory responsibilities can only be added to an Office Staff account here.' });
+  if (isAssignatory && authorityMode === 'department' && !isPositiveId(authorityDepartmentId)) return res.status(400).json({ error: 'Choose the department this assignatory oversees.' });
+  if (isAssignatory && authorityMode === 'multiple' && authorityOfficeIds.length === 0) return res.status(400).json({ error: 'Choose at least one office this assignatory oversees.' });
   
+  const client = await pool.connect();
   try {
-    const userCheck = await pool.query(
-      'SELECT * FROM public."User" WHERE username = $1 OR uni_email = $2', 
-      [username, email]
+    await client.query('BEGIN');
+    const userCheck = await client.query(
+      'SELECT username,uni_email FROM public."User" WHERE LOWER(username) = LOWER($1) OR LOWER(BTRIM(uni_email)) = $2',
+      [String(username || '').trim(), email]
     );
     if (userCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Rejection: Username or email already registered.' });
     }
 
@@ -559,31 +857,63 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
     let assignedOfficeId = ([2, 3, 4].includes(accountType) && officeId) ? parseInt(officeId) : null;
 
     if (accountType === 4) {
-      const gsoOfficeId = await findGsoOfficeId(pool);
-      if (!gsoOfficeId) return res.status(409).json({ error: 'The General Services office must be registered before creating its administrator account.' });
-      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 LIMIT 1');
-      if (existingGso.rowCount) return res.status(409).json({ error: 'A GSO Admin account already exists. Manage that account instead of creating another one.' });
+      const gsoOfficeId = await findGsoOfficeId(client);
+      if (!gsoOfficeId) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'The General Services office must be registered before creating its administrator account.' }); }
+      const existingGso = await client.query('SELECT u_id FROM public."User" WHERE a_id = 4 LIMIT 1');
+      if (existingGso.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'A GSO Admin account already exists. Manage that account instead of creating another one.' }); }
       assignedOfficeId = gsoOfficeId;
     } else if (assignedOfficeId) {
-      const gsoOfficeId = await findGsoOfficeId(pool);
+      const gsoOfficeId = await findGsoOfficeId(client);
       if (gsoOfficeId && assignedOfficeId === gsoOfficeId) {
+        await client.query('ROLLBACK');
         return res.status(400).json({ error: 'The General Services Office is reserved for the single GSO Admin account.' });
       }
     }
 
-    const assignedDepartmentId = departmentId ? parseInt(departmentId) : 1;
+    const assignedDepartmentId = departmentId
+      ? parseInt(departmentId)
+      : isAssignatory && authorityMode === 'department' ? authorityDepartmentId : null;
 
-    await pool.query(
+    const created = await client.query(
       `INSERT INTO public."User" (a_id, d_id, username, password, full_name, uni_email, o_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`, 
-      [parseInt(accountType), assignedDepartmentId, username, hashedPassword, fullName, email, assignedOfficeId]
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING u_id,public_id`,
+       [parseInt(accountType), assignedDepartmentId, String(username).trim(), hashedPassword, String(fullName).trim(), email, assignedOfficeId]
     );
 
-    res.status(201).json({ message: 'Success: Account architecture generated and synchronized successfully!' });
+    if (isAssignatory) {
+      const assignments = authorityMode === 'department'
+        ? [{ scopeType: 'office', targetId: assignedOfficeId }, { scopeType: 'department', targetId: authorityDepartmentId }]
+        : authorityMode === 'multiple'
+          ? [...new Set([assignedOfficeId, ...authorityOfficeIds])].map(targetId => ({ scopeType: 'office', targetId }))
+          : [{ scopeType: 'office', targetId: assignedOfficeId }];
+      for (const assignment of assignments) {
+        await client.query(`
+          INSERT INTO public.account_access_assignments
+            (u_id,scope_type,office_id,department_id,can_view_submissions,can_recommend,can_approve,can_request_registration,position_title)
+          VALUES ($1,$2,$3,$4,true,true,true,true,$5)
+        `, [created.rows[0].u_id, assignment.scopeType,
+          assignment.scopeType === 'office' ? assignment.targetId : null,
+          assignment.scopeType === 'department' ? assignment.targetId : null,
+          positionTitle]);
+      }
+    }
+    await client.query(`
+      INSERT INTO public.account_administration_audit (actor_user_id,target_user_id,action,details)
+      VALUES ($1,$2,'account_created_by_ict',$3::jsonb)
+    `, [req.user.u_id, created.rows[0].u_id, JSON.stringify({ accountType, isAssignatory, authorityMode })]);
+    await client.query('COMMIT');
+
+    broadcastIctConfiguration(req);
+    broadcastAccountRegistry(req);
+    res.status(201).json({ message: 'Success: Account architecture generated and synchronized successfully!', userId: created.rows[0].public_id });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error("Account registration script processing breakdown:", err);
-    res.status(500).json({ error: 'Failed account generation sequence structural assignment loop.' });
-  }
+    if (err.code === '23505') return res.status(409).json({ error: 'That username or university email is already in use.' });
+    if (err.code === '23514') return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    res.status(500).json({ error: 'The account could not be created. Please try again.' });
+  } finally { client.release(); }
 });
 
 // ==========================================
@@ -591,17 +921,32 @@ app.post('/api/accounts', requireAuth, async (req, res) => {
 // ==========================================
 app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
   const { userId } = req.params;
-  const { username, fullName, email, departmentId, officeId, isActive } = req.body;
+  const { username, fullName, departmentId, officeId, isActive } = req.body;
+  const email = normalizeUniversityEmail(req.body.email);
   const accountType = Number(req.body.accountType) === 3 ? 2 : Number(req.body.accountType);
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error:"Administrator access required."});  
+  if (!String(username || '').trim() || !String(fullName || '').trim()) return res.status(400).json({ error: 'Enter the staff member’s full name and username.' });
+  if (![1, 2, 4, 5].includes(accountType)) return res.status(400).json({ error: 'Choose a valid account role.' });
+  if (accountType === 1 && !isPositiveId(departmentId)) return res.status(400).json({ error: 'Choose a department for Faculty Staff.' });
+  if (accountType === 2 && !isPositiveId(officeId)) return res.status(400).json({ error: 'Choose an office for Office Staff.' });
   try {
+    const currentAccount = await pool.query('SELECT u_id,uni_email,username,full_name,a_id,d_id,o_id,is_active FROM public."User" WHERE public_id=$1', [userId]);
+    if (!currentAccount.rowCount) return res.status(404).json({ error: 'Account not found.' });
+    const savedEmail = currentAccount.rows[0].uni_email;
+    const emailChanged = normalizeUniversityEmail(savedEmail) !== email;
+    if (emailChanged && !isUniversityEmail(email)) {
+      return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph when changing this address.' });
+    }
+    const emailToStore = emailChanged ? email : savedEmail;
+
     const duplicateCheck = await pool.query(
-      `SELECT * FROM public."User" WHERE username = $1 AND u_id != $2`,
-      [username, parseInt(userId)]
+      `SELECT username,uni_email FROM public."User"
+       WHERE (LOWER(username)=LOWER($1) OR LOWER(BTRIM(uni_email))=$2) AND public_id<>$3`,
+      [String(username || '').trim(), email, userId]
     );
 
     if (duplicateCheck.rows.length > 0) {
-      return res.status(400).json({ error: 'Rejection: This username identifier is already registered to another user account.' });
+      return res.status(409).json({ error: 'That username or university email is already in use.' });
     }
 
     let assignedOfficeId = ([2, 3, 4].includes(accountType) && officeId) ? parseInt(officeId) : null;
@@ -609,7 +954,7 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
     if (accountType === 4) {
       const gsoOfficeId = await findGsoOfficeId(pool);
       if (!gsoOfficeId) return res.status(409).json({ error: 'The General Services office must be registered before assigning the GSO Admin role.' });
-      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 AND u_id <> $1 LIMIT 1', [parseInt(userId)]);
+      const existingGso = await pool.query('SELECT u_id FROM public."User" WHERE a_id = 4 AND public_id <> $1 LIMIT 1', [userId]);
       if (existingGso.rowCount) return res.status(409).json({ error: 'A GSO Admin account already exists. Only one GSO Admin account is allowed.' });
       assignedOfficeId = gsoOfficeId;
     } else if (assignedOfficeId) {
@@ -619,23 +964,51 @@ app.put('/api/accounts/:userId', requireAuth, async (req, res) => {
       }
     }
 
-    const assignedDepartmentId = departmentId ? parseInt(departmentId) : 1;
+    const assignedDepartmentId = departmentId ? parseInt(departmentId) : null;
 
     const query = `
       UPDATE public."User"
       SET username = $1, full_name = $2, uni_email = $3, a_id = $4, d_id = $5, o_id = $6, is_active = $7
-      WHERE u_id = $8
+      WHERE public_id = $8
     `;
     
-    await pool.query(query, [
-      username, fullName, email, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, parseInt(userId)
-    ]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(query, [
+        String(username).trim(), String(fullName).trim(), emailToStore, parseInt(accountType), assignedDepartmentId, assignedOfficeId, isActive, userId
+      ]);
+      await client.query(`
+        INSERT INTO public.account_administration_audit (actor_user_id,target_user_id,action,details)
+        VALUES ($1,$2,'account_profile_overridden',$3::jsonb)
+      `, [req.user.u_id, currentAccount.rows[0].u_id, JSON.stringify({
+        before: currentAccount.rows[0],
+        after: { username: String(username).trim(), fullName: String(fullName).trim(), accountType, departmentId: assignedDepartmentId, officeId: assignedOfficeId, isActive }
+      })]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
 
+    broadcastIctConfiguration(req);
+    broadcastAccountRegistry(req);
+    req.app.get('io')?.to(`user_${userId}`).emit('account-access-updated');
     res.json({ message: 'Personnel access profile parameters re-indexed and synchronized cleanly!' });
   } catch (err) {
     console.error("Account update failure:", err);
-    res.status(500).json({ error: 'Failed execution update sequence constraint loop.' });
+    if (err.code === '23505') return res.status(409).json({ error: 'That username or university email is already in use.' });
+    if (err.code === '23514') return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    res.status(500).json({ error: 'The account could not be updated. Please try again.' });
   }
+});
+
+require('./accountAccessRoutes')(app, pool, requireAuth);
+
+require('./registrationLinkRoutes')(app, pool, requireAuth, {
+  request: registrationRequestLimiter,
+  publicRead: publicRegistrationReadLimiter,
+  publicWrite: publicRegistrationWriteLimiter
 });
 
 require('./profilePictureRoutes')(app, pool, requireAuth);
@@ -646,14 +1019,14 @@ require('./profilePictureRoutes')(app, pool, requireAuth);
 app.get('/api/profile/:userId', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT u.u_id, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.two_fa_code, u.o_id,
+      `SELECT u.public_id AS u_id, u.full_name, u.uni_email, u.faculty_id, u.two_fa_enabled, u.o_id,
               a.account_type, d.department_name, off.office_name
        FROM public."User" u
        JOIN public.account a ON u.a_id = a.a_id
-       JOIN public.department d ON u.d_id = d.d_id
+       LEFT JOIN public.department d ON u.d_id = d.d_id
        LEFT JOIN public.offices off ON u.o_id = off.o_id
        WHERE u.u_id = $1`,
-      [req.params.userId]
+      [req.user.u_id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User profiles entry missing' });
     res.json(result.rows[0]);
@@ -679,7 +1052,7 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
     if (twoFaEnabled && (!twoFaCode || twoFaCode.toString().length < 4)) {
       return res.status(400).json({ error: 'A valid numeric PIN (at least 4 digits) is required to enable Two-Factor Authentication.' });
     }
-    const current = await pool.query('SELECT two_fa_enabled FROM public."User" WHERE u_id=$1',[req.params.userId]);
+    const current = await pool.query('SELECT two_fa_enabled FROM public."User" WHERE u_id=$1',[req.user.u_id]);
     if (!current.rows[0]) return res.status(404).json({error:'User not found.'});
     if (twoFaEnabled && !current.rows[0].two_fa_enabled)
       return res.status(409).json({error:'Verify the emailed 2FA code before enabling 2FA.'});
@@ -689,9 +1062,10 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
       `UPDATE public."User" 
        SET full_name = $1, uni_email = $2, two_fa_enabled = $3, two_fa_code = $4
        WHERE u_id = $5`,
-      [fullName.trim(), email.trim(), twoFaEnabled, twoFaCode || null, req.params.userId]
+      [fullName.trim(), email.trim(), twoFaEnabled, twoFaCode || null, req.user.u_id]
     );
     
+    broadcastIctConfiguration(req);
     res.json({ message: 'Profile variables synchronized successfully!' });
   } catch (err) {
     console.error("Profile Synchronization Error:", err);
@@ -705,14 +1079,14 @@ app.put('/api/profile/:userId', requireAuth, async (req, res) => {
 app.put('/api/profile/:userId/password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   try {
-    const userRes = await pool.query('SELECT password FROM public."User" WHERE u_id = $1', [req.params.userId]);
+    const userRes = await pool.query('SELECT password FROM public."User" WHERE u_id = $1', [req.user.u_id]);
     const user = userRes.rows[0];
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) return res.status(400).json({ error: 'Current password credentials record mismatch' });
 
     const newHashed = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE public."User" SET password = $1 WHERE u_id = $2', [newHashed, req.params.userId]);
+    await pool.query('UPDATE public."User" SET password = $1 WHERE u_id = $2', [newHashed, req.user.u_id]);
     res.json({ message: 'Credentials records changed cleanly' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to rewrite target security credentials record' });
@@ -723,7 +1097,7 @@ app.put('/api/profile/:userId/password', requireAuth, async (req, res) => {
 // 2.6 REQUEST OTP FOR PROFILE SECURITY CHANGES
 // ==========================================
 app.post('/api/users/:id/request-profile-otp', requireAuth, async (req, res) => {
-  const userId = req.params.id;
+  const userId = req.user.u_id;
 
   try {
     const userRes = await pool.query('SELECT uni_email FROM public."User" WHERE u_id = $1', [userId]);
@@ -762,6 +1136,16 @@ app.get('/api/offices', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/departments', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT d_id AS id, department_name AS name FROM public.department ORDER BY department_name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching departments:', err);
+    res.status(500).json({ error: 'Unable to load the department list.' });
+  }
+});
+
 // ==========================================
 // 3.1 CREATE DEPARTMENT ENDPOINT
 // ==========================================
@@ -778,7 +1162,8 @@ app.post('/api/departments', requireAuth, async (req, res) => {
     }
 
     await pool.query('INSERT INTO public.department (department_name) VALUES ($1)', [departmentName.trim()]);
-    res.status(201).json({ message: 'Success: Global department structure synchronized successfully!' });
+    broadcastIctConfiguration(req);
+    res.status(201).json({ message: 'Department added.' });
   } catch (err) {
     console.error("Department registration exception:", err);
     res.status(500).json({ error: 'Failed execution query write department sequence context.' });
@@ -823,25 +1208,26 @@ app.post('/api/offices', requireAuth, async (req, res) => {
       await client.query('ROLLBACK');
       throw error;
     } finally { client.release(); }
-    res.status(201).json({ message: 'Success: Physical campus office station indexed into global catalogs!' });
+    broadcastIctConfiguration(req);
+    res.status(201).json({ message: 'Office location added.' });
   } catch (err) {
     console.error("Office drop node registration exception:", err);
     res.status(500).json({ error: 'Failed execution query write offices sequence context.' });
   }
 });
 
-app.post('/api/login/resend-2fa', async (req, res) => {
+app.post('/api/login/resend-2fa', authLimiter, async (req, res) => {
   const userId = Number(req.body.userId);
   if (!Number.isInteger(userId) || userId < 1) return res.status(400).json({error:'A valid user is required.'});
   const last = twoFaResendTracker.get(userId) || 0;
   if (Date.now() - last < TWO_FA_RESEND_MS) return res.status(429).json({error:'Please wait before requesting another code.'});
   try {
-    const result = await pool.query('SELECT uni_email,full_name,two_fa_enabled,is_active FROM public."User" WHERE u_id=$1',[userId]);
+    const result = await pool.query('SELECT u_id,uni_email,full_name,two_fa_enabled,is_active FROM public."User" WHERE public_id=$1',[userId]);
     const user = result.rows[0];
     if (!user || !user.is_active || !user.two_fa_enabled) return res.status(400).json({error:'A 2FA challenge is not available.'});
     const code = newTwoFaCode();
     const expiresAt = twoFaExpiry();
-    await pool.query('UPDATE public."User" SET two_fa_code=$1,two_fa_code_expires=$2,two_fa_attempts=0 WHERE u_id=$3',[code,expiresAt,userId]);
+    await pool.query('UPDATE public."User" SET two_fa_code=$1,two_fa_code_expires=$2,two_fa_attempts=0 WHERE u_id=$3',[code,expiresAt,user.u_id]);
     await sendSystemEmail(user.uni_email,'BSU-Trace Login Verification',`Your new 2FA verification code is: ${code}. Do not share it.`);
     twoFaResendTracker.set(userId,Date.now());
     res.json({message:'A new verification code was sent.',two_fa_expires_at:expiresAt.toISOString(),resend_after_seconds:60});
@@ -854,12 +1240,12 @@ app.put('/api/departments/:id', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
   const name = String(req.body.departmentName || '').trim();
   if (!name) return res.status(400).json({error: 'Department name is required.'});
-  try { const r = await pool.query('UPDATE public.department SET department_name=$1 WHERE d_id=$2 RETURNING d_id', [name, req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); res.json({message:'Department updated.'}); }
+  try { const r = await pool.query('UPDATE public.department SET department_name=$1 WHERE d_id=$2 RETURNING d_id', [name, req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); broadcastIctConfiguration(req); res.json({message:'Department updated.'}); }
   catch (e) { res.status(e.code === '23505' ? 409 : 500).json({error: e.code === '23505' ? 'That department already exists.' : 'Unable to update department.'}); }
 });
 app.delete('/api/departments/:id', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
-  try { const r = await pool.query('DELETE FROM public.department WHERE d_id=$1 RETURNING d_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); res.json({message:'Department deleted.'}); }
+  try { const r = await pool.query('DELETE FROM public.department WHERE d_id=$1 RETURNING d_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Department not found.'}); broadcastIctConfiguration(req); res.json({message:'Department deleted.'}); }
   catch (e) { res.status(e.code === '23503' ? 409 : 500).json({error: e.code === '23503' ? 'This department is still assigned to an account.' : 'Unable to delete department.'}); }
 });
 app.put('/api/offices/:id', requireAuth, async (req, res) => {
@@ -883,13 +1269,14 @@ app.put('/api/offices/:id', requireAuth, async (req, res) => {
       throw error;
     } finally { client.release(); }
     if (!r.rowCount) return res.status(404).json({error:'Office not found.'});
+    broadcastIctConfiguration(req);
     res.json({message:'Office and category updated.'});
   }
   catch (e) { res.status(e.code === '23505' ? 409 : 500).json({error: e.code === '23505' ? 'That office already exists.' : 'Unable to update office.'}); }
 });
 app.delete('/api/offices/:id', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
-  try { const r = await pool.query('DELETE FROM public.offices WHERE o_id=$1 RETURNING o_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Office not found.'}); res.json({message:'Office deleted.'}); }
+  try { const r = await pool.query('DELETE FROM public.offices WHERE o_id=$1 RETURNING o_id', [req.params.id]); if (!r.rowCount) return res.status(404).json({error:'Office not found.'}); broadcastIctConfiguration(req); res.json({message:'Office deleted.'}); }
   catch (e) { res.status(e.code === '23503' ? 409 : 500).json({error: e.code === '23503' ? 'This office is still referenced by an account, route, or document.' : 'Unable to delete office.'}); }
 });
 
@@ -898,6 +1285,7 @@ app.delete('/api/offices/:id', requireAuth, async (req, res) => {
 // ==========================================
 require('./documentCategoryRoutes')(app, pool, requireAuth);
 require('./officeWorkflowRoutes')(app, pool, requireAuth);
+require('./documentCollaborationRoutes')(app, pool, requireAuth);
 
 // ==========================================
 // 5. FETCH USER DOCUMENTS ENDPOINT
@@ -992,8 +1380,8 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
       // 1. ORIGINATOR: Alerts every time any action occurs on their document
       const query = `
         SELECT 
-          h.history_id as id,
-          idoc.ini_id,  /* CRITICAL ADDITION: Pulls the document reference key */
+          h.public_id as id,
+          idoc.public_id AS ini_id,
           idoc.title,
           h.action_type as title_alert,
           ('Action performed at ' || COALESCE(off.office_name, 'Origin Station')) as message,
@@ -1001,7 +1389,7 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
         FROM public.office_action_history h
         JOIN public.initial_document idoc ON h.ini_id = idoc.ini_id
         LEFT JOIN public.offices off ON h.o_id = off.o_id
-        WHERE idoc.u_id = $1
+        WHERE idoc.u_id = $1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=$1)
         ORDER BY h.history_id DESC LIMIT 10;
       `;
       const result = await pool.query(query, [userId]);
@@ -1014,7 +1402,7 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
       }));
 
     } else if ([2,3,4].includes(roleId)) {
-      const result=await pool.query(`SELECT h.history_id AS id,i.ini_id,i.title AS doc_title,h.action_type AS title,
+      const result=await pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,h.action_type AS title,
         u.full_name || ' · ' || o.office_name AS message,
         CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
         FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
@@ -1035,16 +1423,26 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
 // ==========================================
 // 10. CHAT: FETCH DOCUMENT CHANNELS ENDPOINT
 // ==========================================
+const resolveChatDocument = async (publicId, user) => {
+  return resolveChatDocumentAccess(pool, publicId, user);
+};
+
+const resolveChatRoom = async (publicId, user) => {
+  return resolveChatRoomAccess(pool, publicId, user);
+};
+
 app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
   const { iniId } = req.params;
   try {
+    const context = await resolveChatDocument(iniId, req.user);
+    if (!context) return res.status(404).json({error:'Document conversation not found.'});
     const docStepsQuery = `
       SELECT pd_id, s_id, current_office_id, next_office_id, time_in, time_out, is_adhoc, adhoc_return_office_id 
       FROM public.processed_document 
       WHERE ini_id = $1 
       ORDER BY pd_id ASC;
     `;
-    const stepsResult = await pool.query(docStepsQuery, [parseInt(iniId)]);
+    const stepsResult = await pool.query(docStepsQuery, [context.ini_id]);
     const steps = stepsResult.rows;
 
     if (steps.length === 0) {
@@ -1105,12 +1503,13 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
 
     const finalChannels = [];
     for (const oId of Object.keys(officeChannels)) {
+      if (!context.can_view_all_channels && Number(oId) !== Number(req.user.o_id)) continue;
       const officeNameRes = await pool.query('SELECT office_name FROM public.offices WHERE o_id = $1', [parseInt(oId)]);
       
       // CHECK IF A CHAT ROOM ACTUALLY EXISTS AND HAS MESSAGES IN IT
       const checkRoom = await pool.query(
         `SELECT room_id FROM public.chat_rooms WHERE ini_id = $1 AND o_id = $2`,
-        [parseInt(iniId), parseInt(oId)]
+        [context.ini_id, parseInt(oId)]
       );
       
       let hasChat = false;
@@ -1127,7 +1526,9 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
         officeName: officeNameRes.rows[0]?.office_name || `Office Station #${oId}`,
         isLocked: officeChannels[oId].isLocked,
         statusMessage: officeChannels[oId].statusMessage,
-        hasChat: hasChat
+        hasChat: hasChat,
+        canViewAllChannels: Boolean(context.can_view_all_channels),
+        viewerRole: context.is_owner ? 'Submitter' : context.is_collaborator ? 'Collaborator' : 'Processing Office'
       });
     }
 
@@ -1144,21 +1545,28 @@ app.get('/api/chat/document-channels/:iniId', requireAuth, async (req, res) => {
 app.post('/api/chat/get-or-create-room', requireAuth, async (req, res) => {
   const { iniId, officeId } = req.body;
   try {
+    const document = await resolveChatDocument(iniId, req.user);
+    if (!document) return res.status(404).json({error:'Document conversation not found.'});
+    const requestedOfficeId = Number(officeId);
+    const mayChooseStation = Boolean(document.can_view_all_channels);
+    if (!mayChooseStation && requestedOfficeId !== Number(req.user.o_id)) return res.status(403).json({error:'This office conversation is not available to your account.'});
+    const station = await pool.query('SELECT 1 FROM public.processed_document WHERE ini_id=$1 AND current_office_id=$2 LIMIT 1',[document.ini_id,requestedOfficeId]);
+    if (!station.rows.length) return res.status(404).json({error:'Office station not found in this document route.'});
     // Check if channel already exists to prevent duplicate tables instantiation
     let roomRes = await pool.query(
-      'SELECT room_id FROM public.chat_rooms WHERE ini_id = $1 AND o_id = $2',
-      [parseInt(iniId), parseInt(officeId)]
+      'SELECT public_id FROM public.chat_rooms WHERE ini_id = $1 AND o_id = $2',
+      [document.ini_id, requestedOfficeId]
     );
 
     if (roomRes.rows.length === 0) {
       roomRes = await pool.query(
         `INSERT INTO public.chat_rooms (ini_id, o_id, created_at) 
-         VALUES ($1, $2, TIMEZONE('Asia/Manila', NOW())) RETURNING room_id`,
-        [parseInt(iniId), parseInt(officeId)]
+         VALUES ($1, $2, TIMEZONE('Asia/Manila', NOW())) RETURNING public_id`,
+        [document.ini_id, requestedOfficeId]
       );
     }
 
-    res.json({ roomId: roomRes.rows[0].room_id });
+    res.json({ roomId: roomRes.rows[0].public_id });
   } catch (err) {
     console.error("Error instantiating or resolving chat room nodes:", err);
     res.status(500).json({ error: 'Failed chat room assignment initialization query structural loops.' });
@@ -1171,15 +1579,24 @@ app.post('/api/chat/get-or-create-room', requireAuth, async (req, res) => {
 app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
   const { roomId } = req.params;
   try {
+    const room = await resolveChatRoom(roomId, req.user);
+    if (!room) return res.status(404).json({error:'Conversation not found.'});
     const messagesQuery = `
-      SELECT m.message_id, m.room_id, m.sender_id, m.message_text, m.sent_at, u.full_name as sender_name, a.account_type as role_name
+      SELECT m.public_id AS message_id, cr.public_id AS room_id, u.public_id AS sender_id,
+        m.message_text, m.sent_at, u.full_name as sender_name,
+        CASE WHEN m.sender_id=idoc.u_id THEN 'Submitter'
+          WHEN EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=cr.ini_id AND dc.user_id=m.sender_id) THEN 'Collaborator'
+          WHEN u.o_id=cr.o_id THEN 'Processing Office'
+          ELSE a.account_type END AS role_name
       FROM public.chat_messages m
+      JOIN public.chat_rooms cr ON m.room_id=cr.room_id
+      JOIN public.initial_document idoc ON idoc.ini_id=cr.ini_id
       JOIN public."User" u ON m.sender_id = u.u_id
       JOIN public.account a ON u.a_id = a.a_id
       WHERE m.room_id = $1
       ORDER BY m.sent_at ASC;
     `;
-    const result = await pool.query(messagesQuery, [parseInt(roomId)]);
+    const result = await pool.query(messagesQuery, [room.room_id]);
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching historical stream messages loop:", err);
@@ -1190,18 +1607,67 @@ app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
 // ==========================================
 // 10.3 CHAT: SEND MESSAGE ENDPOINT
 // ==========================================
-app.post('/api/chat/messages', requireAuth, async (req, res) => {
+app.post('/api/chat/messages', requireAuth, chatLimiter, async (req, res) => {
   const { roomId, messageText } = req.body;
-  const senderId = req.user.u_id; // Decoded cleanly from your JWT authentication layer middleware
+  const senderId = req.user.u_id;
+
   try {
+    const text = String(messageText || '').trim();
+    if (!text || text.length > 2000) return res.status(400).json({error:'Enter a message of up to 2,000 characters.'});
+    const room = await resolveChatRoom(roomId, req.user);
+    if (!room) return res.status(404).json({error:'Conversation not found.'});
     const result = await pool.query(
       `INSERT INTO public.chat_messages (room_id, sender_id, message_text, sent_at)
        VALUES ($1, $2, $3, TIMEZONE('Asia/Manila', NOW()))
-       RETURNING *`,
-      [parseInt(roomId), senderId, messageText.trim()]
+       RETURNING public_id,message_text,sent_at`,
+      [room.room_id, senderId, text]
     );
     
-    res.status(201).json(result.rows[0]);
+    const savedMessage = result.rows[0];
+
+    // Query extra metadata required by the frontend feed
+    const metaRes = await pool.query(
+      `SELECT u.full_name as sender_name,
+        CASE WHEN u.u_id=idoc.u_id THEN 'Submitter'
+          WHEN EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=u.u_id) THEN 'Collaborator'
+          WHEN u.o_id=$3 THEN 'Processing Office'
+          ELSE a.account_type END AS role_name
+       FROM public."User" u
+       JOIN public.account a ON u.a_id = a.a_id
+       JOIN public.initial_document idoc ON idoc.ini_id=$2
+       WHERE u.u_id = $1`,
+      [senderId, room.ini_id, room.o_id]
+    );
+
+    const fullMessage = {
+      message_id: savedMessage.public_id,
+      room_id: room.public_id,
+      sender_id: req.user.public_id,
+      message_text: savedMessage.message_text,
+      sent_at: savedMessage.sent_at,
+      sender_name: metaRes.rows[0]?.sender_name || 'User',
+      role_name: metaRes.rows[0]?.role_name || 'Staff'
+    };
+
+    // Broadcast instantly to anyone viewing this chat room
+    io.to(`chat_room_${roomId}`).emit('new-chat-message', fullMessage);
+
+    // Refresh unread state only for people who can participate in this document
+    // instead of making every connected account query its chat directory.
+    const participantUsers = await pool.query(`
+      SELECT DISTINCT u.public_id
+      FROM public."User" u
+      JOIN public.initial_document idoc ON idoc.ini_id=$1
+      WHERE u.u_id=idoc.u_id OR EXISTS (
+        SELECT 1 FROM public.document_collaborators dc
+        WHERE dc.ini_id=idoc.ini_id AND dc.user_id=u.u_id
+      )
+    `, [room.ini_id]);
+    let chatAudience = io.to(`office_${room.o_id}`);
+    participantUsers.rows.forEach(participant => { chatAudience = chatAudience.to(`user_${participant.public_id}`); });
+    chatAudience.emit('chat-badge-updated');
+
+    res.status(201).json(fullMessage);
   } catch (err) {
     console.error("Failed submitting secure message tracking block node:", err);
     res.status(500).json({ error: 'Structural breakdown committing message log row.' });
@@ -1219,39 +1685,43 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
     let query = '';
     let params = [];
 
-    if (roleId === 1) {
-      query = `
-        SELECT idoc.ini_id, idoc.title, idoc.created_at,
-          EXISTS (
-            SELECT 1 FROM public.chat_rooms cr
-            JOIN public.chat_messages cm ON cr.room_id = cm.room_id
-            WHERE cr.ini_id = idoc.ini_id
-          ) AS "hasAnyChat"
-        FROM public.initial_document idoc
-        WHERE idoc.u_id = $1
-        ORDER BY idoc.ini_id DESC;
-      `;
-      params = [userId];
-    } else if ([2,3,4].includes(Number(roleId))) {
+    if ([1,2,3,4].includes(Number(roleId))) {
+      let officeId = null;
+      if ([2,3,4].includes(Number(roleId))) {
       const userOfficeRes = await pool.query('SELECT o_id FROM public."User" WHERE u_id = $1', [userId]);
-      const officeId = userOfficeRes.rows[0]?.o_id;
-
-      if (!officeId) return res.json([]);
+        officeId = userOfficeRes.rows[0]?.o_id || null;
+      }
 
       query = `
-        SELECT DISTINCT ON (idoc.ini_id) 
-          idoc.ini_id, idoc.title, idoc.created_at,
+        SELECT
+          idoc.public_id AS ini_id, idoc.title, idoc.created_at, idoc.submission_office_id,
+          (idoc.u_id = $1) AS "isPersonalSubmission",
+          (idoc.u_id = $1) AS "isSubmitter",
+          EXISTS (SELECT 1 FROM public.document_collaborators viewer_access
+            WHERE viewer_access.ini_id=idoc.ini_id AND viewer_access.user_id=$1) AS "isCollaborator",
+          ((idoc.u_id = $1) OR EXISTS (SELECT 1 FROM public.document_collaborators viewer_access
+            WHERE viewer_access.ini_id=idoc.ini_id AND viewer_access.user_id=$1)) AS "canViewAllChannels",
+          CASE WHEN idoc.u_id=$1 THEN 'Submitter'
+            WHEN EXISTS (SELECT 1 FROM public.document_collaborators viewer_access
+              WHERE viewer_access.ini_id=idoc.ini_id AND viewer_access.user_id=$1) THEN 'Collaborator'
+            ELSE 'Processing Office' END AS "viewerRole",
           EXISTS (
             SELECT 1 FROM public.chat_rooms cr
             JOIN public.chat_messages cm ON cr.room_id = cm.room_id
             WHERE cr.ini_id = idoc.ini_id
           ) AS "hasAnyChat"
         FROM public.initial_document idoc
-        JOIN public.processed_document pd ON idoc.ini_id = pd.ini_id
-        WHERE (pd.current_office_id = $1 OR idoc.submission_office_id = $1)
+        JOIN LATERAL (
+          SELECT pd.current_office_id,pd.s_id FROM public.processed_document pd
+          WHERE pd.ini_id=idoc.ini_id AND pd.time_out IS NULL
+          ORDER BY pd.pd_id DESC LIMIT 1
+        ) active ON active.s_id<>5
+        WHERE idoc.lifecycle_state <> 'cancelled' AND
+          (idoc.u_id=$1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=$1)
+          OR ($2::integer IS NOT NULL AND active.current_office_id=$2))
         ORDER BY idoc.ini_id DESC;
       `;
-      params = [officeId];
+      params = [userId, officeId];
     } else {
       return res.json([]);
     }
@@ -1309,7 +1779,7 @@ app.post('/api/resources/inventory/lend', requireAuth, async (req, res) => {
       INSERT INTO public.equipment_ledgers (asd_id, requestor_name, department, purpose, qty_borrowed, expected_return, status, processed_by)
       VALUES ($1, $2, $3, $4, $5, TIMEZONE('Asia/Manila', NOW()) + interval '1 hour' * $6, 'Borrowed', $7)
     `, [asd_id, requestorName, department, purpose, quantityNeeded, parseInt(duration) || 24, req.user.u_id]);
-    
+    broadcastResourceUpdate(req);
     res.json({ message: "Equipment successfully logged as borrowed." });
   } catch (err) {
     console.error(err);
@@ -1343,7 +1813,7 @@ app.post('/api/resources/inventory/return', requireAuth, async (req, res) => {
           condition_on_return = $3, damage_notes = $4
       WHERE log_id = $2
     `, [req.user.u_id, activeLog.rows[0].log_id, condition, notes]);
-
+    broadcastResourceUpdate(req);
     res.json({ message: "Equipment return successfully logged. Stock replenished." });
   } catch (err) {
     console.error(err);
@@ -1357,9 +1827,10 @@ app.post('/api/resources/inventory/return', requireAuth, async (req, res) => {
 app.get('/api/resources/assets', async (req, res) => {
   try {
     const query = `
-      SELECT ad.asd_id, ad.asset_name, ad.quantity, at.asset_type, at.ast_id,
+      SELECT ad.asd_id, ad.asset_name, ad.quantity, ad.is_active, at.asset_type, at.ast_id,
       (
         SELECT CASE
+          WHEN NOT ad.is_active THEN 'Unavailable'
           WHEN EXISTS (
             SELECT 1 FROM public.asset_blackouts ab 
             WHERE ab.asd_id = ad.asd_id AND TIMEZONE('Asia/Manila', NOW()) BETWEEN ab.start_time AND ab.end_time
@@ -1367,14 +1838,14 @@ app.get('/api/resources/assets', async (req, res) => {
           WHEN EXISTS (
             SELECT 1 FROM public.bookings b
             JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id
-            WHERE gm.asd_id = ad.asd_id AND b.status = 'Confirmed'
+            WHERE gm.asd_id = ad.asd_id AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
             AND b.reservation_date = (TIMEZONE('Asia/Manila', NOW()))::date
             AND (TIMEZONE('Asia/Manila', NOW()))::time BETWEEN gm.start_time AND gm.end_time
           ) THEN 'Occupied'
           WHEN EXISTS (
             SELECT 1 FROM public.bookings b
             JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id
-            WHERE vr.asd_id = ad.asd_id AND b.status = 'Confirmed'
+            WHERE vr.asd_id = ad.asd_id AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
             AND b.reservation_date = (TIMEZONE('Asia/Manila', NOW()))::date
             AND (TIMEZONE('Asia/Manila', NOW()))::time BETWEEN vr.pick_up_time AND vr.drop_off_time
           ) THEN 'Occupied'
@@ -1408,7 +1879,7 @@ app.get('/api/resources/assets/:id/schedule', async (req, res) => {
       LEFT JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id AND gm.asd_id = $1
       LEFT JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id AND vr.asd_id = $1
       WHERE (gm.asd_id = $1 OR vr.asd_id = $1) 
-      AND b.status = 'Confirmed'
+      AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
       AND b.reservation_date >= (TIMEZONE('Asia/Manila', NOW()))::date
       ORDER BY b.reservation_date ASC, start_time ASC
     `;
@@ -1464,6 +1935,7 @@ app.post('/api/resources/assets', requireAuth, async (req, res) => {
       `INSERT INTO public.asset_details (ast_id, asset_name, quantity) VALUES ($1, $2, $3)`,
       [parseInt(assetTypeId), assetName.trim(), parseInt(quantity) || 1]
     );
+    broadcastResourceUpdate(req);
     res.status(201).json({ message: 'Institutional Asset successfully registered!' });
   } catch (err) {
     console.error("Error adding asset:", err);
@@ -1514,10 +1986,47 @@ app.post('/api/resources/blackouts', requireAuth, async (req, res) => {
 require('./resourceSchedulingRoutes')(app, pool, requireAuth);
 require('./resourceAdminRoutes')(app, pool, requireAuth);
 
-app.get('/api/resources/bookings', async (req, res) => {
+app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date,
+             b.purpose, CASE WHEN b.status = 'Reserved' THEN 'Pending' WHEN b.status = 'Confirmed' THEN 'Approved' ELSE b.status END AS status,
+             b.department, b.created_at, b.updated_at, u.full_name AS requestor,
+             COALESCE(gm.start_time, vr.pick_up_time)::text AS start_time,
+             COALESCE(gm.end_time, vr.drop_off_time)::text AS end_time,
+             ad.asset_name, vr.destination, vr.passenger_count, vr.official_passengers,
+             vr.vehicle_to_be_used, vr.designated_driver, vr.plate_number, vr.license_number,
+             vr.prepared_by_name, vr.prepared_by_position,
+             vr.recommending_approval_name, vr.recommending_approval_position,
+             st.service_type AS trip_type, gm.expected_attendees, gm.request_details,
+             latest_update.reason AS latest_update_reason,
+             latest_update.notification_message AS latest_notification,
+             latest_update.created_at AS latest_update_at
+      FROM public.bookings b
+      JOIN public."User" u ON b.u_id = u.u_id
+      LEFT JOIN public.gm_requirements gm ON b.booking_id = gm.booking_id
+      LEFT JOIN public.vehicle_requirements vr ON b.booking_id = vr.booking_id
+      LEFT JOIN public.service_type st ON vr.sv_id = st.sv_id
+      LEFT JOIN public.asset_details ad ON (gm.asd_id = ad.asd_id OR vr.asd_id = ad.asd_id)
+      LEFT JOIN LATERAL (
+        SELECT reason,notification_message,created_at FROM public.booking_status_updates
+        WHERE booking_id=b.booking_id ORDER BY created_at DESC LIMIT 1
+      ) latest_update ON true
+      WHERE b.u_id = $1
+      ORDER BY b.created_at DESC, b.booking_id DESC
+    `, [req.user.u_id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error loading personal facility requests:', err);
+    res.status(500).json({ error: 'Failed to load submitted facility requests.' });
+  }
+});
+
+app.get('/api/resources/bookings', requireAuth, async (req, res) => {
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose, b.status, u.full_name,
+      SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
+             CASE WHEN b.status = 'Reserved' THEN 'Pending' WHEN b.status = 'Confirmed' THEN 'Approved' ELSE b.status END AS status, u.full_name,
              gm.start_time as gm_start, gm.end_time as gm_end,
              vr.pick_up_time as vr_start, vr.drop_off_time as vr_end, vr.destination,
              ad.asset_name
@@ -1540,19 +2049,35 @@ app.get('/api/resources/bookings', async (req, res) => {
 // ==========================================
 app.post('/api/resources/book', requireAuth, async (req, res) => {
   const { 
-    userId, bookingType, assetName, reservationDate, purpose, department,
+    bookingType, assetName, reservationDate, purpose, department,
     startTime, endTime, expectedAttendees, intendedDates, facilityDetails,
     destination, officialPassengers, serviceTypeId, pickUpTime, dropOffTime,
-    preparedByName, preparedByPosition, recommendingApprovalName, recommendingApprovalPosition
+    recommendingApprovalOfficeId, recommendingApprovalUserId,
+    approvedByOfficeId, approvedByUserId
   } = req.body;
+
+  let assignedSignatories;
+  try {
+    assignedSignatories = await resolveBookingSignatories(pool, req.user.u_id, {
+      recommendingApprovalOfficeId, recommendingApprovalUserId,
+      approvedByOfficeId, approvedByUserId
+    });
+  } catch (error) {
+    console.error('Booking signatory lookup failed:', error);
+    return res.status(500).json({ error: 'The assigned approvers could not be loaded.' });
+  }
+  if (!assignedSignatories?.requestedBy) return res.status(404).json({ error: 'Your account profile could not be loaded.' });
 
   const passengerNames = Array.isArray(officialPassengers)
     ? officialPassengers.map(name => typeof name === 'string' ? name.trim() : '') : [];
   if (bookingType === 'Vehicle') {
-    const requiredText = [department, purpose, destination, preparedByName, preparedByPosition, recommendingApprovalName, recommendingApprovalPosition];
+    if (!assignedSignatories.recommendingApproval) {
+      return res.status(400).json({ error: 'Choose an available recommending signatory and office.' });
+    }
+    const requiredText = [department, purpose, destination];
     if (!requiredText.every(value => typeof value === 'string' && value.trim()) ||
         passengerNames.length === 0 || passengerNames.some(name => !name)) {
-      return res.status(400).json({ error: 'Complete the travel details, official passenger names, and both name/position sections.' });
+      return res.status(400).json({ error: 'Complete the travel details and official passenger names.' });
     }
     if (!['1', '2', '3'].includes(String(serviceTypeId))) {
       return res.status(400).json({ error: 'Choose a valid service type.' });
@@ -1569,13 +2094,16 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
   const dates = isFacility ? intendedDates : [reservationDate];
   let details = null;
   if (isFacility) {
+    if (!assignedSignatories.recommendingApproval || !assignedSignatories.approvedBy) {
+      return res.status(400).json({ error: 'Choose an available recommending signatory and final signatory.' });
+    }
     if (!Array.isArray(dates) || dates.length === 0 || !dates.every(validDate) || new Set(dates).size !== dates.length) {
       return res.status(400).json({error: 'Provide unique, valid intended dates of use.'});
     }
     const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
     if (!validTime(startTime) || !validTime(endTime) || startTime >= endTime ||
-        !Number.isInteger(Number(expectedAttendees)) || Number(expectedAttendees) < 1) {
-      return res.status(400).json({error: 'Provide valid start/end times and a positive whole-number attendance.'});
+        !Number.isInteger(Number(expectedAttendees)) || Number(expectedAttendees) < 1 || Number(expectedAttendees) > 99999) {
+      return res.status(400).json({error: 'Provide valid start/end times and an expected attendance from 1 to 99,999.'});
     }
     if (!facilityDetails || typeof facilityDetails !== 'object' || Array.isArray(facilityDetails) ||
         typeof department !== 'string' || !department.trim()) {
@@ -1599,12 +2127,21 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
         details[`${key}Other`] = other.trim();
       }
     }
-    for (const key of ['personInChargeName', 'personInChargePosition', 'requestedByName', 'requestedByPosition', 'reviewedByName', 'reviewedByPosition', 'approvedByName', 'approvedByPosition']) {
+    for (const key of ['personInChargeName', 'personInChargePosition']) {
       if (typeof facilityDetails[key] !== 'string' || !facilityDetails[key].trim()) {
-        return res.status(400).json({error: 'Complete all name and position fields.'});
+        return res.status(400).json({error: 'Complete the person-in-charge name and position.'});
       }
       details[key] = facilityDetails[key].trim();
     }
+    details.requestedByName = assignedSignatories.requestedBy.name;
+    details.requestedByPosition = assignedSignatories.requestedBy.position;
+    details.requestedByUserId = assignedSignatories.requestedBy.userId;
+    details.reviewedByName = assignedSignatories.recommendingApproval.name;
+    details.reviewedByPosition = assignedSignatories.recommendingApproval.position;
+    details.reviewedByUserId = assignedSignatories.recommendingApproval.userId;
+    details.approvedByName = assignedSignatories.approvedBy.name;
+    details.approvedByPosition = assignedSignatories.approvedBy.position;
+    details.approvedByUserId = assignedSignatories.approvedBy.userId;
     if (facilityDetails.remarks != null && typeof facilityDetails.remarks !== 'string') {
       return res.status(400).json({error: 'Remarks must be text.'});
     }
@@ -1627,7 +2164,7 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
     // Insert the booking
     const bookingRes = await client.query(
       `INSERT INTO public.bookings (u_id, booking_type, department, reservation_date, purpose, status)
-       VALUES ($1, $2, $3, $4, $5, 'Reserved') RETURNING booking_id`,
+       VALUES ($1, $2, $3, $4, $5, 'Pending') RETURNING booking_id`,
       [req.user.u_id, bookingType, department, requestedDate, isFacility ? details.purposes.map(value => value === 'Others' ? details.purposesOther : value).join(', ') : purpose]
     );
     const bookingId = bookingRes.rows[0].booking_id;
@@ -1644,16 +2181,20 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
 
       await client.query(
         `INSERT INTO public.vehicle_requirements (asd_id, sv_id, booking_id, destination, passenger_count, pick_up_time, drop_off_time,
-          official_passengers, prepared_by_name, prepared_by_position, recommending_approval_name, recommending_approval_position)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          official_passengers, prepared_by_name, prepared_by_position, recommending_approval_name, recommending_approval_position,
+          prepared_by_user_id,recommending_approval_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [asdId, parseInt(serviceTypeId) || 3, bookingId, destination, passengerNames.length, finalizedPickUp, finalizedDropOff,
-          passengerNames, preparedByName.trim(), preparedByPosition.trim(), recommendingApprovalName.trim(), recommendingApprovalPosition.trim()]
+          passengerNames, assignedSignatories.requestedBy.name, assignedSignatories.requestedBy.position,
+          assignedSignatories.recommendingApproval.name, assignedSignatories.recommendingApproval.position,
+          assignedSignatories.requestedBy.userId, assignedSignatories.recommendingApproval.userId]
       );
     }
 
     }
 
     await client.query('COMMIT');
+    broadcastResourceUpdate(req);
     res.status(201).json({ message: "Request submitted. Confirmation requires the necessary documents to be submitted in person at the GSO office and review by the responsible officers." });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1667,13 +2208,15 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
 // 13. PROCUREMENT: FETCH ALL RESERVATIONS ENDPOINT
 // ==========================================
 app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
     const query = `
-      SELECT b.booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose, b.status,
+      SELECT b.public_id AS booking_id, b.booking_type, to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date, b.purpose,
+             CASE WHEN b.status = 'Reserved' THEN 'Pending' WHEN b.status = 'Confirmed' THEN 'Approved' ELSE b.status END AS status,
              b.department,
              b.created_at, 
              CASE 
-                WHEN b.status = 'Confirmed' THEN b.updated_at 
+                WHEN b.status IN ('Confirmed','Approved') THEN b.updated_at
                 ELSE NULL 
              END as updated_at,
              u.full_name as requestor,
@@ -1685,10 +2228,12 @@ app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
              vr.destination,
              vr.passenger_count,
              vr.official_passengers,
-             vr.vehicle_to_be_used,
-             vr.designated_driver,
-             vr.plate_number,
-             vr.license_number,
+              vr.vehicle_to_be_used,
+              vr.designated_driver,
+              vr.plate_number,
+              vr.license_number,
+              vr.assigned_vehicle_id,
+              vr.assigned_driver_id,
              vr.prepared_by_name,
              vr.prepared_by_position,
              vr.recommending_approval_name,
@@ -1716,10 +2261,11 @@ app.get('/api/procurement/reservations', requireAuth, async (req, res) => {
 // 13.1 PROCUREMENT: FETCH LOGISTICS HISTORY ENDPOINT
 // ==========================================
 app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
     const query = `
       SELECT 
-        el.log_id,
+        el.public_id AS log_id,
         ad.asset_name, 
         el.requestor_name, 
         el.qty_borrowed, 
@@ -1743,13 +2289,17 @@ app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
 // 13.2 PROCUREMENT: GET & SYNC BOOKING CHECKLIST ENDPOINT
 // ==========================================
 app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   const { bookingId, type } = req.params;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1', [bookingId]);
+    if (!booking.rows.length) throw Object.assign(new Error('Request not found.'), {status:404});
+    const internalBookingId = booking.rows[0].booking_id;
     
     // 1. Check if this booking already has checklist items
-    const existingChecklist = await client.query('SELECT * FROM public.booking_checklists WHERE booking_id = $1', [bookingId]);
+    const existingChecklist = await client.query('SELECT public_id AS check_id,item_name,is_checked FROM public.booking_checklists WHERE booking_id = $1', [internalBookingId]);
     
     if (existingChecklist.rows.length === 0) {
       // 2. If empty, generate them from the global template
@@ -1758,19 +2308,19 @@ app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req,
         for (let t of templates.rows) {
           await client.query(
             'INSERT INTO public.booking_checklists (booking_id, item_name, is_checked) VALUES ($1, $2, false)',
-            [bookingId, t.item_name]
+            [internalBookingId, t.item_name]
           );
         }
       }
     }
     
     // 3. Return the checklist state
-    const currentChecklist = await client.query('SELECT * FROM public.booking_checklists WHERE booking_id = $1 ORDER BY check_id ASC', [bookingId]);
+    const currentChecklist = await client.query('SELECT public_id AS check_id,item_name,is_checked FROM public.booking_checklists WHERE booking_id = $1 ORDER BY check_id ASC', [internalBookingId]);
     await client.query('COMMIT');
     res.json(currentChecklist.rows);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: "Failed to fetch checklist." });
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to fetch checklist." });
   } finally {
     client.release();
   }
@@ -1788,25 +2338,29 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     await client.query('BEGIN');
     await lockSchedule(client);
     if (typeof isChecked !== 'boolean') throw new Error('Invalid checklist value.');
+    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1 FOR UPDATE', [bookingId]);
+    if (!booking.rows.length) throw new Error('Request not found.');
+    const internalBookingId = booking.rows[0].booking_id;
     
     // Update specific item
-    const updated = await client.query('UPDATE public.booking_checklists SET is_checked = $1 WHERE check_id = $2 AND booking_id = $3 RETURNING check_id', [isChecked, checkId, bookingId]);
+    const updated = await client.query('UPDATE public.booking_checklists SET is_checked = $1 WHERE public_id = $2 AND booking_id = $3 RETURNING check_id', [isChecked, checkId, internalBookingId]);
     if (!updated.rows.length) throw new Error('Checklist item does not belong to this request.');
     
     // Check if ALL items for this booking are now ticked off
-    const allItems = await client.query('SELECT is_checked FROM public.booking_checklists WHERE booking_id = $1', [bookingId]);
+    const allItems = await client.query('SELECT is_checked FROM public.booking_checklists WHERE booking_id = $1', [internalBookingId]);
     const allChecked = allItems.rows.every(item => item.is_checked === true);
     
     // Auto-update booking status if requirements are met
 // Auto-update booking status if requirements are met
   if (allChecked && allItems.rows.length > 0) {
-    await assertConfirmable(client, bookingId);
-    await client.query("UPDATE public.bookings SET status = 'Confirmed', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [bookingId]);
+    await assertConfirmable(client, internalBookingId);
+    await client.query("UPDATE public.bookings SET status = 'Approved', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [internalBookingId]);
   } else {
-    await client.query("UPDATE public.bookings SET status = 'Reserved' WHERE booking_id = $1", [bookingId]);
+    await client.query("UPDATE public.bookings SET status = 'Pending' WHERE booking_id = $1", [internalBookingId]);
   }
 
     await client.query('COMMIT');
+    broadcastResourceUpdate(req);
     res.json({ message: "Checklist updated", allChecked });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1882,7 +2436,7 @@ app.get('/api/admin/infrastructure-summary', async (req, res) => {
         COUNT(u.u_id)::int AS staff_count,
         COALESCE(
           json_agg(
-            json_build_object('user_id', u.u_id, 'full_name', u.full_name, 'username', u.username)
+            json_build_object('user_id', u.public_id, 'full_name', u.full_name, 'username', u.username)
             ORDER BY lower(u.full_name)
           ) FILTER (WHERE u.u_id IS NOT NULL),
           '[]'::json
@@ -1989,7 +2543,7 @@ app.get('/api/analytics/peak-demand', requireAuth, async (req, res) => {
 // ==========================================
 app.get('/api/analytics/bottlenecks', async (req, res) => {
     try {
-        const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/bottlenecks`);
+        const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/bottlenecks`, { params: req.query });
         res.json(response.data);
     } catch (error) {
         console.error('Error fetching bottleneck analytics:', error.message);
@@ -2015,7 +2569,7 @@ app.get('/api/analytics/edc', requireAuth, async (req, res) => {
 // ==========================================
 app.get('/api/analytics/route-performance', requireAuth, async (req, res) => {
   try {
-      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/route-performance`);
+      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/route-performance`, { params: req.query });
       res.json(response.data);
   } catch (error) {
       console.error('Error fetching route performance analytics:', error.message);
@@ -2032,6 +2586,19 @@ app.get('/api/analytics/system-health', requireAuth, async (req, res) => {
       res.json(response.data);
   } catch (error) {
       console.error('Error fetching system health analytics:', error.message);
+      res.status(500).json({ message: 'Analytics service unavailable' });
+  }
+});
+
+// ==========================================
+// 15.5 ANALYTICS: ADMINISTRATIVE INSIGHTS MICROSERVICE PROXY
+// ==========================================
+app.get('/api/analytics/administrative-insights', requireAuth, async (req, res) => {
+  try {
+      const response = await axios.get(`${PYTHON_MICROSERVICE_URL}/api/analytics/administrative-insights`, { params: req.query });
+      res.json(response.data);
+  } catch (error) {
+      console.error('Error fetching administrative insights:', error.message);
       res.status(500).json({ message: 'Analytics service unavailable' });
   }
 });

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clipboard, Link2, Plus, Search, Send, Users, X } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { API_BASE_URL, fetchWithAuth } from '../../../../api';
-import { createRealtimeClient } from '../../../../utils/realtimeClient';
+import { API_BASE_URL, fetchWithAuth } from '../../../api';
+import { createRealtimeClient } from '../../../utils/realtimeClient';
 
 const LINKS_PER_COLUMN = 4;
 const ACCOUNTS_PER_PAGE = 8;
@@ -64,11 +64,12 @@ function LinkCard({ link, onCopy }) {
   );
 }
 
-export default function RegistrationManagementPage({ userId, access }) {
+export default function RegistrationManagementPage({ userId, access, officeOnly = false }) {
   const [links, setLinks] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [linkPages, setLinkPages] = useState({ pending: 1, active: 1, closed: 1 });
+  const [closedFilter, setClosedFilter] = useState('');
   const [accountQuery, setAccountQuery] = useState('');
   const [accountSort, setAccountSort] = useState('newest');
   const [accountPage, setAccountPage] = useState(1);
@@ -168,9 +169,11 @@ export default function RegistrationManagementPage({ userId, access }) {
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           {linksByColumn.map(column => {
-            const pageCount = Math.max(1, Math.ceil(column.links.length / LINKS_PER_COLUMN));
+            const visibleLinks = column.id === 'closed' && closedFilter
+              ? column.links.filter(link => link.status === closedFilter) : column.links;
+            const pageCount = Math.max(1, Math.ceil(visibleLinks.length / LINKS_PER_COLUMN));
             const page = Math.min(linkPages[column.id] || 1, pageCount);
-            const displayedLinks = column.links.slice((page - 1) * LINKS_PER_COLUMN, page * LINKS_PER_COLUMN);
+            const displayedLinks = visibleLinks.slice((page - 1) * LINKS_PER_COLUMN, page * LINKS_PER_COLUMN);
             return (
               <div key={column.id} className="rounded-2xl border border-neutral-200 dark:border-[#42292f] bg-neutral-100/70 dark:bg-[#1c1113] p-3">
                 <div className="mb-3 flex items-center justify-between gap-3 px-1">
@@ -180,12 +183,16 @@ export default function RegistrationManagementPage({ userId, access }) {
                   </div>
                   <span className="rounded-full bg-white dark:bg-[#180e10] px-2 py-1 text-[10px] font-black text-neutral-600 dark:text-gray-300">{column.links.length}</span>
                 </div>
+                {column.id === 'closed' && <select aria-label="Filter closed links by status" value={closedFilter} onChange={event => { setClosedFilter(event.target.value); setLinkPages(current => ({ ...current, closed: 1 })); }} className="mb-3 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3 py-2 text-xs text-neutral-800 dark:text-gray-200">
+                  <option value="">All closed statuses</option>
+                  {['exhausted', 'expired', 'revoked', 'rejected'].map(status => <option key={status} value={status}>{status[0].toUpperCase() + status.slice(1)}</option>)}
+                </select>}
                 <div className="space-y-2">
                   {displayedLinks.map(link => <LinkCard key={link.link_id} link={link} onCopy={copyLink} />)}
-                  {column.links.length === 0 && <p className="rounded-xl border border-dashed border-neutral-300 dark:border-gray-700 bg-white/60 dark:bg-[#180e10]/60 px-3 py-8 text-center text-xs text-neutral-400 dark:text-gray-500">No links in this stage.</p>}
+                  {visibleLinks.length === 0 && <p className="rounded-xl border border-dashed border-neutral-300 dark:border-gray-700 bg-white/60 dark:bg-[#180e10]/60 px-3 py-8 text-center text-xs text-neutral-400 dark:text-gray-500">No links match this stage or filter.</p>}
                 </div>
                 <div className="mt-3">
-                  <Pagination page={page} pageCount={pageCount} onPageChange={nextPage => setLinkPages(current => ({ ...current, [column.id]: nextPage }))} label={`${column.links.length} links`} />
+                  <Pagination page={page} pageCount={pageCount} onPageChange={nextPage => setLinkPages(current => ({ ...current, [column.id]: nextPage }))} label={`${visibleLinks.length} links`} />
                 </div>
               </div>
             );
@@ -236,7 +243,7 @@ export default function RegistrationManagementPage({ userId, access }) {
             <form onSubmit={submit} className="p-5">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="text-xs font-bold text-neutral-700 dark:text-gray-300">Account type
-                  <select value={form.accountType} onChange={event => setForm({ ...form, accountType: Number(event.target.value), targetId: '' })} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal"><option value="2">Regular Office Staff</option><option value="1">Faculty Staff</option></select>
+                  <select value={form.accountType} onChange={event => setForm({ ...form, accountType: Number(event.target.value), targetId: '' })} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal"><option value="2">Regular Office Staff</option>{!officeOnly && <option value="1">Faculty Staff</option>}</select>
                 </label>
                 <label className="text-xs font-bold text-neutral-700 dark:text-gray-300">Assigned {form.accountType === 1 ? 'department' : 'office'}
                   <select required value={effectiveTargetId} onChange={event => setForm({ ...form, targetId: event.target.value })} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white px-3 py-2.5 text-sm font-normal"><option value="">Choose...</option>{scopes.map(scope => <option key={targetFor(scope)} value={targetFor(scope)}>{scope.department_name || scope.office_name}</option>)}</select>
