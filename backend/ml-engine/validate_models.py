@@ -143,15 +143,18 @@ def validate_peak_demand_time_series(test_weeks=8):
     query = """
         SELECT reservation_date, booking_type, COUNT(booking_id) as daily_demand
         FROM public.bookings
-        WHERE status = 'Confirmed'
+        WHERE status IN (
+            'Confirmed', 'Approved', 'Ongoing', 'Delayed',
+            'Rescheduled', 'Resource Reassigned', 'Completed'
+        )
         GROUP BY reservation_date, booking_type
         ORDER BY reservation_date;
     """
     with get_db_connection() as conn:
         df = pd.read_sql_query(query, conn)
 
-    if df.empty or len(df) < 60:
-        return {"Status": "Failed", "Reason": "Need at least 60 days of confirmed bookings."}
+    if df.empty or df['reservation_date'].nunique() < 60:
+        return {"Status": "Failed", "Reason": "Need bookings on at least 60 distinct reservation dates."}
 
     df['reservation_date'] = pd.to_datetime(df['reservation_date'])
     df['category'] = df['booking_type'].apply(lambda x: 'vehicle_demand' if x == 'Vehicle' else 'facility_demand')
@@ -163,6 +166,9 @@ def validate_peak_demand_time_series(test_weeks=8):
         values='daily_demand', 
         aggfunc='sum'
     ).fillna(0).resample('W-MON').sum()
+
+    if len(weekly_df) <= test_weeks:
+        return {"Status": "Failed", "Reason": "Not enough weekly history for the holdout period."}
 
     train = weekly_df.iloc[:-test_weeks]
     test = weekly_df.iloc[-test_weeks:]
@@ -181,7 +187,7 @@ def validate_peak_demand_time_series(test_weeks=8):
             results[col] = {
                 "MAE (Weekly)": metrics["MAE"],
                 "RMSE (Weekly)": metrics["RMSE"],
-                "R-squared": max(0.0, metrics["R-squared"]),
+                "R-squared": metrics["R-squared"],
                 "MAPE (%)": metrics["MAPE (%)"],
                 "wMAPE (%)": metrics["wMAPE (%)"]
             }
@@ -299,10 +305,13 @@ if __name__ == "__main__":
     edc_res = validate_edc_linear_regression(n_splits=5)
     print(pd.DataFrame([edc_res], index=["Document Duration"]))
 
-    print("\n[OBJECTIVE 2.3] Predictive: Peak Demand Time-Series Analysis (Workdays)")
+    print("\n[OBJECTIVE 2.3] Predictive: Peak Demand Time-Series Analysis (8-Week Holdout)")
     print("-" * 72)
     demand_res = validate_peak_demand_time_series(test_weeks=8)
-    print(pd.DataFrame(demand_res).T)
+    if "Status" in demand_res:
+        print(pd.DataFrame([demand_res], index=["Peak Demand"]))
+    else:
+        print(pd.DataFrame(demand_res).T)
 
     print("\n[OBJECTIVES 2.1 & 2.4] Empirical Health, Sanity & Decision Audits")
     print("-" * 72)
@@ -310,5 +319,5 @@ if __name__ == "__main__":
         print(f"* {service}: {audit}")
 
     print("\n" + "="*72)
-    print("Validation run finished successfully.")
+    print("Validation suite completed. Predictive quality is shown by the metrics above.")
     print("="*72 + "\n")

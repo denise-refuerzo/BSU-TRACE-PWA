@@ -22,6 +22,7 @@ export default function DocumentSubmissionModal({
   const [catalogError,setCatalogError] = useState('');
   const [catalogLoading,setCatalogLoading] = useState(true);
   const [retry,setRetry] = useState(0);
+  const [officeSignals, setOfficeSignals] = useState({});
   useEffect(()=>{let cancelled=false; Promise.all(['/api/offices','/api/document-categories','/api/office-route-groups'].map(async url=>{
     const res=await fetchWithAuth(url);const data=await res.json();if(!res.ok)throw new Error(data.error || 'Unable to load route options.');return data;
   })).then(([offices,categories,groups])=>{if(!cancelled){setCatalog({offices:offices.filter(o=>Number(o.id)!==999),categories,groups});setCatalogError('');}})
@@ -32,6 +33,37 @@ export default function DocumentSubmissionModal({
   const routeStops = getWorkflowStops(selectedOfficial, placeholderSelections);
   const placeholderStops = routeStops.filter(stop => stop.groupId);
   const groupOffices = groupId => catalog.groups.find(group => Number(group.group_id) === Number(groupId))?.offices || [];
+  const signalIds = [...new Set([
+    ...(custom ? custom.stops : []),
+    ...placeholderStops.flatMap(stop => groupOffices(stop.groupId).map(office => office.id))
+  ].map(Number).filter(id => Number.isInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
+  useEffect(() => {
+    if (!signalIds) return;
+    let cancelled = false;
+    fetchWithAuth(`/api/decision-support/offices?ids=${signalIds}`)
+      .then(async response => response.ok ? response.json() : [])
+      .then(rows => {
+        if (!cancelled) setOfficeSignals(Object.fromEntries(rows.map(row => [Number(row.office_id), row])));
+      })
+      .catch(() => { if (!cancelled) setOfficeSignals({}); });
+    return () => { cancelled = true; };
+  }, [signalIds]);
+  const signalText = officeId => {
+    const signal = officeSignals[Number(officeId)];
+    if (!signal) return null;
+    return `${signal.open_stops} open document${Number(signal.open_stops) === 1 ? '' : 's'}${Number(signal.completed_stops) >= 3 ? ` · ${signal.avg_hours}h average per completed stop (past 90 days)` : ' · limited recent history'}`;
+  };
+  const suggestedOffice = stop => {
+    const choices = groupOffices(stop.groupId);
+    if (choices.length < 2 || choices.some(office => Number(officeSignals[Number(office.id)]?.completed_stops || 0) < 3)) return null;
+    return [...choices].sort((a, b) => {
+      const left = officeSignals[Number(a.id)];
+      const right = officeSignals[Number(b.id)];
+      return Number(left.open_stops) - Number(right.open_stops)
+        || Number(left.avg_hours) - Number(right.avg_hours)
+        || String(a.name).localeCompare(String(b.name));
+    })[0];
+  };
   const routePreview = selectedOfficial ? routeStops.map(stop => {
     if (!stop.groupId) return selectedOfficial.resolved_route_names?.[stop.position - 1] || stop.name;
     const chosen = groupOffices(stop.groupId).find(office => Number(office.id) === stop.officeId);
@@ -79,6 +111,11 @@ export default function DocumentSubmissionModal({
             <label className="block text-sm text-gray-700 dark:text-gray-300">New process type<input required maxLength={100} value={custom.processName} onChange={e=>changeCustom({processName:e.target.value})} className="w-full border border-gray-300 dark:border-gray-700 rounded p-2 mt-1 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white text-xs outline-none"/></label>
             <p className="text-xs text-gray-600 dark:text-gray-300">Select offices in processing order, starting with the office that should receive the document first.</p>
             {custom.stops.map((stop,i)=><label key={i} className="block text-sm text-gray-700 dark:text-gray-300">Office {i+1}<select required value={stop} onChange={e=>changeCustom({stops:custom.stops.map((v,j)=>j===i?Number(e.target.value):v)})} className="w-full border border-gray-300 dark:border-gray-700 rounded p-2 mt-1 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white text-xs outline-none cursor-pointer"><option value="">Select office…</option>{catalog.offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>)}
+            {custom.stops.some(Boolean) && <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 text-xs text-blue-950 dark:text-blue-200">
+              <p className="font-bold">Route processing signals</p>
+              <p className="mt-1">These figures help you review your chosen offices. Choose the offices required by your process; ICT reviews a custom route before making it official.</p>
+              {custom.stops.map((id, index) => id && signalText(id) ? <p key={index} className="mt-1">Step {index + 1}: {signalText(id)}</p> : null)}
+            </div>}
             <div className="flex gap-4 text-sm"><button type="button" disabled={custom.stops.length>=7} onClick={()=>changeCustom({stops:[...custom.stops,'']})} className="underline disabled:opacity-40 text-red-800 dark:text-red-400 cursor-pointer font-bold text-xs">Add office</button><button type="button" disabled={custom.stops.length<=2} onClick={()=>changeCustom({stops:custom.stops.slice(0,-1)})} className="underline disabled:opacity-40 text-neutral-600 dark:text-gray-400 cursor-pointer font-bold text-xs">Remove last office</button></div>
           </div>}
           {!custom && <div className="grid grid-cols-1 gap-4">
@@ -119,6 +156,8 @@ export default function DocumentSubmissionModal({
                 <option value="">Select an office…</option>
                 {groupOffices(stop.groupId).map(office => <option key={office.id} value={office.id}>{office.name}</option>)}
               </select>
+              {suggestedOffice(stop) && <span className="mt-1 block text-xs font-normal text-blue-900 dark:text-blue-300">Suggested from eligible offices: {suggestedOffice(stop).name} (fewest open documents, then lower recent average). {signalText(suggestedOffice(stop).id)}</span>}
+              {stop.officeId && signalText(stop.officeId) && <span className="mt-1 block text-xs font-normal text-blue-900 dark:text-blue-300">Selected office: {signalText(stop.officeId)}</span>}
               {!catalogLoading && !catalogError && groupOffices(stop.groupId).length === 0 && <span role="alert" className="mt-1 block text-xs text-red-800 dark:text-red-400">No offices are available for this step. Contact ICT.</span>}
             </label>)}
           </div>}

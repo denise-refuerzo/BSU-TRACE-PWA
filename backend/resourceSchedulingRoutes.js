@@ -1,4 +1,5 @@
 const {availability, lockSchedule, validateWindow} = require('./resourceScheduling');
+const {suggestFleetAssignment} = require('./decisionSupport');
 module.exports = function registerScheduling(app, pool, requireAuth) {
   const gso = (req,res,next) => Number(req.user.a_id) === 4 ? next() : res.status(403).json({error:'GSO administrator access required.'});
   const handle = fn => async (req,res) => {try {await fn(req,res);} catch(error) {res.status(error.status || 400).json({error:error.message});}};
@@ -52,7 +53,7 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
     const result=await pool.query(`SELECT b.booking_id,to_char(b.reservation_date,'YYYY-MM-DD') AS date,vr.pick_up_time::text AS start,vr.drop_off_time::text AS end
       FROM public.bookings b JOIN public.vehicle_requirements vr USING(booking_id) WHERE b.public_id=$1`,[req.params.id]);
     if(!result.rows.length) throw new Error('Vehicle request not found.');
-    res.json(await availability(pool,{...result.rows[0],...(req.query.start && req.query.end ? {start:req.query.start,end:req.query.end} : {}),type:'Vehicle',exclude:result.rows[0].booking_id,allowLegacy:true}));
+    res.json(await suggestFleetAssignment(pool,{...result.rows[0],...(req.query.start && req.query.end ? {start:req.query.start,end:req.query.end} : {})}));
   }));
   app.get('/api/resources/available-facilities',requireAuth,handle(async(req,res)=>{
     const type=String(req.query.type||'');

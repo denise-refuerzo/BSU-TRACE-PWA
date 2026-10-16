@@ -1978,6 +1978,19 @@ app.post('/api/resources/blackouts', requireAuth, async (req, res) => {
 // 12. BOOKINGS: FETCH CALENDAR EVENTS ENDPOINT
 // ==========================================
 require('./resourceSchedulingRoutes')(app, pool, requireAuth);
+app.get('/api/decision-support/offices', requireAuth, async (req, res) => {
+  try {
+    const raw = String(req.query.ids || '').split(',').filter(Boolean);
+    if (!raw.length || raw.length > 50 || raw.some(id => !/^[1-9]\d*$/.test(id) || Number(id) > 2147483647)) {
+      return res.status(400).json({error: 'Provide up to 50 valid office IDs.'});
+    }
+    const {getOfficeSignals} = require('./decisionSupport');
+    res.json(await getOfficeSignals(pool, [...new Set(raw.map(Number))]));
+  } catch (error) {
+    console.error('Office decision support failed:', error);
+    res.status(500).json({error: 'Unable to load office processing signals.'});
+  }
+});
 require('./resourceAdminRoutes')(app, pool, requireAuth);
 
 app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
