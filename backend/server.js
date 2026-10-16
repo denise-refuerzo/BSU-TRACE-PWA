@@ -7,6 +7,7 @@ const bcrypt = require('bcrypt');
 const pool = require('./db');
 const {lockSchedule, availability, assertConfirmable} = require('./resourceScheduling');
 const { resolveBookingSignatories } = require('./accountAccessRoutes');
+const { syncOfficeRouteGroup } = require('./officeRouteGroups');
 const { resolveChatDocument: resolveChatDocumentAccess, resolveChatRoom: resolveChatRoomAccess } = require('./chatAccess');
 const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require('./mailer');
 const crypto = require('crypto');
@@ -1173,14 +1174,6 @@ app.post('/api/departments', requireAuth, async (req, res) => {
 // ==========================================
 // 3.2 CREATE OFFICE ENDPOINT
 // ==========================================
-const syncOfficeRouteGroup = async (db, officeId, category) => {
-  await db.query('DELETE FROM public.office_route_group_members WHERE office_id=$1', [officeId]);
-  if (!category) return;
-  await db.query('INSERT INTO public.office_route_groups (group_name) VALUES ($1) ON CONFLICT DO NOTHING', [category]);
-  const group = await db.query('SELECT group_id FROM public.office_route_groups WHERE LOWER(BTRIM(group_name))=LOWER($1) LIMIT 1', [category]);
-  if (group.rows[0]) await db.query('INSERT INTO public.office_route_group_members (group_id, office_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [group.rows[0].group_id, officeId]);
-};
-
 app.post('/api/offices', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
   const { officeName } = req.body;
@@ -1261,8 +1254,9 @@ app.put('/api/offices/:id', requireAuth, async (req, res) => {
     let r;
     try {
       await client.query('BEGIN');
+      const previous = await client.query('SELECT office_category FROM public.offices WHERE o_id=$1 FOR UPDATE', [req.params.id]);
       r = await client.query('UPDATE public.offices SET office_name=$1, office_category=$2 WHERE o_id=$3 RETURNING o_id', [name, category, req.params.id]);
-      if (r.rowCount) await syncOfficeRouteGroup(client, r.rows[0].o_id, category);
+      if (r.rowCount) await syncOfficeRouteGroup(client, r.rows[0].o_id, category, previous.rows[0]?.office_category);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -1984,6 +1978,19 @@ app.post('/api/resources/blackouts', requireAuth, async (req, res) => {
 // 12. BOOKINGS: FETCH CALENDAR EVENTS ENDPOINT
 // ==========================================
 require('./resourceSchedulingRoutes')(app, pool, requireAuth);
+app.get('/api/decision-support/offices', requireAuth, async (req, res) => {
+  try {
+    const raw = String(req.query.ids || '').split(',').filter(Boolean);
+    if (!raw.length || raw.length > 50 || raw.some(id => !/^[1-9]\d*$/.test(id) || Number(id) > 2147483647)) {
+      return res.status(400).json({error: 'Provide up to 50 valid office IDs.'});
+    }
+    const {getOfficeSignals} = require('./decisionSupport');
+    res.json(await getOfficeSignals(pool, [...new Set(raw.map(Number))]));
+  } catch (error) {
+    console.error('Office decision support failed:', error);
+    res.status(500).json({error: 'Unable to load office processing signals.'});
+  }
+});
 require('./resourceAdminRoutes')(app, pool, requireAuth);
 
 app.get('/api/resources/my-requests', requireAuth, async (req, res) => {

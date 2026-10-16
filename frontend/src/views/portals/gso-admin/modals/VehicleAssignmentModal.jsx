@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { X, Car, User, Clock, AlertCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Car, Clock, AlertCircle } from 'lucide-react';
 import { resourceApi, confirmResourceAction, resourceSuccess, resourceError } from '../resourceActions';
 import { publicReference } from '../../../../utils/publicReference';
 
@@ -18,7 +18,6 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
 
   useEffect(() => {
     let cancelled = false;
-    setError('');
 
     const formattedStart = start.length === 5 ? `${start}:00` : start;
     const formattedEnd = end.length === 5 ? `${end}:00` : end;
@@ -32,16 +31,17 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
       .then(data => {
         if (cancelled) return;
         setOptions(data);
+        setError('');
 
         // Retain selections if they still exist in available options
-        if (data.vehicles?.length > 0 && !vehicleId) {
+        if (data.vehicles?.length > 0) {
           if (request.assigned_vehicle_id && data.vehicles.some(v => v.vehicle_id === request.assigned_vehicle_id)) {
-            setVehicleId(String(request.assigned_vehicle_id));
+            setVehicleId(current => current || String(request.assigned_vehicle_id));
           }
         }
-        if (data.drivers?.length > 0 && !driverId) {
+        if (data.drivers?.length > 0) {
           if (request.assigned_driver_id && data.drivers.some(d => d.driver_id === request.assigned_driver_id)) {
-            setDriverId(String(request.assigned_driver_id));
+            setDriverId(current => current || String(request.assigned_driver_id));
           }
         }
       })
@@ -50,7 +50,7 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
       });
 
     return () => { cancelled = true; };
-  }, [request.booking_id, start, end]);
+  }, [request.booking_id, request.assigned_vehicle_id, request.assigned_driver_id, start, end]);
 
   async function save(e) {
     e.preventDefault();
@@ -151,6 +151,14 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
               <div className="text-xs rounded-xl bg-gray-50 dark:bg-[#1c1113] border border-gray-200 dark:border-gray-800 p-3 text-gray-700 dark:text-gray-300 font-medium leading-relaxed">
                 {options.reason}
               </div>
+              {options.suggestion && (
+                <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 text-xs text-blue-950 dark:text-blue-200">
+                  <p className="font-bold">Suggested assignment</p>
+                  <p className="mt-1">{options.suggestion.vehicleName} + {options.suggestion.driverName}</p>
+                  <p className="mt-1 text-blue-800 dark:text-blue-300">Both are free for this request. In the previous 30 days: {options.suggestion.vehicleTrips} vehicle trips and {options.suggestion.driverTrips} driver trips.</p>
+                  <button type="button" onClick={() => { setVehicleId(String(options.suggestion.vehicleId)); setDriverId(String(options.suggestion.driverId)); }} className="mt-2 font-bold underline cursor-pointer">Use suggestion</button>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Select Available Vehicle</label>

@@ -4,6 +4,7 @@ import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 import DocumentSubmissionModal from '../../originator/modals/DocumentSubmissionModal';
 import OfficeDocumentModal from '../../../shared/modals/DocumentTrackingModal';
 import { formatPhilippineDateTime, formatPhilippineDate } from '../../../../utils/philippineTime';
+import {getWorkflowStops, getSelectedRouteKey} from '../../../../utils/workflowRoute';
 import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Filter, MoreVertical } from 'lucide-react';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
@@ -30,7 +31,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
   const [filterStatus, setFilterStatus] = useState('All');
   const [predictions, setPredictions] = useState([]);
   const [customEstimate, setCustomEstimate] = useState({ routeKey: '', hours: null });
-  const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false });
+  const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false, placeholderSelections: {} });
 
   // --- OPTIMIZATION: Search Debouncing ---
   useEffect(() => {
@@ -102,7 +103,12 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
     return () => { cancelled = true; }; 
   }, []);
 
-  const customRouteKey = form.customRoute?.stops?.filter(Boolean).join(',') || '';
+  const process = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
+  const selectedStops = getWorkflowStops(process, form.placeholderSelections);
+  const needsRouteEstimate = Boolean(form.customRoute || selectedStops.some(stop => stop.groupId));
+  const customRouteKey = form.customRoute
+    ? getSelectedRouteKey(form.customRoute.stops.map(officeId => ({officeId})))
+    : needsRouteEstimate ? getSelectedRouteKey(selectedStops) : '';
   useEffect(() => {
     if (!customRouteKey) return undefined;
     let cancelled = false;
@@ -115,21 +121,21 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
   }, [customRouteKey]);
 
   // --- LOGIC ---
-  const process = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
-  const eligible = form.customRoute ? Number(form.customRoute.stops[0]) === Number(officeId) : process && Number(process.resolved_origin_office_id) === Number(officeId);
+  const originOfficeId = form.customRoute ? form.customRoute.stops[0] : selectedStops[0]?.officeId;
+  const eligible = Boolean(originOfficeId && Number(originOfficeId) === Number(officeId));
   const hours = Number(predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete);
   const estimate = Number.isFinite(hours) && hours >= 0 ? new Date(estimateBase + hours * 3600000) : null;
   const edc = estimate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(estimate) : null;
   const customHours = customEstimate.routeKey === customRouteKey ? customEstimate.hours : null;
-  const customEdc = form.customRoute?.stops?.every(Boolean) && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(estimateBase + customHours * 3600000)) : null;
-  const resolvedEdc = form.customRoute ? customEdc : edc;
+  const customEdc = customRouteKey && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(estimateBase + customHours * 3600000)) : null;
+  const resolvedEdc = needsRouteEstimate ? customEdc : edc;
 
   const submit = async e => {
     e.preventDefault(); if (busy) return; if (!resolvedEdc) { setError('Estimated delivery is still being calculated. Complete the route stops first.'); return; } setBusy(true); setError('');
     try {
-      const res = await fetchWithAuth('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: form.title, processTypeId: Number(form.processTypeId), customRoute: form.customRoute, edc: resolvedEdc, completeOriginProcessing: Boolean(eligible && form.completeOriginProcessing) }) });
+      const res = await fetchWithAuth('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: form.title, processTypeId: Number(form.processTypeId), customRoute: form.customRoute, placeholderSelections: form.placeholderSelections || {}, edc: resolvedEdc, completeOriginProcessing: Boolean(eligible && form.completeOriginProcessing) }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      setShowModal(false); setForm({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false });
+      setShowModal(false); setForm({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false, placeholderSelections: {} });
       await load(); onProcessed(); setSelected({ ini_id: data.iniId });
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
@@ -362,12 +368,12 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
           submitDocument={submit} 
           form={form} 
           setForm={setForm} 
-          handleProcessChange={id => setForm({ ...form, processTypeId: id, completeOriginProcessing: false })} 
+          handleProcessChange={id => setForm({ ...form, processTypeId: id, completeOriginProcessing: false, placeholderSelections: {} })}
           processTypes={processTypes} 
           workflowsLoading={loading} 
           workflowError={workflowError} 
           retryWorkflows={() => { setLoading(true); workflows(); }} 
-          estimatedDate={form.customRoute ? (customEdc ? formatPhilippineDate(customEdc) : 'Complete the route to calculate') : (estimate ? formatPhilippineDate(estimate) : "Estimate unavailable")} 
+          estimatedDate={needsRouteEstimate ? (customEdc ? formatPhilippineDate(customEdc) : 'Complete the route to calculate') : (estimate ? formatPhilippineDate(estimate) : "Estimate unavailable")}
           selectedRoutePreview={process?.resolved_route_names || []} 
           canCompleteOriginProcessing={eligible} 
           submitting={busy} 

@@ -4,7 +4,7 @@ import CustomRouteReview from './CustomRouteReview';
 
 export default function InteractiveVisualizerTab({
   formMeta, setFormMeta, newProcessName, setNewProcessName, selectedStops, setSelectedStops,
-  handleStopSelectorChange, handleStopKindChange, handleAddStopSlot, handleRemoveTrailingStopSlot,
+  handleStopSelectorChange, handleStopKindChange, handleStopLabelChange, handleAddStopSlot, handleRemoveTrailingStopSlot,
   offices, routeGroups, resetWorkflowForm, handleProcessFormSubmit, processTypes,
   categories, categoryId, setCategoryId, catalogError, refreshCatalogs, deletePipeline
 }) {
@@ -106,7 +106,7 @@ export default function InteractiveVisualizerTab({
                       <option value="group">Category placeholder</option>
                     </select>
                     <select
-                      required={index < 2}
+                      required={index < 2 || stop?.type === 'group'}
                       value={stop?.type === 'group' ? (stop.groupId || '') : (stop || '')}
                       onChange={e => handleStopSelectorChange(index, e.target.value)}
                       className="w-full bg-white dark:bg-[#180e10] text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 rounded-lg pl-9 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-red-100 focus:border-[#D32F2F] transition-all cursor-pointer shadow-sm appearance-none"
@@ -118,6 +118,10 @@ export default function InteractiveVisualizerTab({
                         ? routeGroups.filter(group => group.offices?.length).map(group => <option key={group.group_id} value={group.group_id}>{group.group_name} category ({group.offices.length} offices)</option>)
                         : offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
+                    {stop?.type === 'group' && <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                      Label shown to the user (required)
+                      <input required maxLength={150} value={stop.label || ''} onChange={event => handleStopLabelChange(index, event.target.value)} placeholder="e.g. Prepared by, College Dean, Program Chair" className="mt-1.5 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3 py-2 text-sm font-normal text-gray-900 dark:text-white" />
+                    </label>}
                   </div>
                 </div>
               ))}
@@ -198,8 +202,8 @@ export default function InteractiveVisualizerTab({
 
         <div className="space-y-3 overflow-y-auto custom-scrollbar flex-1 pr-2">
           {processTypes.map((p) => {
-            const stopsArray = Array.from({length: 7}, (_, index) => p[`stop_${index + 1}_kind`] === 'group' ? `${p[`stop_${index + 1}_group_name`]} category` : p[`stop_${index + 1}_name`]).filter(Boolean);
-            const stopsIdsArray = Array.from({length: 7}, (_, index) => p[`stop_${index + 1}_kind`] === 'group' ? {type: 'group', groupId: p[`stop_${index + 1}_group_id`]} : p[`stop_${index + 1}`]).filter(Boolean);
+            const stopsArray = Array.from({length: 7}, (_, index) => p[`stop_${index + 1}_kind`] === 'group' ? `${p[`stop_${index + 1}_label`] || 'Choose office'} (${p[`stop_${index + 1}_group_name`]})` : p[`stop_${index + 1}_name`]).filter(Boolean);
+            const stopsIdsArray = Array.from({length: 7}, (_, index) => p[`stop_${index + 1}_kind`] === 'group' ? {type: 'group', groupId: p[`stop_${index + 1}_group_id`], label: p[`stop_${index + 1}_label`] || ''} : p[`stop_${index + 1}`]).filter(Boolean);
             const isSelectedCard = formMeta.currentProcessId === p.p_id;
 
             return (

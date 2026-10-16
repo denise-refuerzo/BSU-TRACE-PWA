@@ -3,7 +3,7 @@ import { Plus, Trash2, X } from 'lucide-react';
 export default function WorkflowEditorModal({
   open, onClose, onSubmit, formMeta, setFormMeta, newProcessName, setNewProcessName,
   categoryId, setCategoryId, categories, selectedStops, offices, routeGroups,
-  handleStopKindChange, handleStopSelectorChange, handleAddStopSlot, handleRemoveTrailingStopSlot
+  handleStopKindChange, handleStopSelectorChange, handleStopLabelChange, handleAddStopSlot, handleRemoveTrailingStopSlot
 }) {
   if (!open) return null;
 
@@ -61,7 +61,7 @@ export default function WorkflowEditorModal({
                       </label>
                       <label className="block text-xs font-bold text-neutral-700" htmlFor={`workflow-step-${index}`}>
                         {isGroup ? 'Office category' : 'Office'} {index < 2 ? <span className="text-rose-700">(required)</span> : null}
-                        <select id={`workflow-step-${index}`} required={index < 2} value={isGroup ? (stop.groupId || '') : (stop || '')} onChange={event => handleStopSelectorChange(index, event.target.value)} className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-normal">
+                        <select id={`workflow-step-${index}`} required={index < 2 || isGroup} value={isGroup ? (stop.groupId || '') : (stop || '')} onChange={event => handleStopSelectorChange(index, event.target.value)} className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-normal">
                           <option value="">Select {isGroup ? 'a category' : 'an office'}</option>
                           {isGroup
                             ? routeGroups.filter(group => group.offices?.length).map(group => <option key={group.group_id} value={group.group_id}>{group.group_name} ({group.offices.length} offices)</option>)
@@ -69,6 +69,11 @@ export default function WorkflowEditorModal({
                         </select>
                       </label>
                     </div>
+                    {isGroup && <label className="mt-3 block text-xs font-bold text-neutral-700" htmlFor={`workflow-step-label-${index}`}>
+                      Label shown to the user <span className="text-rose-700">(required)</span>
+                      <input id={`workflow-step-label-${index}`} required maxLength={150} value={stop.label || ''} onChange={event => handleStopLabelChange(index, event.target.value)} placeholder="e.g. Prepared by, College Dean, Program Chair" className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-normal" />
+                      <span className="mt-1.5 block font-normal text-neutral-500">Tell the user which office to choose for this step.</span>
+                    </label>}
                   </li>
                 );
               })}
