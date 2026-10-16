@@ -2,6 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {fetchWithAuth} from '../../../../api';
 import { X } from 'lucide-react';
 import ProcessCombobox from '../components/ProcessCombobox';
+import {getWorkflowStops} from '../../../../utils/workflowRoute';
 
 export default function DocumentSubmissionModal({
   setShowModal,
@@ -16,27 +17,30 @@ export default function DocumentSubmissionModal({
   canCompleteOriginProcessing = false,
   submitting = false,
   submissionError = ''
-  , placeholderSelections = {}
 }) {
-  const [catalog,setCatalog] = useState({offices:[],categories:[]});
+  const [catalog,setCatalog] = useState({offices:[],categories:[],groups:[]});
   const [catalogError,setCatalogError] = useState('');
   const [catalogLoading,setCatalogLoading] = useState(true);
   const [retry,setRetry] = useState(0);
-  useEffect(()=>{let cancelled=false; Promise.all(['/api/offices','/api/document-categories'].map(async url=>{
+  useEffect(()=>{let cancelled=false; Promise.all(['/api/offices','/api/document-categories','/api/office-route-groups'].map(async url=>{
     const res=await fetchWithAuth(url);const data=await res.json();if(!res.ok)throw new Error(data.error || 'Unable to load route options.');return data;
-  })).then(([offices,categories])=>{if(!cancelled){setCatalog({offices:offices.filter(o=>Number(o.id)!==999),categories});setCatalogError('');}})
+  })).then(([offices,categories,groups])=>{if(!cancelled){setCatalog({offices:offices.filter(o=>Number(o.id)!==999),categories,groups});setCatalogError('');}})
     .catch(err=>{if(!cancelled)setCatalogError(err.message);}).finally(()=>{if(!cancelled)setCatalogLoading(false);});return()=>{cancelled=true;};},[retry]);
   const custom = form.customRoute;
   const selectedOfficial = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
-  const placeholderStops = selectedOfficial ? Array.from({length: 7}, (_, index) => ({
-    position: index + 1,
-    groupId: selectedOfficial[`stop_${index + 1}_group_id`],
-    groupName: selectedOfficial[`stop_${index + 1}_group_name`]
-  })).filter(stop => stop.groupId) : [];
+  const placeholderSelections = form.placeholderSelections || {};
+  const routeStops = getWorkflowStops(selectedOfficial, placeholderSelections);
+  const placeholderStops = routeStops.filter(stop => stop.groupId);
+  const groupOffices = groupId => catalog.groups.find(group => Number(group.group_id) === Number(groupId))?.offices || [];
+  const routePreview = selectedOfficial ? routeStops.map(stop => {
+    if (!stop.groupId) return selectedOfficial.resolved_route_names?.[stop.position - 1] || stop.name;
+    const chosen = groupOffices(stop.groupId).find(office => Number(office.id) === stop.officeId);
+    return chosen ? `${stop.label}: ${chosen.name}` : `${stop.label}: choose an office`;
+  }) : selectedRoutePreview;
   const changeCustom = patch => setForm({...form,customRoute:{...custom,...patch},completeOriginProcessing:false});
   const customValid = custom && custom.processName.trim() && (custom.categoryId || custom.categoryName.trim()) && custom.stops.every(Boolean) && !catalogLoading && !catalogError;
   const close = () => { handleProcessChange(''); setShowModal(false); };
-  const placeholdersComplete = placeholderStops.every(stop => placeholderSelections[stop.groupId]);
+  const placeholdersComplete = placeholderStops.length === 0 || (!catalogLoading && !catalogError && placeholderStops.every(stop => groupOffices(stop.groupId).some(office => Number(office.id) === stop.officeId)));
   const verified = custom ? customValid : processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId)) && placeholdersComplete;
   
   return (
@@ -54,7 +58,7 @@ export default function DocumentSubmissionModal({
             <input type="text" required placeholder="e.g., Curriculum Revision Request" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-red-700 border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white" />
           </div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Route type
-            <select aria-label="Route type" className="w-full border border-gray-300 dark:border-gray-700 rounded-lg p-2 mt-1 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white text-xs cursor-pointer outline-none" value={custom?'custom':'official'} onChange={e=>setForm({...form,processTypeId:'',completeOriginProcessing:false,customRoute:e.target.value==='custom'?{processName:'',categoryId:'',categoryName:'',stops:['','']}:undefined})}>
+            <select aria-label="Route type" className="w-full border border-gray-300 dark:border-gray-700 rounded-lg p-2 mt-1 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white text-xs cursor-pointer outline-none" value={custom?'custom':'official'} onChange={e=>setForm({...form,processTypeId:'',placeholderSelections:{},completeOriginProcessing:false,customRoute:e.target.value==='custom'?{processName:'',categoryId:'',categoryName:'',stops:['','']}:undefined})}>
               <option value="official">Official process</option>
               <option value="custom">Create a custom route</option>
             </select>
@@ -88,25 +92,35 @@ export default function DocumentSubmissionModal({
               <input type="text" readOnly value={estimatedDate || "Select a process type..."} className="w-full border bg-neutral-50 dark:bg-neutral-900 font-medium text-neutral-500 dark:text-gray-400 rounded-lg px-3 py-2 text-xs outline-none cursor-not-allowed border-neutral-200 dark:border-gray-800" />
             </div>
           </div>}
-          {!custom && selectedRoutePreview.length > 0 && (
+          {!custom && routePreview.length > 0 && (
             <div>
               <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Submission Route Path</label>
               <div className="bg-red-50/50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl p-4 flex flex-wrap items-center gap-2 text-xs font-semibold text-neutral-700 dark:text-gray-200">
-                {selectedRoutePreview.map((stop, i) => (
+                {routePreview.map((stop, i) => (
                   <React.Fragment key={i}>
                     <span className="bg-white dark:bg-[#180e10] border border-neutral-200 dark:border-gray-700 px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
                       <span className="w-4 h-4 rounded-full bg-red-800 dark:bg-red-700 text-white text-[9px] flex items-center justify-center font-bold">{i+1}</span>
                       {stop}
                     </span>
-                    {i < selectedRoutePreview.length - 1 && <span className="text-neutral-400 dark:text-gray-500 font-bold">→</span>}
+                    {i < routePreview.length - 1 && <span className="text-neutral-400 dark:text-gray-500 font-bold">→</span>}
                   </React.Fragment>
                 ))}
               </div>
             </div>
           )}
           {!custom && placeholderStops.length > 0 && <div className="rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-900/20 p-4 space-y-3">
-            <div><p className="text-[10px] font-bold uppercase tracking-wider text-blue-800 dark:text-blue-400">Complete flexible route stops</p><p className="text-xs text-blue-900/80 dark:text-blue-300 mt-1">Choose the actual office for each category placeholder in this official pipeline.</p></div>
-            {placeholderStops.map(stop => <label key={stop.position} className="block text-sm font-semibold text-blue-950 dark:text-blue-200">Stop {stop.position}: {stop.groupName}<select required value={placeholderSelections[stop.groupId] || ''} onChange={event => setForm({...form, placeholderSelections: {...placeholderSelections, [stop.groupId]: Number(event.target.value)}}) } className="w-full mt-1 border border-blue-200 dark:border-blue-800 rounded-lg p-2 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white text-sm outline-none cursor-pointer"><option value="">Select an office from this category...</option>{catalog.offices.filter(office => office.category === stop.groupName).map(office => <option key={office.id} value={office.id}>{office.name}</option>)}</select></label>)}
+            <div><p className="text-[10px] font-bold uppercase tracking-wider text-blue-800 dark:text-blue-400">Choose offices for your document</p><p className="text-xs text-blue-900/80 dark:text-blue-300 mt-1">Use each step’s label to choose the appropriate office.</p></div>
+            {catalogLoading && <p role="status" className="text-xs">Loading office choices…</p>}
+            {catalogError && <p role="alert" className="text-xs text-red-800 dark:text-red-400">{catalogError} <button type="button" className="underline" onClick={()=>{setCatalogLoading(true);setRetry(retry+1);}}>Retry</button></p>}
+            {placeholderStops.map(stop => <label key={stop.position} className="block text-sm font-semibold text-blue-950 dark:text-blue-200">
+              <span className="block">{stop.label}</span>
+              <span className="mt-1 block text-xs font-normal text-blue-900/80 dark:text-blue-300">Step {stop.position} · {stop.groupName}</span>
+              <select required disabled={catalogLoading || !!catalogError} value={placeholderSelections[`stop_${stop.position}`] || ''} onChange={event => setForm({...form, completeOriginProcessing:false, placeholderSelections: {...placeholderSelections, [`stop_${stop.position}`]: Number(event.target.value)}})} className="w-full mt-1 border border-blue-200 dark:border-blue-800 rounded-lg p-2 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white text-sm outline-none cursor-pointer">
+                <option value="">Select an office…</option>
+                {groupOffices(stop.groupId).map(office => <option key={office.id} value={office.id}>{office.name}</option>)}
+              </select>
+              {!catalogLoading && !catalogError && groupOffices(stop.groupId).length === 0 && <span role="alert" className="mt-1 block text-xs text-red-800 dark:text-red-400">No offices are available for this step. Contact ICT.</span>}
+            </label>)}
           </div>}
           {submissionError && <p role="alert" className="text-sm text-red-800 dark:text-red-400">{submissionError}</p>}
           {canCompleteOriginProcessing && <label className="flex items-start gap-3 p-4 border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 rounded-xl text-sm">

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import CustomRouteReview from './CustomRouteReview';
 import WorkflowEditorModal from '../modals/WorkflowEditorModal';
+import OfficeRouteGroupsManager from './OfficeRouteGroupsManager';
 
 const PAGE_SIZE = 8;
 
@@ -90,7 +91,7 @@ function Pagination({ currentPage, totalItems, onPageChange }) {
 function WorkflowRoute({ workflow }) {
   const stops = Array.from({ length: 7 }, (_, index) => {
     const step = index + 1;
-    return workflow[`stop_${step}_kind`] === 'group' ? `${workflow[`stop_${step}_group_name`]} category` : workflow[`stop_${step}_name`];
+    return workflow[`stop_${step}_kind`] === 'group' ? `${workflow[`stop_${step}_label`] || 'Choose office'} (${workflow[`stop_${step}_group_name`]})` : workflow[`stop_${step}_name`];
   }).filter(Boolean);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -270,8 +271,9 @@ export default function SystemManagementTab({ matrixProps, section = 'offices' }
         )}
       </div>
 
+      {section === 'offices' && <OfficeRouteGroupsManager groups={matrixProps.adminRouteGroups} offices={matrixProps.offices} onSave={matrixProps.saveOfficeRouteGroup} onDelete={matrixProps.deleteOfficeRouteGroup} />}
       <RecordModal key={dialog ? `${dialog.kind}-${dialog.record?.id || dialog.record?.category_id || 'new'}` : 'closed'} dialog={dialog} onClose={() => setDialog(null)} onSave={saveDialog} officeCategories={officeCategories} />
-      <WorkflowEditorModal open={matrixProps.workflowEditorOpen} onClose={matrixProps.closeWorkflowEditor} onSubmit={matrixProps.handleProcessFormSubmit} formMeta={matrixProps.formMeta} setFormMeta={matrixProps.setFormMeta} newProcessName={matrixProps.newProcessName} setNewProcessName={matrixProps.setNewProcessName} categoryId={matrixProps.categoryId} setCategoryId={matrixProps.setCategoryId} categories={matrixProps.categories} selectedStops={matrixProps.selectedStops} offices={matrixProps.offices} routeGroups={matrixProps.routeGroups} handleStopKindChange={matrixProps.handleStopKindChange} handleStopSelectorChange={matrixProps.handleStopSelectorChange} handleAddStopSlot={matrixProps.handleAddStopSlot} handleRemoveTrailingStopSlot={matrixProps.handleRemoveTrailingStopSlot} />
+      <WorkflowEditorModal open={matrixProps.workflowEditorOpen} onClose={matrixProps.closeWorkflowEditor} onSubmit={matrixProps.handleProcessFormSubmit} formMeta={matrixProps.formMeta} setFormMeta={matrixProps.setFormMeta} newProcessName={matrixProps.newProcessName} setNewProcessName={matrixProps.setNewProcessName} categoryId={matrixProps.categoryId} setCategoryId={matrixProps.setCategoryId} categories={matrixProps.categories} selectedStops={matrixProps.selectedStops} offices={matrixProps.offices} routeGroups={matrixProps.routeGroups} handleStopKindChange={matrixProps.handleStopKindChange} handleStopSelectorChange={matrixProps.handleStopSelectorChange} handleStopLabelChange={matrixProps.handleStopLabelChange} handleAddStopSlot={matrixProps.handleAddStopSlot} handleRemoveTrailingStopSlot={matrixProps.handleRemoveTrailingStopSlot} />
     </div>
   );
 }

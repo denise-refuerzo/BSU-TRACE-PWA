@@ -312,7 +312,6 @@ export default function OriginatorDashboard() {
           processTypes={processTypes}
           estimatedDate={estimatedDate}
           selectedRoutePreview={selectedRoutePreview}
-          placeholderSelections={form.placeholderSelections || {}}
           workflowsLoading={workflowsLoading}
           workflowError={workflowError}
           retryWorkflows={retryWorkflows}

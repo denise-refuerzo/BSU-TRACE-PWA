@@ -5,6 +5,7 @@ import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 
 import { fetchWithAuth } from "../../../../api";
 import { formatPhilippineDate } from '../../../../utils/philippineTime';
+import {getWorkflowStops, getSelectedRouteKey} from '../../../../utils/workflowRoute';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
@@ -63,6 +64,7 @@ export default function useOriginatorData() {
   const [selectedRoutePreview, setSelectedRoutePreview] = useState([]);
   const [estimatedDate, setEstimatedDate] = useState('');
   const [estimatedDatePayload, setEstimatedDatePayload] = useState('');
+  const [routeEstimate, setRouteEstimate] = useState({key: '', date: ''});
   
   const [statusMsg, setStatusMsg] = useState('');
   const [recentDocStops, setRecentDocStops] = useState([]);
@@ -123,33 +125,35 @@ export default function useOriginatorData() {
     fetchEDC();
   }, []);
 
+  const selectedWorkflow = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
+  const selectedWorkflowStops = getWorkflowStops(selectedWorkflow, form.placeholderSelections);
+  const needsRouteEstimate = Boolean(form.customRoute || selectedWorkflowStops.some(stop => stop.groupId));
+  const estimateRouteKey = form.customRoute
+    ? getSelectedRouteKey(form.customRoute.stops.map(officeId => ({officeId})))
+    : getSelectedRouteKey(selectedWorkflowStops);
   useEffect(() => {
     let cancelled = false;
-    const customRoute = form.customRoute;
-    const stops = customRoute?.stops || [];
-    if (!customRoute || stops.length < 2 || stops.some(stop => !stop)) {
-      if (customRoute) {
-        setEstimatedDate('');
-        setEstimatedDatePayload('');
-      }
-      return () => { cancelled = true; };
-    }
-    fetchWithAuth(`/api/analytics/edc?route=${stops.join(',')}`)
+    if (!needsRouteEstimate || !estimateRouteKey) return undefined;
+    fetchWithAuth(`/api/analytics/edc?route=${estimateRouteKey}`)
       .then(async res => res.ok ? res.json() : [])
       .then(data => {
         if (cancelled) return;
         const deliveryDate = data[0]?.estimated_delivery_date || '';
-        setEstimatedDatePayload(deliveryDate);
-        setEstimatedDate(deliveryDate ? formatPhilippineDate(deliveryDate) : '');
+        setRouteEstimate({key: estimateRouteKey, date: deliveryDate});
       })
       .catch(() => {
         if (!cancelled) {
-          setEstimatedDate('');
-          setEstimatedDatePayload('');
+          setRouteEstimate({key: estimateRouteKey, date: ''});
         }
       });
     return () => { cancelled = true; };
-  }, [form.customRoute?.stops?.join(',')]);
+  }, [needsRouteEstimate, estimateRouteKey]);
+  const resolvedEstimatePayload = needsRouteEstimate
+    ? (estimateRouteKey && routeEstimate.key === estimateRouteKey ? routeEstimate.date : '')
+    : estimatedDatePayload;
+  const displayedEstimate = needsRouteEstimate
+    ? (resolvedEstimatePayload ? formatPhilippineDate(resolvedEstimatePayload) : estimateRouteKey ? 'Estimate pending...' : 'Choose offices to calculate')
+    : estimatedDate;
 
   // REAL-TIME: WebSockets implementation for originator data and chat badges
   useEffect(() => {
@@ -318,14 +322,17 @@ export default function useOriginatorData() {
       const stops = [];
       for (let i = 1; i <= 7; i++) {
         const kind = selected[`stop_${i}_kind`];
-        const name = kind === 'group' ? selected[`stop_${i}_group_name`] : selected[`stop_${i}_name`];
-        if (name) stops.push(kind === 'group' ? `${name} category` : name);
+        const name = kind === 'group' ? (selected[`stop_${i}_label`] || selected[`stop_${i}_group_name`]) : selected[`stop_${i}_name`];
+        if (name) stops.push(kind === 'group' ? `${name}: choose an office` : name);
       }
       setSelectedRoutePreview(stops);
       setForm({ ...form, processTypeId: pId, placeholderSelections: {} });
       
       const prediction = edcPredictions.find(e => e.process_id === parseInt(pId));
-      if (prediction) {
+      if (getWorkflowStops(selected).some(stop => stop.groupId)) {
+        setEstimatedDate('');
+        setEstimatedDatePayload('');
+      } else if (prediction) {
         const deliveryDate = prediction.estimated_delivery_date;
         setEstimatedDatePayload(deliveryDate || '');
         setEstimatedDate(deliveryDate ? formatPhilippineDate(deliveryDate) : 'Estimation pending...');
@@ -343,11 +350,11 @@ export default function useOriginatorData() {
 
   const submitDocument = async (e) => {
     e.preventDefault();
-    if (workflowsLoading || workflowError || !estimatedDate || estimatedDate === 'Estimation pending...' || (!form.customRoute && !processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId)))) {
+    if (workflowsLoading || workflowError || !resolvedEstimatePayload || (!form.customRoute && !processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId)))) {
       alert('Choose an active pipeline from the suggestions before submitting.');
       return;
     }
-    const edcPayload = estimatedDatePayload || null;
+    const edcPayload = resolvedEstimatePayload || null;
     
     try {
       const res = await fetchWithAuth('/api/documents', {
@@ -479,7 +486,7 @@ export default function useOriginatorData() {
     showPassModal, setShowPassModal,
     generatedQr,
     form, setForm, passForm, setPassForm,
-    selectedRoutePreview, estimatedDate, statusMsg,
+    selectedRoutePreview, estimatedDate: displayedEstimate, statusMsg,
     recentDocStops, documents, processTypes,
     workflowsLoading, workflowError, retryWorkflows: () => { setWorkflowsLoading(true); setWorkflowRefresh(value => value + 1); },
     filteredDocuments, currentLedgerDocs, totalPages, pendingCount, mostRecentDoc,

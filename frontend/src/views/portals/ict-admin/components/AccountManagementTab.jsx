@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link2 } from 'lucide-react';
+import { Eye, EyeOff, Link2 } from 'lucide-react';
 import CreateRegistrationLinkModal from './CreateRegistrationLinkModal';
 
 export default function AccountManagementTab({
@@ -12,6 +12,7 @@ export default function AccountManagementTab({
   form, setForm, handleCreateAccount, offices, departments
 }) {
   const [createLinkOpen, setCreateLinkOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   return (
     <div className="w-full text-left">
       <div className="w-full">
@@ -186,7 +187,7 @@ export default function AccountManagementTab({
               </div>
             )}
 
-            <form onSubmit={handleCreateAccount} className="space-y-6">
+            <form onSubmit={event => { setShowPassword(false); handleCreateAccount(event); }} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-2">Full Name</label>
@@ -208,16 +209,30 @@ export default function AccountManagementTab({
                          className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors bg-gray-50 dark:bg-[#1c1113] text-gray-900 dark:text-white" placeholder="j_delacruz" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-2">Password</label>
-                  <input 
-                    type="password" 
-                    required 
-                    minLength="6"
-                    value={form.password} 
-                    onChange={e => setForm({...form, password: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors bg-gray-50 dark:bg-[#1c1113] text-gray-900 dark:text-white" 
-                    placeholder="••••••••••••" 
-                  />
+                  <label htmlFor="create-account-password" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-2">Password</label>
+                  <div className="relative">
+                    <input
+                      id="create-account-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      required
+                      minLength="6"
+                      value={form.password}
+                      onChange={e => setForm({...form, password: e.target.value})}
+                      className="w-full border border-gray-300 dark:border-gray-700 rounded-lg pl-4 pr-12 py-2.5 text-sm focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] outline-none transition-colors bg-gray-50 dark:bg-[#1c1113] text-gray-900 dark:text-white"
+                      placeholder="••••••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(visible => !visible)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                      aria-controls="create-account-password"
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-gray-500 dark:text-gray-400 hover:text-[#D32F2F] dark:hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#D32F2F] cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                    </button>
+                  </div>
                   </div>
               </div>
 
@@ -323,7 +338,7 @@ export default function AccountManagementTab({
               <div className="flex justify-end gap-3 pt-6 mt-2 border-t border-gray-100 dark:border-[#42292f]">
                 <button 
                   type="button" 
-                  onClick={() => setForm({ username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: '', isAssignatory: false, positionTitle: '', authorityMode: 'office', authorityOfficeIds: [], authorityDepartmentId: '' })}
+                  onClick={() => { setShowPassword(false); setForm({ username: '', password: '', accountType: '', fullName: '', email: '', departmentId: '', officeId: '', isAssignatory: false, positionTitle: '', authorityMode: 'office', authorityOfficeIds: [], authorityDepartmentId: '' }); }}
                   className="px-5 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-white dark:bg-[#180e10] border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors shadow-sm cursor-pointer"
                 >
                   Reset Form

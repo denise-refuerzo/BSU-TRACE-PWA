@@ -7,6 +7,7 @@ export function useRolesPermissions(enabled = true) {
   // --- CATALOG INDICES STATES ---
   const [offices, setOffices] = useState([]);
   const [routeGroups, setRouteGroups] = useState([]);
+  const [adminRouteGroups, setAdminRouteGroups] = useState([]);
   const [processTypes, setProcessTypes] = useState([]);
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState('');
@@ -41,6 +42,10 @@ export function useRolesPermissions(enabled = true) {
       const groupRes = await fetchWithAuth('/api/office-route-groups');
       const groupData = await groupRes.json();
       if (groupRes.ok) setRouteGroups(groupData);
+      const adminGroupRes = await fetchWithAuth('/api/admin/office-route-groups');
+      const adminGroupData = await adminGroupRes.json();
+      if (!adminGroupRes.ok) throw new Error(adminGroupData.error || 'Unable to load office categories.');
+      setAdminRouteGroups(adminGroupData);
 
       const processRes = await fetchWithAuth('/api/process-types');
       const processData = await processRes.json();
@@ -76,16 +81,22 @@ export function useRolesPermissions(enabled = true) {
   const handleStopSelectorChange = (index, value) => {
     const updated = [...selectedStops];
     const current = updated[index];
-    const parsedValue = value ? (current?.type === 'group' ? {type: 'group', groupId: parseInt(value, 10)} : parseInt(value, 10)) : null;
+    const parsedValue = current?.type === 'group'
+      ? {...current, groupId: value ? parseInt(value, 10) : null}
+      : value ? parseInt(value, 10) : null;
     updated[index] = parsedValue;
 
     // Automated Chain-Limiting Guard: If an admin clears a middle step out, clear all downstream choices
-    if (parsedValue === null) {
-      for (let i = index; i < updated.length; i++) {
+    if (!value) {
+      for (let i = index + 1; i < updated.length; i++) {
         updated[i] = null;
       }
     }
     setSelectedStops(updated);
+  };
+
+  const handleStopLabelChange = (index, label) => {
+    setSelectedStops(stops => stops.map((stop, i) => i === index && stop?.type === 'group' ? {...stop, label} : stop));
   };
 
   useEffect(() => {
@@ -106,7 +117,7 @@ export function useRolesPermissions(enabled = true) {
 
   const handleStopKindChange = (index, kind) => {
     const updated = [...selectedStops];
-    updated[index] = kind === 'group' ? {type: 'group', groupId: null} : null;
+    updated[index] = kind === 'group' ? {type: 'group', groupId: null, label: ''} : null;
     for (let i = index + 1; i < updated.length; i += 1) updated[i] = null;
     setSelectedStops(updated);
   };
@@ -128,7 +139,7 @@ export function useRolesPermissions(enabled = true) {
     const stops = Array.from({ length: 7 }, (_, index) => {
       const step = index + 1;
       return workflow[`stop_${step}_kind`] === 'group'
-        ? { type: 'group', groupId: workflow[`stop_${step}_group_id`] }
+        ? { type: 'group', groupId: workflow[`stop_${step}_group_id`], label: workflow[`stop_${step}_label`] || '' }
         : workflow[`stop_${step}`];
     }).filter(Boolean);
     setNewProcessName(workflow.process_name);
@@ -146,6 +157,10 @@ export function useRolesPermissions(enabled = true) {
   // --- PROCESS TEMPLATE ROUTING TRANSACTION SUBMISSION ---
   const handleProcessFormSubmit = async (e) => {
     e.preventDefault();
+    if (selectedStops.some(stop => stop?.type === 'group' && (!Number.isInteger(stop.groupId) || !stop.label?.trim() || stop.label.trim().length > 150))) {
+      Swal.fire('Complete the category steps', 'Choose a category and enter a label of up to 150 characters for each category step.', 'error');
+      return;
+    }
     const processedStopsPayload = selectedStops.filter(s => s !== null && (Number.isInteger(s) || (s?.type === 'group' && Number.isInteger(s.groupId))));
 
     if (processedStopsPayload.length < 2) {
@@ -231,6 +246,28 @@ export function useRolesPermissions(enabled = true) {
     if (!response.ok) throw new Error(data.error || 'Unable to save the document type.');
     await fetchBaselineCatalogs();
     return data;
+  };
+
+  const saveOfficeRouteGroup = async ({id, name, description, officeIds}) => {
+    const response = await fetchWithAuth(`/api/admin/office-route-groups${id ? `/${id}` : ''}`, {
+      method: id ? 'PUT' : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({groupName:name, description, officeIds})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to save the office category.');
+    await fetchBaselineCatalogs();
+    return data;
+  };
+
+  const deleteOfficeRouteGroup = async group => {
+    const confirmation = await Swal.fire({title:`Delete ${group.group_name}?`,text:'This removes the category from office choices. Categories used by workflows or assigned as an organizational category are protected.',icon:'warning',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#8c1023'});
+    if (!confirmation.isConfirmed) return;
+    const response = await fetchWithAuth(`/api/admin/office-route-groups/${group.group_id}`, {method:'DELETE'});
+    const data = await response.json();
+    if (!response.ok) return Swal.fire('Unable to delete',data.error,'error');
+    await fetchBaselineCatalogs();
+    return Swal.fire('Deleted',data.message,'success');
   };
 
   const deleteCategory = async category => {
@@ -322,7 +359,7 @@ export function useRolesPermissions(enabled = true) {
   };
 
   return {
-    offices, routeGroups, processTypes, infraSummary,
+    offices, routeGroups, adminRouteGroups, processTypes, infraSummary,
     categories, categoryId, setCategoryId, catalogError, refreshCatalogs: fetchBaselineCatalogs,
     newProcessName, setNewProcessName,
     selectedStops, setSelectedStops,
@@ -332,8 +369,8 @@ export function useRolesPermissions(enabled = true) {
     newOfficeCategory, setNewOfficeCategory, officeCategoryEnabled, setOfficeCategoryEnabled,
     editingOffice, setEditingOffice, saveOfficeEdit,
     workflowEditorOpen, openWorkflowEditor, closeWorkflowEditor,
-    saveDepartment, saveOffice, saveCategory, deleteCategory,
-    handleAddStopSlot, handleRemoveTrailingStopSlot, handleStopSelectorChange, handleStopKindChange,
+    saveDepartment, saveOffice, saveCategory, deleteCategory, saveOfficeRouteGroup, deleteOfficeRouteGroup,
+    handleAddStopSlot, handleRemoveTrailingStopSlot, handleStopSelectorChange, handleStopKindChange, handleStopLabelChange,
     resetWorkflowForm, handleProcessFormSubmit, handleCreateDepartment, handleCreateOffice, editInfrastructure, deleteInfrastructure, deletePipeline
   };
 }
