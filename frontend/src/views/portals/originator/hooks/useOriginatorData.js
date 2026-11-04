@@ -139,7 +139,7 @@ export default function useOriginatorData() {
       .then(data => {
         if (cancelled) return;
         const deliveryDate = data[0]?.estimated_delivery_date || '';
-        setRouteEstimate({key: estimateRouteKey, date: deliveryDate});
+        setRouteEstimate({key: estimateRouteKey, date: deliveryDate, hours: data[0]?.estimated_hours_to_complete ?? null});
       })
       .catch(() => {
         if (!cancelled) {
@@ -486,7 +486,11 @@ export default function useOriginatorData() {
     showPassModal, setShowPassModal,
     generatedQr,
     form, setForm, passForm, setPassForm,
-    selectedRoutePreview, estimatedDate: displayedEstimate, statusMsg,
+    selectedRoutePreview, estimatedDate: displayedEstimate,
+    estimatedWorkingHours: needsRouteEstimate
+      ? (routeEstimate.key === estimateRouteKey ? routeEstimate.hours : null)
+      : edcPredictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete,
+    statusMsg,
     recentDocStops, documents, processTypes,
     workflowsLoading, workflowError, retryWorkflows: () => { setWorkflowsLoading(true); setWorkflowRefresh(value => value + 1); },
     filteredDocuments, currentLedgerDocs, totalPages, pendingCount, mostRecentDoc,

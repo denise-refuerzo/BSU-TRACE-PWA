@@ -47,7 +47,7 @@ export default function OriginatorDashboard() {
     showPassModal, setShowPassModal,
     generatedQr,
     form, setForm, passForm, setPassForm,
-    selectedRoutePreview, estimatedDate,
+    selectedRoutePreview, estimatedDate, estimatedWorkingHours,
     recentDocStops, documents, processTypes,
     workflowsLoading, workflowError, retryWorkflows,
     pendingCount, mostRecentDoc,
@@ -311,6 +311,7 @@ export default function OriginatorDashboard() {
           handleProcessChange={handleProcessChange}
           processTypes={processTypes}
           estimatedDate={estimatedDate}
+          estimatedWorkingHours={estimatedWorkingHours}
           selectedRoutePreview={selectedRoutePreview}
           workflowsLoading={workflowsLoading}
           workflowError={workflowError}
