@@ -55,6 +55,7 @@ export default function ProcessorDashboard() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
+  const [targetBookingId, setTargetBookingId] = useState(null);
   const [previousTab, setPreviousTab] = useState('dashboard');
 
   // --- MODAL & ACTION STATE ---
@@ -139,32 +140,14 @@ export default function ProcessorDashboard() {
   };
 
   const handleNotificationClick = async (notif) => {
-    setActiveTab('documents');
-    const targetIniId = notif.ini_id;
-    const allKnownDocs = processorData.pipelineDocs || [];
-
-    let matchedDoc = allKnownDocs.find(d => 
-      (targetIniId && d.ini_id === targetIniId) ||
-      (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
-    );
-
-    if (matchedDoc) {
-      handleOpenPipelineDetails(matchedDoc, false);
+    if (notif.booking_id) {
+      setTargetBookingId(notif.booking_id);
+      setActiveTab('resource-requests');
       return;
     }
-
-    if (targetIniId) {
-      try {
-        const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
-        const freshDocs = await res.json();
-        const docFromFresh = Array.isArray(freshDocs) ? freshDocs.find(d => d.ini_id === targetIniId) : null;
-        if (docFromFresh) {
-          handleOpenPipelineDetails(docFromFresh, false);
-        }
-      } catch (err) {
-        console.error("Error opening notification document:", err);
-      }
-    }
+    if (!notif.ini_id) return;
+    setActiveTab('documents');
+    handleOpenPipelineDetails({ini_id:notif.ini_id}, false);
   };
 
   const executeSimulatedScanner = async (e, scannedCode = null) => {
@@ -442,6 +425,7 @@ export default function ProcessorDashboard() {
               userId={userId}
               notifications={processorData.notifications}
               onNotificationClick={handleNotificationClick}
+              filters={[{value:'work',label:'Documents to process'},{value:'personal',label:'My submissions'}]}
             />
             
             <button 
@@ -486,7 +470,7 @@ export default function ProcessorDashboard() {
           {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Gymnasium" />}
           {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Multimedia Room" />}
           {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Van" />}
-          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
+          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" targetBookingId={targetBookingId} onClearTargetBookingId={() => setTargetBookingId(null)} />}
           {activeTab === 'registration-management' && <RegistrationManagementPage userId={userId} access={submissionAccess} />}
           {activeTab === 'history' && (
             <SubmissionActivityHistoryTab includeOfficeActivity onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />

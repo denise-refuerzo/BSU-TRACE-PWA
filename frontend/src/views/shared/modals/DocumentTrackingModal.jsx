@@ -4,6 +4,10 @@ import {FileText, X, GitBranch, Clock3, Building2, ArrowRight, CheckCircle2, Shi
 import {fetchWithAuth} from '../../../api';
 import {formatPhilippineDateTime,formatPhilippineDate} from '../../../utils/philippineTime';
 import DocumentAccessControls from '../components/DocumentAccessControls';
+import TrackingId from '../components/TrackingId';
+import {createRealtimeClient as io} from '../../../utils/realtimeClient';
+
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 function StatusBadge({step}) {
   const states={
@@ -22,6 +26,10 @@ function ActorLine({label,actor}) {
   return <span className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-neutral-600 dark:text-gray-400"><UserRound size={11} className="shrink-0 text-rose-700 dark:text-rose-400"/>{label} <strong className="font-semibold text-neutral-800 dark:text-white">{actor.name}</strong></span>;
 }
 
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
+
 export default function DocumentTrackingModal({selectedDoc,onClose,onRefresh,onOpenChat,processorOfficeId,officesList=[],isHistoryDetails=false,readOnly=false}) {
   const [doc,setDoc] = useState(null);
   const [error,setError] = useState('');
@@ -31,18 +39,33 @@ export default function DocumentTrackingModal({selectedDoc,onClose,onRefresh,onO
   const [mode,setMode] = useState('');
   const [confirmation,setConfirmation] = useState('');
   const [showExportMenu,setShowExportMenu] = useState(false);
-  const qrContainerRef = useRef(null);
+  const [requestVersion,setRequestVersion] = useState(0);
+  const qrCodeRef = useRef(null);
   const dropdownRef = useRef(null);
   const actionPanel = useRef(null);
 
   useEffect(()=>{
     let cancelled=false;
+    const timeout=setTimeout(()=>{if(!cancelled)setError('Document details are taking longer than expected. Please retry.');},15000);
     fetchWithAuth(`/api/office/documents/${selectedDoc.ini_id}`).then(async res => {
       const data=await res.json(); if (!res.ok) throw new Error(data.error);
       if (!cancelled) {setError('');setDoc(data);}
-    }).catch(err => {if (!cancelled) setError(err.message);});
-    return () => {cancelled=true;};
-  },[selectedDoc.ini_id]);
+    }).catch(err => {if (!cancelled) setError(err.message || 'Unable to load document details.');})
+      .finally(()=>clearTimeout(timeout));
+    return () => {cancelled=true;clearTimeout(timeout);};
+  },[selectedDoc.ini_id,requestVersion]);
+  useEffect(()=>{
+    const socket=io(SOCKET_URL,{reconnection:true});
+    socket.on('connect',()=>{
+      if (processorOfficeId) socket.emit('join-office-room',processorOfficeId);
+      const userId=localStorage.getItem('userId');
+      if (userId) socket.emit('join-user-room',userId);
+    });
+    const refresh=()=>setRequestVersion(version=>version+1);
+    socket.on('pipeline-updated',refresh);
+    socket.on('document-updated',refresh);
+    return()=>socket.disconnect();
+  },[selectedDoc.ini_id,processorOfficeId]);
   useEffect(()=>{
     const closeMenu=e=>{if(dropdownRef.current&&!dropdownRef.current.contains(e.target))setShowExportMenu(false);};
     document.addEventListener('mousedown',closeMenu);
@@ -51,7 +74,7 @@ export default function DocumentTrackingModal({selectedDoc,onClose,onRefresh,onO
   useEffect(()=>{if(mode||confirmation)actionPanel.current?.scrollIntoView({block:'nearest',behavior:'smooth'});},[mode,confirmation]);
 
   const halted=doc?.steps?.at(-1)?.s_id===4 && doc?.steps?.at(-1)?.time_out;
-  const step=halted ? null : doc?.steps?.findLast(s=>!s.time_out);
+  const step=halted ? null : doc?.steps?.findLast(s=>!s.time_out && !s.is_returned_from_adhoc);
   const latestStep=doc?.steps?.at(-1);
   const latestCorrectionAction=doc?.actions?.findLast(action=>String(action.action_type||'').startsWith('Sent Back for Revision:'));
   const correctionNotice=latestStep?.s_id===4 ? (latestStep.correction || (latestCorrectionAction ? {
@@ -68,17 +91,57 @@ export default function DocumentTrackingModal({selectedDoc,onClose,onRefresh,onO
     try{
       const path=action==='adhoc'?'/api/processor/documents/ad-hoc':action.startsWith('time-')?`/api/documents/scan-${action==='time-in'?'in':'out'}`:`/api/office/${action}`;
       const res=await fetchWithAuth(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({iniId:doc.ini_id,qrCode:doc.qr_code,reason,targetOfficeId:Number(target)})});
-      const data=await res.json();if(!res.ok)throw new Error(data.error);onRefresh?.();onClose();
+      const data=await res.json();if(!res.ok)throw new Error(data.error);
+      setMode('');setConfirmation('');setReason('');setTarget('');
+      setRequestVersion(version=>version+1);
+      onRefresh?.();
     }catch(err){setError(err.message);}finally{setBusy(false);}
   };
-  const getQrBase64=()=>new Promise(resolve=>{
-    const svg=qrContainerRef.current?.querySelector('svg');if(!svg)return resolve(null);
-    const canvas=document.createElement('canvas');const size=512;canvas.width=size;canvas.height=size;
-    const img=new Image();img.onload=()=>{const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);ctx.drawImage(img,0,0,size,size);resolve(canvas.toDataURL('image/png'));};
-    img.src=`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(new XMLSerializer().serializeToString(svg))))}`;
+  const getQrSvg = () => qrCodeRef.current?.querySelector('svg');
+  const getQrBase64 = () => new Promise((resolve, reject) => {
+    const svg = getQrSvg();
+    if (!svg) return reject(new Error('Tracking QR is not ready. Please try again.'));
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const image = new Image();
+    const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], {type: 'image/svg+xml;charset=utf-8'}));
+    image.onload = () => {
+      try {
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Your browser could not create the QR image.');
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, 512, 512);
+        context.drawImage(image, 0, 0, 512, 512);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (error) { reject(error); }
+      finally { URL.revokeObjectURL(svgUrl); }
+    };
+    image.onerror = () => { URL.revokeObjectURL(svgUrl); reject(new Error('Unable to render the tracking QR.')); };
+    image.src = svgUrl;
   });
-  const handleDownloadImage=async()=>{setShowExportMenu(false);const png=await getQrBase64();if(!png)return;const link=document.createElement('a');link.download=`QR-${doc?.qr_code||'Document'}.png`;link.href=png;link.click();};
-  const handlePrintPdf=async()=>{setShowExportMenu(false);const png=await getQrBase64();if(!png)return;const w=window.open('','_blank');if(!w)return;w.document.write(`<html><head><title>Routing Slip - ${doc.qr_code}</title><style>body{font-family:Arial;padding:40px;text-align:center}.card{max-width:480px;margin:auto;border:2px solid #e5e7eb;border-radius:12px;padding:24px}.qr{width:180px;height:180px}.details{text-align:left;border-top:1px dashed #d1d5db;margin-top:20px;padding-top:14px;font-size:13px}.details p{margin:8px 0}</style></head><body><div class="card"><h2>BSU - Trace Verification Slip</h2><img class="qr" src="${png}"/><p><b>${doc.qr_code}</b></p><div class="details"><p><b>Document:</b> ${doc.title||'Untitled'}</p><p><b>Requestor:</b> ${doc.submitted_by||'N/A'}</p><p><b>Requestor office:</b> ${doc.requestor_office_name||'N/A'}</p><p><b>Created:</b> ${formatPhilippineDateTime(doc.created_at)}</p></div></div><script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script></body></html>`);w.document.close();};
+  const handleDownloadImage = async () => {
+    setShowExportMenu(false);
+    try {
+      const png = await getQrBase64();
+      const link = document.createElement('a');
+      link.download = `QR-${doc.qr_code}.png`;
+      link.href = png;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) { setError(error.message); }
+  };
+  const handlePrintPdf = () => {
+    setShowExportMenu(false);
+    const svg = getQrSvg();
+    if (!svg) { setError('Tracking QR is not ready. Please try again.'); return; }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { setError('Allow pop-ups to open the printable slip.'); return; }
+    const title = escapeHtml(`Routing Slip - ${doc.qr_code}`);
+    printWindow.document.write(`<html><head><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:40px;text-align:center}.toolbar{margin-bottom:24px}.toolbar button{padding:10px 18px;cursor:pointer}.card{max-width:480px;margin:auto;border:2px solid #e5e7eb;border-radius:12px;padding:24px}.qr{width:180px;height:180px;margin:auto}.qr svg{width:180px;height:180px}.details{text-align:left;border-top:1px dashed #d1d5db;margin-top:20px;padding-top:14px;font-size:13px}.details p{margin:8px 0}@media print{.toolbar{display:none}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print or save as PDF</button></div><div class="card"><h2>BSU - Trace Verification Slip</h2><div class="qr">${new XMLSerializer().serializeToString(svg)}</div><p><b>${escapeHtml(doc.qr_code)}</b></p><div class="details"><p><b>Document:</b> ${escapeHtml(doc.title || 'Untitled')}</p><p><b>Requestor:</b> ${escapeHtml(doc.submitted_by || 'N/A')}</p><p><b>Requestor office:</b> ${escapeHtml(doc.requestor_office_name || 'N/A')}</p><p><b>Created:</b> ${escapeHtml(formatPhilippineDateTime(doc.created_at))}</p></div></div></body></html>`);
+    printWindow.document.close();
+  };
   const button='trace-button dark:bg-[#1c1113] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#2b1317]';
   return (
     <div className="fixed inset-0 bg-neutral-950/55 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6">
@@ -95,8 +158,8 @@ export default function DocumentTrackingModal({selectedDoc,onClose,onRefresh,onO
         </header>
 
         <div className="trace-dialog-body min-h-0 overflow-y-auto overscroll-contain">
-          {error && <p role="alert" className="m-5 p-3 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 text-sm text-rose-800 dark:text-rose-300">{error}</p>}
-          {!doc ? (
+          {error && <div role="alert" className="m-5 p-3 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 text-sm text-rose-800 dark:text-rose-300">{error}{!doc && <button type="button" className="ml-3 underline cursor-pointer" onClick={()=>{setError('');setRequestVersion(version=>version+1);}}>Retry</button>}</div>}
+          {!doc ? (error ? null :
             <p className="p-6 text-sm text-neutral-500 dark:text-gray-400">Loading document…</p>
           ) : (
             <div className="p-5 sm:p-6 space-y-5">
@@ -124,11 +187,11 @@ export default function DocumentTrackingModal({selectedDoc,onClose,onRefresh,onO
               <div className="grid md:grid-cols-[1fr_180px] gap-5">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="rounded-md bg-rose-50 dark:bg-red-900/30 border border-rose-100 dark:border-red-800 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-800 dark:text-red-400">{doc.process_name}</span>
+                    <span title={doc.process_name} className="inline-block max-w-full truncate rounded-md bg-rose-50 dark:bg-red-900/30 border border-rose-100 dark:border-red-800 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-800 dark:text-red-400">{doc.process_name}</span>
                     <StatusBadge step={step||doc.steps.at(-1)}/>
                   </div>
                   <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white break-words">{doc.title}</h3>
-                  <p className="font-mono text-[11px] text-rose-800 dark:text-red-400 mt-2 break-all">{doc.qr_code}</p>
+                  <div className="mt-2"><TrackingId value={doc.qr_code}/></div>
                   <dl className="text-xs grid grid-cols-2 gap-x-5 gap-y-4 mt-5">
                     <div><dt className="trace-field-label">Requestor name</dt><dd className="font-semibold text-neutral-700 dark:text-gray-300">{doc.submitted_by||'N/A'}</dd></div>
                     {doc.requestor_office_name && <div><dt className="trace-field-label">Requestor office</dt><dd className="font-semibold text-neutral-700 dark:text-gray-300">{doc.requestor_office_name}</dd></div>}
@@ -137,9 +200,9 @@ export default function DocumentTrackingModal({selectedDoc,onClose,onRefresh,onO
                     <div><dt className="trace-field-label">Estimated delivery</dt><dd className="text-neutral-600 dark:text-gray-400">{doc.edc?formatPhilippineDate(doc.edc):'Not set at submission'}</dd></div>
                   </dl>
                 </div>
-                <div ref={qrContainerRef} className="rounded-2xl border border-rose-100 dark:border-red-900 bg-rose-50/50 dark:bg-red-900/10 p-4 flex flex-col items-center justify-center gap-3">
+                <div className="rounded-2xl border border-rose-100 dark:border-red-900 bg-rose-50/50 dark:bg-red-900/10 p-4 flex flex-col items-center justify-center gap-3">
                   <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-800 dark:text-red-400"><ShieldCheck size={14}/> Tracking QR</span>
-                  <div className="bg-white dark:bg-[#180e10] p-3 rounded-xl border border-rose-100 dark:border-gray-700 shadow-sm"><QRCodeSVG value={doc.qr_code} size={116} fgColor="#701126" level="M"/></div>
+                  <div ref={qrCodeRef} className="bg-white dark:bg-[#180e10] p-3 rounded-xl border border-rose-100 dark:border-gray-700 shadow-sm"><QRCodeSVG value={doc.qr_code} size={116} fgColor="#701126" level="M"/></div>
                   <p className="text-[10px] text-center text-neutral-500 dark:text-gray-400">Scan to identify this document</p>
                 </div>
               </div>

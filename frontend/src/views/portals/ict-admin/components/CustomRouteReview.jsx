@@ -32,7 +32,7 @@ function RouteRequestModal({ request, onClose, onReview, busy }) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500 dark:text-gray-400">Requested workflow</p>
-              <p className="mt-1 text-lg font-black text-neutral-900 dark:text-white">{request.process_name}</p>
+              <p className="mt-1 max-w-full break-words text-lg font-black text-neutral-900 dark:text-white">{request.process_name}</p>
             </div>
             <span className={`rounded-full px-3 py-1.5 text-xs font-black ${pending ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400' : request.route_status === 'official' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400' : 'bg-neutral-200 dark:bg-gray-800 text-neutral-700 dark:text-gray-300'}`}>{statusLabels[request.route_status] || request.route_status}</span>
           </div>
@@ -186,7 +186,7 @@ export default function CustomRouteReview({ onChanged }) {
             <tbody className="divide-y divide-neutral-100 dark:divide-gray-800">
               {displayedRoutes.map(route => (
                 <tr key={route.p_id} onClick={() => setSelected(route)} className="cursor-pointer hover:bg-rose-50/40 dark:hover:bg-[#2b1317]/50 transition-colors">
-                  <td className="px-5 py-4 font-bold text-neutral-900 dark:text-white">{route.process_name}</td>
+                  <td className="px-5 py-4 font-bold text-neutral-900 dark:text-white"><span title={route.process_name} className="block max-w-[15rem] truncate">{route.process_name}</span></td>
                   <td className="px-5 py-4 text-neutral-600 dark:text-gray-400">{route.category_name}</td>
                   <td className="px-5 py-4 text-neutral-600 dark:text-gray-400">{route.submitter_name || 'Unknown user'}</td>
                   <td className="px-5 py-4">

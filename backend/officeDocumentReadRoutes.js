@@ -3,7 +3,7 @@ const expectedDocumentsSql = `SELECT idoc.public_id AS ini_id,idoc.title,idoc.qr
   FROM public.initial_document idoc JOIN public.process_type pt ON idoc.p_id=pt.p_id
   JOIN public."User" creator ON idoc.u_id=creator.u_id
   LEFT JOIN LATERAL (SELECT * FROM public.processed_document pd WHERE pd.ini_id=idoc.ini_id
-    ORDER BY (pd.time_out IS NULL) DESC,pd.pd_id DESC LIMIT 1) current_step ON TRUE
+    ORDER BY (pd.time_out IS NULL AND pd.is_returned_from_adhoc IS NOT TRUE) DESC,pd.pd_id DESC LIMIT 1) current_step ON TRUE
   LEFT JOIN public.offices curr_o ON current_step.current_office_id=curr_o.o_id
   WHERE $1=ANY(idoc.route_snapshot)
     AND idoc.lifecycle_state <> 'cancelled'
@@ -56,7 +56,7 @@ app.get('/api/documents/:userId', requireAuth, async (req, res) => {
              ) as history_logs
       FROM public.initial_document idoc
       JOIN public.process_type pt ON idoc.p_id = pt.p_id
-      LEFT JOIN LATERAL (SELECT * FROM public.processed_document pd WHERE pd.ini_id=idoc.ini_id ORDER BY CASE WHEN pd.s_id=4 AND pd.pd_id=(SELECT max(last.pd_id) FROM public.processed_document last WHERE last.ini_id=idoc.ini_id) THEN 0 WHEN pd.time_out IS NULL THEN 1 ELSE 2 END, pd.pd_id DESC LIMIT 1) pdoc ON TRUE
+      LEFT JOIN LATERAL (SELECT * FROM public.processed_document pd WHERE pd.ini_id=idoc.ini_id ORDER BY CASE WHEN pd.s_id=4 AND pd.pd_id=(SELECT max(last.pd_id) FROM public.processed_document last WHERE last.ini_id=idoc.ini_id) THEN 0 WHEN pd.time_out IS NULL AND pd.is_returned_from_adhoc IS NOT TRUE THEN 1 ELSE 2 END, pd.pd_id DESC LIMIT 1) pdoc ON TRUE
       LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON pdoc.s_id = st.s_id
@@ -109,7 +109,8 @@ app.get('/api/processor/documents/:officeId', requireAuth, async (req, res) => {
       LEFT JOIN public.offices curr_o ON pdoc.current_office_id = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON pdoc.s_id = st.s_id
-      WHERE pdoc.current_office_id = $1 AND pdoc.time_out IS NULL AND idoc.lifecycle_state <> 'cancelled'
+      WHERE pdoc.current_office_id = $1 AND pdoc.time_out IS NULL
+        AND pdoc.is_returned_from_adhoc IS NOT TRUE AND idoc.lifecycle_state <> 'cancelled'
       ORDER BY pdoc.pd_id DESC;
     `;
     const result = await pool.query(query, [parseInt(officeId)]);
@@ -144,6 +145,12 @@ app.get('/api/processor/documents/pipeline/:officeId', requireAuth, async (req, 
         curr_o.office_name as current_office, 
         next_o.office_name as next_office,
         pdoc_office.s_id AS office_status_id,
+        (pdoc_office.is_returned_from_adhoc IS TRUE OR EXISTS (
+          SELECT 1 FROM public.processed_document detour
+          WHERE detour.ini_id=pdoc_office.ini_id AND detour.pd_id>pdoc_office.pd_id
+            AND detour.is_adhoc IS TRUE AND detour.s_id=4
+            AND detour.adhoc_return_office_id=pdoc_office.current_office_id
+        )) AS office_halted,
         pdoc_office.time_in,
         pdoc_office.time_out,
         pdoc_active.current_office_id,
@@ -154,7 +161,7 @@ app.get('/api/processor/documents/pipeline/:officeId', requireAuth, async (req, 
       JOIN public.route r ON pt.r_id = r.r_id
       JOIN public."User" creator ON idoc.u_id = creator.u_id
       JOIN public.processed_document pdoc_office ON idoc.ini_id = pdoc_office.ini_id
-      LEFT JOIN LATERAL (SELECT * FROM public.processed_document pd WHERE pd.ini_id=idoc.ini_id ORDER BY CASE WHEN pd.s_id=4 AND pd.pd_id=(SELECT max(last.pd_id) FROM public.processed_document last WHERE last.ini_id=idoc.ini_id) THEN 0 WHEN pd.time_out IS NULL THEN 1 ELSE 2 END, pd.pd_id DESC LIMIT 1) pdoc_active ON TRUE
+      LEFT JOIN LATERAL (SELECT * FROM public.processed_document pd WHERE pd.ini_id=idoc.ini_id ORDER BY CASE WHEN pd.s_id=4 AND pd.pd_id=(SELECT max(last.pd_id) FROM public.processed_document last WHERE last.ini_id=idoc.ini_id) THEN 0 WHEN pd.time_out IS NULL AND pd.is_returned_from_adhoc IS NOT TRUE THEN 1 ELSE 2 END, pd.pd_id DESC LIMIT 1) pdoc_active ON TRUE
       LEFT JOIN public.offices curr_o ON COALESCE(pdoc_active.current_office_id, pdoc_office.current_office_id) = curr_o.o_id
       LEFT JOIN public.offices next_o ON pdoc_active.next_office_id = next_o.o_id
       LEFT JOIN public.status st ON COALESCE(pdoc_active.s_id, pdoc_office.s_id) = st.s_id

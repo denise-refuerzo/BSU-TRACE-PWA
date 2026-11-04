@@ -1,0 +1,2600 @@
+{
+  "data_scope": "Synthetic history; not evidence of real-world accuracy",
+  "calendar_note": "Historical dates carried from the synthetic generator reference calendar; not a complete university suspension register. Verify and extend against official notices before operational use.",
+  "edc": {
+    "Status": "Skipped (--demand-only)"
+  },
+  "booking_source": "Local SQL snapshot (bookings COPY data only)",
+  "demand": {
+    "test_start": "2026-04-13",
+    "test_end": "2026-10-09",
+    "horizon_days": 30,
+    "test_origins": 6,
+    "selection": "At each origin: six earlier 30-day validation windows; minimize total MAE, daily RMSE breaks ties; no future observations",
+    "evaluation_note": "Retrospective re-evaluation: some final periods were inspected during earlier development; not a new untouched test.",
+    "target": "All booking requests by reservation date, including cancelled/rejected",
+    "synthetic_history": true,
+    "categories": {
+      "vehicle_demand": {
+        "selected_method": "Adaptive: booking_pickup_adaptive, seasonal_level, booking_pickup_180, weekday_28",
+        "inner_validation": {
+          "recent_mean": {
+            "total_mae": 7.92857142857143,
+            "total_rmse": 9.60512901534178,
+            "mae": 1.8753968253968254,
+            "rmse": 2.227253374982712,
+            "validation_periods": 6
+          },
+          "seasonal_naive": {
+            "total_mae": 20.666666666666668,
+            "total_rmse": 24.866309202077684,
+            "mae": 1.4333333333333333,
+            "rmse": 2.19342451684828,
+            "validation_periods": 6
+          },
+          "weekday": {
+            "total_mae": 8.08843537414966,
+            "total_rmse": 10.449816611883236,
+            "mae": 1.2982615268329556,
+            "rmse": 1.7505942281947027,
+            "validation_periods": 6
+          },
+          "weekday_28": {
+            "total_mae": 5.75,
+            "total_rmse": 8.033782836663352,
+            "mae": 1.211111111111111,
+            "rmse": 1.766194905565194,
+            "validation_periods": 6
+          },
+          "weekday_180": {
+            "total_mae": 11.933333333333332,
+            "total_rmse": 13.524967050895565,
+            "mae": 1.1930427350427348,
+            "rmse": 1.7318474134607955,
+            "validation_periods": 6
+          },
+          "weekday_365": {
+            "total_mae": 13.575229801644895,
+            "total_rmse": 15.660741237226,
+            "mae": 1.1882357684244476,
+            "rmse": 1.7761012534883864,
+            "validation_periods": 6
+          },
+          "day_type_84": {
+            "total_mae": 8.141666666666671,
+            "total_rmse": 10.40666853512689,
+            "mae": 1.1880555555555556,
+            "rmse": 1.7259033240453003,
+            "validation_periods": 6
+          },
+          "booking_pickup_28": {
+            "total_mae": 9.9156693040741,
+            "total_rmse": 10.327689016663735,
+            "mae": 0.6788366593688182,
+            "rmse": 1.1317252600919663,
+            "validation_periods": 6
+          },
+          "booking_pickup_180": {
+            "total_mae": 8.892613969365831,
+            "total_rmse": 10.415591877203877,
+            "mae": 0.65501600465651,
+            "rmse": 1.0866196290050907,
+            "validation_periods": 6
+          },
+          "booking_pickup_adaptive": {
+            "total_mae": 13.393211638841558,
+            "total_rmse": 14.818163462395976,
+            "mae": 0.7358258314256219,
+            "rmse": 1.2159836324811013,
+            "validation_periods": 6
+          },
+          "calendar_poisson": {
+            "total_mae": 12.129486261532206,
+            "total_rmse": 13.977549404086947,
+            "mae": 1.2979091741573832,
+            "rmse": 1.7475148185559706,
+            "validation_periods": 6
+          },
+          "seasonal_smoothing": {
+            "total_mae": 11.623047023191518,
+            "total_rmse": 13.775655689776865,
+            "mae": 1.2315137140033439,
+            "rmse": 1.7786375619119552,
+            "validation_periods": 6
+          },
+          "seasonal_level": {
+            "total_mae": 11.82357543078687,
+            "total_rmse": 14.06641766192524,
+            "mae": 1.229734028576467,
+            "rmse": 1.7812292813024164,
+            "validation_periods": 6
+          },
+          "seasonal_blend": {
+            "total_mae": 11.8784543820601,
+            "total_rmse": 13.761921605522385,
+            "mae": 1.2092720283003067,
+            "rmse": 1.7481517933635857,
+            "validation_periods": 6
+          }
+        },
+        "test_period_totals": [
+          {
+            "start": "2026-04-13",
+            "end": "2026-05-12",
+            "actual_total": 57.0,
+            "forecasts": {
+              "selected": 51.7738,
+              "recent_mean": 49.2857,
+              "seasonal_naive": 37.0,
+              "seasonal_smoothing": 53.0988
+            },
+            "selected_method": "booking_pickup_adaptive",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 13.202380952380949,
+                "total_rmse": 16.439877062287575,
+                "mae": 1.4531746031746038,
+                "rmse": 1.777931452399981,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 15.833333333333334,
+                "total_rmse": 17.58313585987058,
+                "mae": 1.1833333333333333,
+                "rmse": 1.7748239349298849,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 12.091836734693876,
+                "total_rmse": 13.36666405276523,
+                "mae": 1.0047808012093726,
+                "rmse": 1.447632826953072,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 12.875,
+                "total_rmse": 16.006183700890936,
+                "mae": 1.0958333333333334,
+                "rmse": 1.681496522611794,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 9.835897435897436,
+                "total_rmse": 10.815658164830356,
+                "mae": 0.9371111111111111,
+                "rmse": 1.424000993580163,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 8.36060716013546,
+                "total_rmse": 9.859602498145927,
+                "mae": 0.9139392839864539,
+                "rmse": 1.3925958789956598,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 12.130555555555558,
+                "total_rmse": 13.542773459043127,
+                "mae": 0.9321296296296298,
+                "rmse": 1.4170843610807908,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 9.00584143876629,
+                "total_rmse": 10.471043991491197,
+                "mae": 0.594534034025502,
+                "rmse": 1.003171619494003,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 8.329020429067405,
+                "total_rmse": 9.516901984391106,
+                "mae": 0.5817953030286754,
+                "rmse": 0.9477493492989302,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 8.242993837456217,
+                "total_rmse": 10.848555084088371,
+                "mae": 0.6082245880712217,
+                "rmse": 0.9908233063826856,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 9.300271019750657,
+                "total_rmse": 10.869034792153325,
+                "mae": 0.9783158354988851,
+                "rmse": 1.34559443561048,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 8.694854964600347,
+                "total_rmse": 9.955987667181908,
+                "mae": 0.9228842929364937,
+                "rmse": 1.38152245483299,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 8.474623102351718,
+                "total_rmse": 9.799791049458927,
+                "mae": 0.9171666791242893,
+                "rmse": 1.3802604844322686,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 9.155260269124577,
+                "total_rmse": 10.274217300094485,
+                "mae": 0.9144891500695195,
+                "rmse": 1.392692076383544,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.30000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.06254597691342023
+                },
+                "weekday": {
+                  "brier": 0.062172865835619345
+                },
+                "weekday_recent": {
+                  "brier": 0.06551561543405063
+                },
+                "calendar_logistic": {
+                  "brier": 0.06215803512271941
+                },
+                "booking_pickup": {
+                  "brier": 0.03222138129477006
+                }
+              },
+              "validation_f1": 0.6923076923076924,
+              "validation_precision": 0.6428571428571429,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-05-13",
+            "end": "2026-06-11",
+            "actual_total": 76.0,
+            "forecasts": {
+              "selected": 52.8257,
+              "recent_mean": 56.7857,
+              "seasonal_naive": 56.0,
+              "seasonal_smoothing": 53.2381
+            },
+            "selected_method": "seasonal_level",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 11.45238095238095,
+                "total_rmse": 14.996484848894728,
+                "mae": 1.4964285714285717,
+                "rmse": 1.8843098425594556,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 15.666666666666666,
+                "total_rmse": 17.3877351409933,
+                "mae": 1.1333333333333333,
+                "rmse": 1.7384539747207064,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 10.052721088435371,
+                "total_rmse": 12.27355985094334,
+                "mae": 1.064512471655329,
+                "rmse": 1.544728056549779,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 10.583333333333334,
+                "total_rmse": 14.042346669983617,
+                "mae": 1.05,
+                "rmse": 1.6374522893812815,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 9.071794871794873,
+                "total_rmse": 10.207279762884475,
+                "mae": 0.9898632478632479,
+                "rmse": 1.5277423150507357,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 7.908018867924526,
+                "total_rmse": 9.610517057384556,
+                "mae": 0.975114900822448,
+                "rmse": 1.5068936161407052,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 10.191666666666668,
+                "total_rmse": 12.482382028727974,
+                "mae": 0.995462962962963,
+                "rmse": 1.52443118312988,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 8.091356365457685,
+                "total_rmse": 9.701290051013975,
+                "mae": 0.5665892671639489,
+                "rmse": 0.9376328270996144,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 8.051896659673908,
+                "total_rmse": 9.328969372472267,
+                "mae": 0.5751367157801311,
+                "rmse": 0.9403627062480816,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 8.314536196139237,
+                "total_rmse": 10.881554562632221,
+                "mae": 0.6079252977209618,
+                "rmse": 0.9870479329090827,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 8.574125774280391,
+                "total_rmse": 10.453044078195624,
+                "mae": 1.0372569605042872,
+                "rmse": 1.4764115651496634,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 7.908900350927955,
+                "total_rmse": 9.448971596253802,
+                "mae": 0.9826811172285707,
+                "rmse": 1.4981331436257646,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 7.868892899762698,
+                "total_rmse": 9.4150359669033,
+                "mae": 0.9776380110584572,
+                "rmse": 1.4978940856051013,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 8.470343885778785,
+                "total_rmse": 9.779958013728606,
+                "mae": 0.9728102861220735,
+                "rmse": 1.504502572404835,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.30000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.07648456019371452
+                },
+                "weekday": {
+                  "brier": 0.07491534731953356
+                },
+                "weekday_recent": {
+                  "brier": 0.07859019553765159
+                },
+                "calendar_logistic": {
+                  "brier": 0.07542754517623944
+                },
+                "booking_pickup": {
+                  "brier": 0.03379933836264788
+                }
+              },
+              "validation_f1": 0.7500000000000001,
+              "validation_precision": 0.7058823529411765,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-06-12",
+            "end": "2026-07-11",
+            "actual_total": 71.0,
+            "forecasts": {
+              "selected": 89.4713,
+              "recent_mean": 73.9286,
+              "seasonal_naive": 71.0,
+              "seasonal_smoothing": 51.92
+            },
+            "selected_method": "booking_pickup_adaptive",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 13.785714285714285,
+                "total_rmse": 16.789715835091705,
+                "mae": 1.6321428571428573,
+                "rmse": 2.0063956695443794,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 16.0,
+                "total_rmse": 17.74823934929885,
+                "mae": 1.2,
+                "rmse": 1.798147194568157,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 12.156462585034012,
+                "total_rmse": 14.43483155673661,
+                "mae": 1.1750755857898716,
+                "rmse": 1.6434176320742764,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 12.416666666666666,
+                "total_rmse": 15.559696869369489,
+                "mae": 1.1416666666666666,
+                "rmse": 1.7394523403774087,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 11.6974358974359,
+                "total_rmse": 13.424267818746317,
+                "mae": 1.0959999999999999,
+                "rmse": 1.6225442476661311,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 10.931361877116593,
+                "total_rmse": 12.813558352561126,
+                "mae": 1.0821298984034833,
+                "rmse": 1.606385109174328,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 12.361111111111114,
+                "total_rmse": 14.680113785006599,
+                "mae": 1.1001851851851852,
+                "rmse": 1.6160861882651043,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 9.480835767099004,
+                "total_rmse": 10.452491442195647,
+                "mae": 0.6122925036411965,
+                "rmse": 0.9944426250933451,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 9.265181173320087,
+                "total_rmse": 10.432572257559148,
+                "mae": 0.6119756442608336,
+                "rmse": 1.0062296109912008,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 8.516464074581508,
+                "total_rmse": 10.975336005176985,
+                "mae": 0.6326837411140452,
+                "rmse": 1.0269728771885223,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 11.43713570752473,
+                "total_rmse": 13.305682215018278,
+                "mae": 1.160934334722439,
+                "rmse": 1.5887894821867867,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 11.040720029299024,
+                "total_rmse": 13.153169772828456,
+                "mae": 1.095059260055387,
+                "rmse": 1.6016391493116873,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 11.153722884183098,
+                "total_rmse": 13.272136503482466,
+                "mae": 1.091419382101747,
+                "rmse": 1.6027557853733696,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 11.425579390809498,
+                "total_rmse": 13.333923218649943,
+                "mae": 1.0840513989941458,
+                "rmse": 1.6050029723062709,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.30000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.10901144488059313
+                },
+                "weekday": {
+                  "brier": 0.10511446419358855
+                },
+                "weekday_recent": {
+                  "brier": 0.10613053731644945
+                },
+                "calendar_logistic": {
+                  "brier": 0.10671827446283556
+                },
+                "booking_pickup": {
+                  "brier": 0.05919036729930427
+                }
+              },
+              "validation_f1": 0.6829268292682926,
+              "validation_precision": 0.7368421052631579,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-07-12",
+            "end": "2026-08-10",
+            "actual_total": 72.0,
+            "forecasts": {
+              "selected": 55.4781,
+              "recent_mean": 76.0714,
+              "seasonal_naive": 41.0,
+              "seasonal_smoothing": 60.7889
+            },
+            "selected_method": "booking_pickup_180",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 12.08333333333333,
+                "total_rmse": 15.954148800408566,
+                "mae": 1.7623015873015873,
+                "rmse": 2.1352079083291593,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 14.333333333333334,
+                "total_rmse": 17.272328544042153,
+                "mae": 1.211111111111111,
+                "rmse": 1.8618986725025255,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 11.977891156462583,
+                "total_rmse": 14.257968074608268,
+                "mae": 1.26583522297808,
+                "rmse": 1.7363430591504547,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 10.791666666666666,
+                "total_rmse": 14.851697433851346,
+                "mae": 1.2152777777777777,
+                "rmse": 1.8229821416812861,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 11.782051282051283,
+                "total_rmse": 13.525079341843279,
+                "mae": 1.1688547008547008,
+                "rmse": 1.6965577556562728,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 11.629051765844217,
+                "total_rmse": 13.65388398266013,
+                "mae": 1.1549225931301401,
+                "rmse": 1.69168763386913,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 11.894444444444446,
+                "total_rmse": 14.21826550863621,
+                "mae": 1.1620370370370372,
+                "rmse": 1.68704028946306,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 9.27599831849757,
+                "total_rmse": 10.183408172166727,
+                "mae": 0.6352333085344132,
+                "rmse": 1.0347411206226709,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 7.305921211174464,
+                "total_rmse": 8.275421759851987,
+                "mae": 0.5965837704830329,
+                "rmse": 0.978952151820632,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 8.85874021079309,
+                "total_rmse": 11.50650571440938,
+                "mae": 0.6589168590106895,
+                "rmse": 1.0597798067465571,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 12.406963067343527,
+                "total_rmse": 14.272816382443203,
+                "mae": 1.27367068263791,
+                "rmse": 1.7068310550291879,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 11.464823444529053,
+                "total_rmse": 13.715336786057525,
+                "mae": 1.1665305833566444,
+                "rmse": 1.6884930318377707,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 11.772882135196864,
+                "total_rmse": 14.085404950513832,
+                "mae": 1.163827184152317,
+                "rmse": 1.691958752392058,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 11.777466708624074,
+                "total_rmse": 13.775523846304212,
+                "mae": 1.1595452933546688,
+                "rmse": 1.6868620404996033,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.30000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.13670471653384586
+                },
+                "weekday": {
+                  "brier": 0.13057049217276442
+                },
+                "weekday_recent": {
+                  "brier": 0.1284566755357711
+                },
+                "calendar_logistic": {
+                  "brier": 0.13165060387465735
+                },
+                "booking_pickup": {
+                  "brier": 0.06043708820048587
+                }
+              },
+              "validation_f1": 0.76,
+              "validation_precision": 0.8636363636363636,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-08-11",
+            "end": "2026-09-09",
+            "actual_total": 80.0,
+            "forecasts": {
+              "selected": 77.75,
+              "recent_mean": 75.0,
+              "seasonal_naive": 123.0,
+              "seasonal_smoothing": 69.4948
+            },
+            "selected_method": "weekday_28",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 7.464285714285715,
+                "total_rmse": 9.429157629684752,
+                "mae": 1.786904761904762,
+                "rmse": 2.129878021269652,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 14.666666666666666,
+                "total_rmse": 17.841898254763514,
+                "mae": 1.2777777777777777,
+                "rmse": 1.9720265943665387,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 9.090136054421768,
+                "total_rmse": 11.19728536918834,
+                "mae": 1.2582766439909296,
+                "rmse": 1.700133642310314,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 6.0,
+                "total_rmse": 8.126602406089932,
+                "mae": 1.1833333333333333,
+                "rmse": 1.7328524974093373,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 11.08974358974359,
+                "total_rmse": 12.852369139770728,
+                "mae": 1.1627008547008546,
+                "rmse": 1.6853506571651011,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 12.091013546202225,
+                "total_rmse": 14.206134425216732,
+                "mae": 1.1516711014352523,
+                "rmse": 1.7076692096117214,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 9.008333333333336,
+                "total_rmse": 11.065907353468836,
+                "mae": 1.152314814814815,
+                "rmse": 1.661336383832881,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 9.070648626869406,
+                "total_rmse": 9.957065846431506,
+                "mae": 0.6675036735711306,
+                "rmse": 1.1119716517673177,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 9.354878660192774,
+                "total_rmse": 10.535578561179287,
+                "mae": 0.6496948718517827,
+                "rmse": 1.0929632488730074,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 11.72299709559371,
+                "total_rmse": 14.102015179711772,
+                "mae": 0.7175126459515986,
+                "rmse": 1.1926601143443663,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 12.291978108979857,
+                "total_rmse": 14.130747061228318,
+                "mae": 1.2606728696579816,
+                "rmse": 1.700754870154532,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 11.221512533398121,
+                "total_rmse": 13.501840025576092,
+                "mae": 1.1766176006392788,
+                "rmse": 1.7001805512700823,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 11.481573745230753,
+                "total_rmse": 13.83424615878237,
+                "mae": 1.17421648676814,
+                "rmse": 1.7032206127572784,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 11.28565866748717,
+                "total_rmse": 13.324527724306323,
+                "mae": 1.1636900393212073,
+                "rmse": 1.6865477407796692,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.30000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.14101572793578915
+                },
+                "weekday": {
+                  "brier": 0.13363103979552599
+                },
+                "weekday_recent": {
+                  "brier": 0.1289705245505625
+                },
+                "calendar_logistic": {
+                  "brier": 0.13253321915831776
+                },
+                "booking_pickup": {
+                  "brier": 0.06953927088227789
+                }
+              },
+              "validation_f1": 0.7200000000000001,
+              "validation_precision": 0.8571428571428571,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-09-10",
+            "end": "2026-10-09",
+            "actual_total": 87.0,
+            "forecasts": {
+              "selected": 75.0,
+              "recent_mean": 73.9286,
+              "seasonal_naive": 59.0,
+              "seasonal_smoothing": 72.9588
+            },
+            "selected_method": "weekday_28",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 7.92857142857143,
+                "total_rmse": 9.60512901534178,
+                "mae": 1.8753968253968254,
+                "rmse": 2.227253374982712,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 20.666666666666668,
+                "total_rmse": 24.866309202077684,
+                "mae": 1.4333333333333333,
+                "rmse": 2.19342451684828,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 8.08843537414966,
+                "total_rmse": 10.449816611883236,
+                "mae": 1.2982615268329556,
+                "rmse": 1.7505942281947027,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 5.75,
+                "total_rmse": 8.033782836663352,
+                "mae": 1.211111111111111,
+                "rmse": 1.766194905565194,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 11.933333333333332,
+                "total_rmse": 13.524967050895565,
+                "mae": 1.1930427350427348,
+                "rmse": 1.7318474134607955,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 13.575229801644895,
+                "total_rmse": 15.660741237226,
+                "mae": 1.1882357684244476,
+                "rmse": 1.7761012534883864,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 8.141666666666671,
+                "total_rmse": 10.40666853512689,
+                "mae": 1.1880555555555556,
+                "rmse": 1.7259033240453003,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 9.9156693040741,
+                "total_rmse": 10.327689016663735,
+                "mae": 0.6788366593688182,
+                "rmse": 1.1317252600919663,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 8.892613969365831,
+                "total_rmse": 10.415591877203877,
+                "mae": 0.65501600465651,
+                "rmse": 1.0866196290050907,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 13.393211638841558,
+                "total_rmse": 14.818163462395976,
+                "mae": 0.7358258314256219,
+                "rmse": 1.2159836324811013,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 12.129486261532206,
+                "total_rmse": 13.977549404086947,
+                "mae": 1.2979091741573832,
+                "rmse": 1.7475148185559706,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 11.623047023191518,
+                "total_rmse": 13.775655689776865,
+                "mae": 1.2315137140033439,
+                "rmse": 1.7786375619119552,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 11.82357543078687,
+                "total_rmse": 14.06641766192524,
+                "mae": 1.229734028576467,
+                "rmse": 1.7812292813024164,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 11.8784543820601,
+                "total_rmse": 13.761921605522385,
+                "mae": 1.2092720283003067,
+                "rmse": 1.7481517933635857,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.25000000000000006,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.14998859901805917
+                },
+                "weekday": {
+                  "brier": 0.14144024455645005
+                },
+                "weekday_recent": {
+                  "brier": 0.13000064883894236
+                },
+                "calendar_logistic": {
+                  "brier": 0.13821283495788778
+                },
+                "booking_pickup": {
+                  "brier": 0.06565236966425493
+                }
+              },
+              "validation_f1": 0.7333333333333333,
+              "validation_precision": 0.7586206896551724,
+              "validation_observations": 180
+            }
+          }
+        ],
+        "daily": {
+          "selected": {
+            "MAE": 0.9444,
+            "RMSE": 1.4782,
+            "R-squared": 0.581,
+            "MAPE (%)": 46.72,
+            "wMAPE (%)": 38.37,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 57
+          },
+          "recent_mean": {
+            "MAE": 1.9341,
+            "RMSE": 2.2893,
+            "R-squared": -0.0049,
+            "MAPE (%)": 51.27,
+            "wMAPE (%)": 78.59,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 57
+          },
+          "seasonal_naive": {
+            "MAE": 1.4778,
+            "RMSE": 2.241,
+            "R-squared": 0.037,
+            "MAPE (%)": 74.74,
+            "wMAPE (%)": 60.05,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 57
+          },
+          "seasonal_smoothing": {
+            "MAE": 1.2624,
+            "RMSE": 1.7863,
+            "R-squared": 0.3881,
+            "MAPE (%)": 53.04,
+            "wMAPE (%)": 51.29,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 57
+          }
+        },
+        "total_30_days": {
+          "selected": {
+            "MAE": 12.9406,
+            "RMSE": 14.875,
+            "R-squared": -1.5989,
+            "MAPE (%)": 17.54,
+            "wMAPE (%)": 17.53,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "recent_mean": {
+            "MAE": 8.6667,
+            "RMSE": 10.406,
+            "R-squared": -0.2719,
+            "MAPE (%)": 11.64,
+            "wMAPE (%)": 11.74,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_naive": {
+            "MAE": 23.6667,
+            "RMSE": 27.0617,
+            "R-squared": -7.6016,
+            "MAPE (%)": 31.73,
+            "wMAPE (%)": 32.05,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_smoothing": {
+            "MAE": 13.5834,
+            "RMSE": 14.8917,
+            "R-squared": -1.6047,
+            "MAPE (%)": 18.08,
+            "wMAPE (%)": 18.4,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          }
+        },
+        "weekly_complete_7_day_periods": {
+          "selected": {
+            "MAE": 3.8823,
+            "RMSE": 5.3298,
+            "R-squared": -0.0692,
+            "MAPE (%)": 21.4,
+            "wMAPE (%)": 22.34,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "recent_mean": {
+            "MAE": 4.0625,
+            "RMSE": 5.1296,
+            "R-squared": 0.0096,
+            "MAPE (%)": 23.06,
+            "wMAPE (%)": 23.38,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_naive": {
+            "MAE": 6.0417,
+            "RMSE": 7.5028,
+            "R-squared": -1.1188,
+            "MAPE (%)": 33.11,
+            "wMAPE (%)": 34.77,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_smoothing": {
+            "MAE": 4.4154,
+            "RMSE": 5.8678,
+            "R-squared": -0.296,
+            "MAPE (%)": 22.58,
+            "wMAPE (%)": 25.41,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          }
+        },
+        "partial_2_day_periods": {
+          "selected": {
+            "MAE": 2.1583,
+            "RMSE": 2.6314,
+            "R-squared": -1.7094,
+            "MAPE (%)": 64.27,
+            "wMAPE (%)": 49.81,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "recent_mean": {
+            "MAE": 1.8095,
+            "RMSE": 2.1822,
+            "R-squared": -0.8634,
+            "MAPE (%)": 52.41,
+            "wMAPE (%)": 41.76,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_naive": {
+            "MAE": 3.8333,
+            "RMSE": 5.2757,
+            "R-squared": -9.8913,
+            "MAPE (%)": 108.93,
+            "wMAPE (%)": 88.46,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_smoothing": {
+            "MAE": 1.8578,
+            "RMSE": 2.2435,
+            "R-squared": -0.9696,
+            "MAPE (%)": 58.14,
+            "wMAPE (%)": 42.87,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          }
+        },
+        "daily_peaks": {
+          "threshold": 4.0,
+          "actual_peaks": 36,
+          "predicted_peaks": 28,
+          "precision": 0.6429,
+          "recall": 0.5
+        },
+        "peak_warning_configuration": {
+          "method": "booking_pickup",
+          "count_threshold": 4.0,
+          "probability_cutoff": 0.25000000000000006,
+          "available": true,
+          "validation": {
+            "constant": {
+              "brier": 0.14998859901805917
+            },
+            "weekday": {
+              "brier": 0.14144024455645005
+            },
+            "weekday_recent": {
+              "brier": 0.13000064883894236
+            },
+            "calendar_logistic": {
+              "brier": 0.13821283495788778
+            },
+            "booking_pickup": {
+              "brier": 0.06565236966425493
+            }
+          },
+          "validation_f1": 0.7333333333333333,
+          "validation_precision": 0.7586206896551724,
+          "validation_observations": 180
+        },
+        "peak_warnings": {
+          "selected": {
+            "precision": 0.7931,
+            "recall": 0.6389,
+            "f1": 0.7077,
+            "brier": 0.0875,
+            "actual_peaks": 36,
+            "warnings": 29,
+            "correct_warnings": 23,
+            "false_alarms": 6,
+            "missed_peaks": 13
+          },
+          "constant": {
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "brier": 0.1724,
+            "actual_peaks": 36,
+            "warnings": 0,
+            "correct_warnings": 0,
+            "false_alarms": 0,
+            "missed_peaks": 36
+          },
+          "weekday": {
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "brier": 0.1609,
+            "actual_peaks": 36,
+            "warnings": 0,
+            "correct_warnings": 0,
+            "false_alarms": 0,
+            "missed_peaks": 36
+          },
+          "always_warn": {
+            "precision": 0.2,
+            "recall": 1.0,
+            "f1": 0.3333,
+            "brier": 0.8,
+            "actual_peaks": 36,
+            "warnings": 180,
+            "correct_warnings": 36,
+            "false_alarms": 144,
+            "missed_peaks": 0
+          },
+          "never_warn": {
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "brier": 0.2,
+            "actual_peaks": 36,
+            "warnings": 0,
+            "correct_warnings": 0,
+            "false_alarms": 0,
+            "missed_peaks": 36
+          },
+          "already_booked_only": {
+            "precision": 1.0,
+            "recall": 0.3056,
+            "f1": 0.4681,
+            "brier": 0.1389,
+            "actual_peaks": 36,
+            "warnings": 11,
+            "correct_warnings": 11,
+            "false_alarms": 0,
+            "missed_peaks": 25
+          }
+        },
+        "peak_warning_known_booking_context": {
+          "days_already_above_peak_threshold_at_origin": 11,
+          "remaining_days": 169,
+          "selected_on_remaining_days": {
+            "precision": 0.6667,
+            "recall": 0.48,
+            "f1": 0.5581,
+            "brier": 0.0932,
+            "actual_peaks": 25,
+            "warnings": 18,
+            "correct_warnings": 12,
+            "false_alarms": 6,
+            "missed_peaks": 13
+          }
+        },
+        "last_90_days": {
+          "selected": {
+            "daily": {
+              "MAE": 1.0173,
+              "RMSE": 1.6569,
+              "R-squared": 0.5081,
+              "MAPE (%)": 42.94,
+              "wMAPE (%)": 38.31,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 27
+            },
+            "total_30_days": {
+              "MAE": 10.2573,
+              "RMSE": 11.8608,
+              "R-squared": -2.7459,
+              "MAPE (%)": 13.18,
+              "wMAPE (%)": 12.88,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          },
+          "recent_mean": {
+            "daily": {
+              "MAE": 1.9817,
+              "RMSE": 2.3703,
+              "R-squared": -0.0066,
+              "MAPE (%)": 47.94,
+              "wMAPE (%)": 74.63,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 27
+            },
+            "total_30_days": {
+              "MAE": 7.381,
+              "RMSE": 8.415,
+              "R-squared": -0.8856,
+              "MAPE (%)": 8.98,
+              "wMAPE (%)": 9.26,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          },
+          "seasonal_naive": {
+            "daily": {
+              "MAE": 1.6889,
+              "RMSE": 2.5386,
+              "R-squared": -0.1546,
+              "MAPE (%)": 77.28,
+              "wMAPE (%)": 63.6,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 27
+            },
+            "total_30_days": {
+              "MAE": 34.0,
+              "RMSE": 34.6121,
+              "R-squared": -30.8994,
+              "MAPE (%)": 43.0,
+              "wMAPE (%)": 42.68,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          },
+          "seasonal_smoothing": {
+            "daily": {
+              "MAE": 1.2603,
+              "RMSE": 1.8038,
+              "R-squared": 0.417,
+              "MAPE (%)": 47.5,
+              "wMAPE (%)": 47.46,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 27
+            },
+            "total_30_days": {
+              "MAE": 11.9192,
+              "RMSE": 12.0167,
+              "R-squared": -2.845,
+              "MAPE (%)": 14.95,
+              "wMAPE (%)": 14.96,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          }
+        },
+        "weekly_peaks": {
+          "threshold": 17.0,
+          "actual_peaks": 9,
+          "predicted_peaks": 12,
+          "precision": 0.5,
+          "recall": 0.6667
+        }
+      },
+      "facility_demand": {
+        "selected_method": "Adaptive: booking_pickup_adaptive, booking_pickup_180, recent_mean, booking_pickup_28",
+        "inner_validation": {
+          "recent_mean": {
+            "total_mae": 7.678571428571426,
+            "total_rmse": 11.893768733831909,
+            "mae": 1.803174603174603,
+            "rmse": 2.1518626904495446,
+            "validation_periods": 6
+          },
+          "seasonal_naive": {
+            "total_mae": 14.333333333333334,
+            "total_rmse": 15.758595538097085,
+            "mae": 1.5777777777777777,
+            "rmse": 2.2949219304078006,
+            "validation_periods": 6
+          },
+          "weekday": {
+            "total_mae": 11.112244897959181,
+            "total_rmse": 15.364762952298149,
+            "mae": 1.2386243386243385,
+            "rmse": 1.7637673301059587,
+            "validation_periods": 6
+          },
+          "weekday_28": {
+            "total_mae": 8.166666666666666,
+            "total_rmse": 11.341296222213755,
+            "mae": 1.2,
+            "rmse": 1.803353357867873,
+            "validation_periods": 6
+          },
+          "weekday_180": {
+            "total_mae": 10.692307692307693,
+            "total_rmse": 16.516789616947147,
+            "mae": 1.1400000000000001,
+            "rmse": 1.7271449993511532,
+            "validation_periods": 6
+          },
+          "weekday_365": {
+            "total_mae": 11.904269472665698,
+            "total_rmse": 18.111835074941048,
+            "mae": 1.1578797774552492,
+            "rmse": 1.7443748856869525,
+            "validation_periods": 6
+          },
+          "day_type_84": {
+            "total_mae": 10.799999999999997,
+            "total_rmse": 15.12858160838224,
+            "mae": 1.110925925925926,
+            "rmse": 1.6815814132484683,
+            "validation_periods": 6
+          },
+          "booking_pickup_28": {
+            "total_mae": 6.755096716341867,
+            "total_rmse": 8.862936218676852,
+            "mae": 0.7320231176182139,
+            "rmse": 1.2218003874052923,
+            "validation_periods": 6
+          },
+          "booking_pickup_180": {
+            "total_mae": 8.648305533442295,
+            "total_rmse": 11.307893979976726,
+            "mae": 0.7344610201461272,
+            "rmse": 1.2253118382624484,
+            "validation_periods": 6
+          },
+          "booking_pickup_adaptive": {
+            "total_mae": 8.44247276798255,
+            "total_rmse": 10.893793740716845,
+            "mae": 0.7378101215859243,
+            "rmse": 1.234578069655676,
+            "validation_periods": 6
+          },
+          "calendar_poisson": {
+            "total_mae": 10.492548269092147,
+            "total_rmse": 15.48054671030093,
+            "mae": 1.2811827958872106,
+            "rmse": 1.6818562246288895,
+            "validation_periods": 6
+          },
+          "seasonal_smoothing": {
+            "total_mae": 12.323458926832151,
+            "total_rmse": 18.461363982767562,
+            "mae": 1.1809202495445306,
+            "rmse": 1.740535585902123,
+            "validation_periods": 6
+          },
+          "seasonal_level": {
+            "total_mae": 11.925215066813792,
+            "total_rmse": 16.906183130872755,
+            "mae": 1.1596766780621155,
+            "rmse": 1.7225748861877004,
+            "validation_periods": 6
+          },
+          "seasonal_blend": {
+            "total_mae": 11.30876137956074,
+            "total_rmse": 16.665913714138735,
+            "mae": 1.148957997150716,
+            "rmse": 1.7220999687441707,
+            "validation_periods": 6
+          }
+        },
+        "test_period_totals": [
+          {
+            "start": "2026-04-13",
+            "end": "2026-05-12",
+            "actual_total": 53.0,
+            "forecasts": {
+              "selected": 47.0631,
+              "recent_mean": 56.7857,
+              "seasonal_naive": 71.0,
+              "seasonal_smoothing": 55.331
+            },
+            "selected_method": "booking_pickup_adaptive",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 10.154761904761903,
+                "total_rmse": 12.409022666488081,
+                "mae": 1.5468253968253969,
+                "rmse": 1.8175534564060074,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 26.5,
+                "total_rmse": 29.8803168211673,
+                "mae": 1.55,
+                "rmse": 2.2373098926066444,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 10.316326530612246,
+                "total_rmse": 13.082448476582687,
+                "mae": 1.1206727135298564,
+                "rmse": 1.5070732508486686,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 11.166666666666666,
+                "total_rmse": 12.934127982460458,
+                "mae": 1.136111111111111,
+                "rmse": 1.6492843565889084,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 8.948717948717949,
+                "total_rmse": 12.14620986979821,
+                "mae": 1.0435555555555556,
+                "rmse": 1.4631663448816112,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 7.270561199806482,
+                "total_rmse": 9.93360893997007,
+                "mae": 0.9987703596194163,
+                "rmse": 1.415132529287566,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 10.091666666666669,
+                "total_rmse": 12.880255130323402,
+                "mae": 1.0271296296296295,
+                "rmse": 1.4491488561936647,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 6.011840007770836,
+                "total_rmse": 6.58589393166835,
+                "mae": 0.6506569482734327,
+                "rmse": 1.041209591992857,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 4.069611028542188,
+                "total_rmse": 5.583412056108567,
+                "mae": 0.6134086286017407,
+                "rmse": 0.9526574821589632,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 3.3150610718459688,
+                "total_rmse": 4.996854425705606,
+                "mae": 0.5982994999018117,
+                "rmse": 0.9268359890640793,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 8.709077535960553,
+                "total_rmse": 10.218697945075528,
+                "mae": 1.1012964181158083,
+                "rmse": 1.3684219046304527,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 6.801219770031806,
+                "total_rmse": 9.483489139123877,
+                "mae": 1.0272347298512445,
+                "rmse": 1.4092380972698075,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 7.836643585423093,
+                "total_rmse": 10.46353538476079,
+                "mae": 1.0177135747112516,
+                "rmse": 1.4215990638856844,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 8.392680767070518,
+                "total_rmse": 11.235638139037261,
+                "mae": 1.0297798642787026,
+                "rmse": 1.4387336902459193,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.20000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.07644983977937078
+                },
+                "weekday": {
+                  "brier": 0.07378847030382713
+                },
+                "weekday_recent": {
+                  "brier": 0.0760821887372925
+                },
+                "calendar_logistic": {
+                  "brier": 0.07466777578151677
+                },
+                "booking_pickup": {
+                  "brier": 0.0493267976929609
+                }
+              },
+              "validation_f1": 0.5405405405405405,
+              "validation_precision": 0.45454545454545453,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-05-13",
+            "end": "2026-06-11",
+            "actual_total": 59.0,
+            "forecasts": {
+              "selected": 57.3858,
+              "recent_mean": 52.5,
+              "seasonal_naive": 51.0,
+              "seasonal_smoothing": 54.6063
+            },
+            "selected_method": "booking_pickup_adaptive",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 10.535714285714285,
+                "total_rmse": 12.489893873832228,
+                "mae": 1.5940476190476192,
+                "rmse": 1.8530747568357218,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 23.0,
+                "total_rmse": 26.331223544175334,
+                "mae": 1.5777777777777777,
+                "rmse": 2.2779132751026516,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 10.426870748299319,
+                "total_rmse": 13.137729674369421,
+                "mae": 1.176020408163265,
+                "rmse": 1.556255368968462,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 11.625,
+                "total_rmse": 13.096993929906207,
+                "mae": 1.2041666666666666,
+                "rmse": 1.733153035494686,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 8.035897435897434,
+                "total_rmse": 11.79901376549177,
+                "mae": 1.099008547008547,
+                "rmse": 1.5183747669593486,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 7.5266086115142725,
+                "total_rmse": 10.025902242379795,
+                "mae": 1.058599419448476,
+                "rmse": 1.4712410605847628,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 10.125,
+                "total_rmse": 12.89749652710427,
+                "mae": 1.0700925925925926,
+                "rmse": 1.4882362790303905,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 5.2854183205211696,
+                "total_rmse": 6.20713769893242,
+                "mae": 0.6589703283048326,
+                "rmse": 1.0673137991697812,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 3.9877557663977914,
+                "total_rmse": 5.536713303741117,
+                "mae": 0.6391879558100984,
+                "rmse": 0.9932491041624658,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 2.4779979985166634,
+                "total_rmse": 3.290197100822664,
+                "mae": 0.6077797541586446,
+                "rmse": 0.9556053382559989,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 8.890114419130576,
+                "total_rmse": 10.313961767146681,
+                "mae": 1.1505817337170046,
+                "rmse": 1.4096787644120734,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 6.404839031882162,
+                "total_rmse": 9.335199913373977,
+                "mae": 1.0715003500514821,
+                "rmse": 1.4492944280973423,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 7.554586812956985,
+                "total_rmse": 10.431366182589256,
+                "mae": 1.0652340103036504,
+                "rmse": 1.4621120498775921,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 7.795242124427207,
+                "total_rmse": 11.081833770945956,
+                "mae": 1.0821212786560988,
+                "rmse": 1.487827034745312,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.20000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.08114194762528766
+                },
+                "weekday": {
+                  "brier": 0.07883458149717892
+                },
+                "weekday_recent": {
+                  "brier": 0.08196671381995632
+                },
+                "calendar_logistic": {
+                  "brier": 0.0794799462431447
+                },
+                "booking_pickup": {
+                  "brier": 0.05818258960781336
+                }
+              },
+              "validation_f1": 0.4864864864864864,
+              "validation_precision": 0.42857142857142855,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-06-12",
+            "end": "2026-07-11",
+            "actual_total": 59.0,
+            "forecasts": {
+              "selected": 47.1567,
+              "recent_mean": 57.8571,
+              "seasonal_naive": 55.0,
+              "seasonal_smoothing": 52.8682
+            },
+            "selected_method": "booking_pickup_adaptive",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 9.416666666666666,
+                "total_rmse": 11.573081892469089,
+                "mae": 1.6234126984126984,
+                "rmse": 1.89515060219199,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 20.5,
+                "total_rmse": 24.815989469157447,
+                "mae": 1.55,
+                "rmse": 2.2693611435820435,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 7.7653061224489806,
+                "total_rmse": 11.006087949681731,
+                "mae": 1.1479591836734693,
+                "rmse": 1.5431720452631212,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 10.208333333333334,
+                "total_rmse": 12.258925319945464,
+                "mae": 1.1513888888888888,
+                "rmse": 1.6971176545346918,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 5.0025641025641026,
+                "total_rmse": 7.6687716859740735,
+                "mae": 1.053008547008547,
+                "rmse": 1.4880481989747705,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 5.0832728592162555,
+                "total_rmse": 7.521518978126736,
+                "mae": 1.0350245928076116,
+                "rmse": 1.466073696533416,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 7.508333333333333,
+                "total_rmse": 10.763073445814632,
+                "mae": 1.0395370370370371,
+                "rmse": 1.4763741245211377,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 4.623804656491955,
+                "total_rmse": 5.802288226018774,
+                "mae": 0.6496149375643991,
+                "rmse": 1.0624909099737208,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 2.585371635515487,
+                "total_rmse": 3.3809134452569523,
+                "mae": 0.6318937987093375,
+                "rmse": 0.9859486254324379,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 2.205106719988385,
+                "total_rmse": 3.0818176132609425,
+                "mae": 0.6204176567254491,
+                "rmse": 0.9782455324795203,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 6.4695766011825,
+                "total_rmse": 7.578386909322076,
+                "mae": 1.1315401639515592,
+                "rmse": 1.4044197319012326,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 4.4570631033278305,
+                "total_rmse": 6.87511720855268,
+                "mae": 1.0446555473167072,
+                "rmse": 1.4470477356677443,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 5.565270494524217,
+                "total_rmse": 7.903213967362681,
+                "mae": 1.0333389962211348,
+                "rmse": 1.455978900519498,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 5.283917298544159,
+                "total_rmse": 7.763016235454378,
+                "mae": 1.043173771614841,
+                "rmse": 1.470428454826143,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.20000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.08115065751701045
+                },
+                "weekday": {
+                  "brier": 0.07869123392705216
+                },
+                "weekday_recent": {
+                  "brier": 0.08111657213035524
+                },
+                "calendar_logistic": {
+                  "brier": 0.07912190674236215
+                },
+                "booking_pickup": {
+                  "brier": 0.057578229826563375
+                }
+              },
+              "validation_f1": 0.4864864864864864,
+              "validation_precision": 0.42857142857142855,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-07-12",
+            "end": "2026-08-10",
+            "actual_total": 70.0,
+            "forecasts": {
+              "selected": 51.275,
+              "recent_mean": 63.2143,
+              "seasonal_naive": 84.0,
+              "seasonal_smoothing": 52.4742
+            },
+            "selected_method": "booking_pickup_180",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 6.4761904761904745,
+                "total_rmse": 8.679673651346434,
+                "mae": 1.6265873015873016,
+                "rmse": 1.8706317217851172,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 13.833333333333334,
+                "total_rmse": 17.19980620045858,
+                "mae": 1.461111111111111,
+                "rmse": 2.1304668241699725,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 7.732993197278913,
+                "total_rmse": 10.985622379721235,
+                "mae": 1.121031746031746,
+                "rmse": 1.5093555140355597,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 7.375,
+                "total_rmse": 9.14865654982559,
+                "mae": 1.1041666666666667,
+                "rmse": 1.6264950387600667,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 5.448717948717949,
+                "total_rmse": 7.788665714322798,
+                "mae": 1.0235555555555556,
+                "rmse": 1.4490199821302516,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 5.560957910014515,
+                "total_rmse": 7.7554526637270484,
+                "mae": 1.013763909046928,
+                "rmse": 1.4372141715624038,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 7.391666666666667,
+                "total_rmse": 10.692384361466502,
+                "mae": 1.0150925925925927,
+                "rmse": 1.4451243058156829,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 4.146488316115913,
+                "total_rmse": 4.9658485910513095,
+                "mae": 0.6108771869236636,
+                "rmse": 0.9903694241860584,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 3.810472739635248,
+                "total_rmse": 4.816433909446044,
+                "mae": 0.6216102157500083,
+                "rmse": 0.9750734163323117,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 3.949468581144835,
+                "total_rmse": 5.706046954640565,
+                "mae": 0.6188871734707343,
+                "rmse": 0.9817821508408655,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 5.4918651657382815,
+                "total_rmse": 6.829943625932644,
+                "mae": 1.1497294182910462,
+                "rmse": 1.4094471903863017,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 5.413925642700948,
+                "total_rmse": 7.314933966670915,
+                "mae": 1.019994703026503,
+                "rmse": 1.4162205265578893,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 6.54710041674308,
+                "total_rmse": 8.511368905919188,
+                "mae": 1.0091211415799388,
+                "rmse": 1.4268423405978055,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 5.997909182730513,
+                "total_rmse": 8.085606372652634,
+                "mae": 1.0163383485677473,
+                "rmse": 1.4359033178061977,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.20000000000000004,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.0764473744505939
+                },
+                "weekday": {
+                  "brier": 0.07383654270234637
+                },
+                "weekday_recent": {
+                  "brier": 0.07468988411686214
+                },
+                "calendar_logistic": {
+                  "brier": 0.07482235587381217
+                },
+                "booking_pickup": {
+                  "brier": 0.05008848442698714
+                }
+              },
+              "validation_f1": 0.5454545454545454,
+              "validation_precision": 0.5,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-08-11",
+            "end": "2026-09-09",
+            "actual_total": 98.0,
+            "forecasts": {
+              "selected": 70.7143,
+              "recent_mean": 70.7143,
+              "seasonal_naive": 117.0,
+              "seasonal_smoothing": 57.1581
+            },
+            "selected_method": "recent_mean",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 4.690476190476189,
+                "total_rmse": 5.654147836332369,
+                "mae": 1.6511904761904759,
+                "rmse": 1.9281451615924399,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 11.333333333333334,
+                "total_rmse": 13.723459233492601,
+                "mae": 1.4333333333333333,
+                "rmse": 2.073644135332772,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 6.062925170068027,
+                "total_rmse": 7.428077327142546,
+                "mae": 1.1339569160997731,
+                "rmse": 1.5443290326664727,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 5.791666666666667,
+                "total_rmse": 6.521598730372791,
+                "mae": 1.1263888888888889,
+                "rmse": 1.6409473889596013,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 4.705128205128205,
+                "total_rmse": 6.135662236858596,
+                "mae": 1.0413675213675215,
+                "rmse": 1.5032247606831237,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 5.4678882438316405,
+                "total_rmse": 7.548326995142989,
+                "mae": 1.0448496210288662,
+                "rmse": 1.5082813237940091,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 5.755555555555556,
+                "total_rmse": 7.163067571720725,
+                "mae": 1.0238888888888888,
+                "rmse": 1.4842922410327837,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 5.6977183715874204,
+                "total_rmse": 7.733584101556425,
+                "mae": 0.6744355463117959,
+                "rmse": 1.129707765659614,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 5.75024290418779,
+                "total_rmse": 8.559558975083414,
+                "mae": 0.670595446457173,
+                "rmse": 1.1119848956586005,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 7.627290351002422,
+                "total_rmse": 10.707198875413926,
+                "mae": 0.6874256176416477,
+                "rmse": 1.157079980620474,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 4.917193434931548,
+                "total_rmse": 5.720361524817712,
+                "mae": 1.1787990591466089,
+                "rmse": 1.472971817476997,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 5.698958127697023,
+                "total_rmse": 7.93798846607709,
+                "mae": 1.0572159332832172,
+                "rmse": 1.4960524298123423,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 6.355792620891101,
+                "total_rmse": 8.12174289484589,
+                "mae": 1.0410911598939012,
+                "rmse": 1.497085088951798,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 5.530460413009652,
+                "total_rmse": 7.086944013583675,
+                "mae": 1.0410156654170362,
+                "rmse": 1.497527225218847,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.1,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.09051823544603313
+                },
+                "weekday": {
+                  "brier": 0.08670187545161405
+                },
+                "weekday_recent": {
+                  "brier": 0.08716982800928808
+                },
+                "calendar_logistic": {
+                  "brier": 0.08714386708229144
+                },
+                "booking_pickup": {
+                  "brier": 0.06648657741554385
+                }
+              },
+              "validation_f1": 0.48275862068965514,
+              "validation_precision": 0.35,
+              "validation_observations": 180
+            }
+          },
+          {
+            "start": "2026-09-10",
+            "end": "2026-10-09",
+            "actual_total": 87.0,
+            "forecasts": {
+              "selected": 98.6077,
+              "recent_mean": 94.2857,
+              "seasonal_naive": 100.0,
+              "seasonal_smoothing": 82.8727
+            },
+            "selected_method": "booking_pickup_28",
+            "inner_validation": {
+              "recent_mean": {
+                "total_mae": 7.678571428571426,
+                "total_rmse": 11.893768733831909,
+                "mae": 1.803174603174603,
+                "rmse": 2.1518626904495446,
+                "validation_periods": 6
+              },
+              "seasonal_naive": {
+                "total_mae": 14.333333333333334,
+                "total_rmse": 15.758595538097085,
+                "mae": 1.5777777777777777,
+                "rmse": 2.2949219304078006,
+                "validation_periods": 6
+              },
+              "weekday": {
+                "total_mae": 11.112244897959181,
+                "total_rmse": 15.364762952298149,
+                "mae": 1.2386243386243385,
+                "rmse": 1.7637673301059587,
+                "validation_periods": 6
+              },
+              "weekday_28": {
+                "total_mae": 8.166666666666666,
+                "total_rmse": 11.341296222213755,
+                "mae": 1.2,
+                "rmse": 1.803353357867873,
+                "validation_periods": 6
+              },
+              "weekday_180": {
+                "total_mae": 10.692307692307693,
+                "total_rmse": 16.516789616947147,
+                "mae": 1.1400000000000001,
+                "rmse": 1.7271449993511532,
+                "validation_periods": 6
+              },
+              "weekday_365": {
+                "total_mae": 11.904269472665698,
+                "total_rmse": 18.111835074941048,
+                "mae": 1.1578797774552492,
+                "rmse": 1.7443748856869525,
+                "validation_periods": 6
+              },
+              "day_type_84": {
+                "total_mae": 10.799999999999997,
+                "total_rmse": 15.12858160838224,
+                "mae": 1.110925925925926,
+                "rmse": 1.6815814132484683,
+                "validation_periods": 6
+              },
+              "booking_pickup_28": {
+                "total_mae": 6.755096716341867,
+                "total_rmse": 8.862936218676852,
+                "mae": 0.7320231176182139,
+                "rmse": 1.2218003874052923,
+                "validation_periods": 6
+              },
+              "booking_pickup_180": {
+                "total_mae": 8.648305533442295,
+                "total_rmse": 11.307893979976726,
+                "mae": 0.7344610201461272,
+                "rmse": 1.2253118382624484,
+                "validation_periods": 6
+              },
+              "booking_pickup_adaptive": {
+                "total_mae": 8.44247276798255,
+                "total_rmse": 10.893793740716845,
+                "mae": 0.7378101215859243,
+                "rmse": 1.234578069655676,
+                "validation_periods": 6
+              },
+              "calendar_poisson": {
+                "total_mae": 10.492548269092147,
+                "total_rmse": 15.48054671030093,
+                "mae": 1.2811827958872106,
+                "rmse": 1.6818562246288895,
+                "validation_periods": 6
+              },
+              "seasonal_smoothing": {
+                "total_mae": 12.323458926832151,
+                "total_rmse": 18.461363982767562,
+                "mae": 1.1809202495445306,
+                "rmse": 1.740535585902123,
+                "validation_periods": 6
+              },
+              "seasonal_level": {
+                "total_mae": 11.925215066813792,
+                "total_rmse": 16.906183130872755,
+                "mae": 1.1596766780621155,
+                "rmse": 1.7225748861877004,
+                "validation_periods": 6
+              },
+              "seasonal_blend": {
+                "total_mae": 11.30876137956074,
+                "total_rmse": 16.665913714138735,
+                "mae": 1.148957997150716,
+                "rmse": 1.7220999687441707,
+                "validation_periods": 6
+              }
+            },
+            "peak_warning_configuration": {
+              "method": "booking_pickup",
+              "count_threshold": 4.0,
+              "probability_cutoff": 0.15000000000000002,
+              "available": true,
+              "validation": {
+                "constant": {
+                  "brier": 0.11374408566591236
+                },
+                "weekday": {
+                  "brier": 0.10954546150120432
+                },
+                "weekday_recent": {
+                  "brier": 0.10904056883742984
+                },
+                "calendar_logistic": {
+                  "brier": 0.1066827121571649
+                },
+                "booking_pickup": {
+                  "brier": 0.07809051562358875
+                }
+              },
+              "validation_f1": 0.5306122448979592,
+              "validation_precision": 0.5,
+              "validation_observations": 180
+            }
+          }
+        ],
+        "daily": {
+          "selected": {
+            "MAE": 1.0568,
+            "RMSE": 1.6701,
+            "R-squared": 0.4681,
+            "MAPE (%)": 40.38,
+            "wMAPE (%)": 44.66,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 61
+          },
+          "recent_mean": {
+            "MAE": 1.8762,
+            "RMSE": 2.2615,
+            "R-squared": 0.0246,
+            "MAPE (%)": 47.97,
+            "wMAPE (%)": 79.28,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 61
+          },
+          "seasonal_naive": {
+            "MAE": 1.5889,
+            "RMSE": 2.3547,
+            "R-squared": -0.0574,
+            "MAPE (%)": 79.61,
+            "wMAPE (%)": 67.14,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 61
+          },
+          "seasonal_smoothing": {
+            "MAE": 1.2767,
+            "RMSE": 1.8246,
+            "R-squared": 0.3651,
+            "MAPE (%)": 51.45,
+            "wMAPE (%)": 53.95,
+            "Observations": 180,
+            "Zero actuals excluded from MAPE": 61
+          }
+        },
+        "total_30_days": {
+          "selected": {
+            "MAE": 12.8355,
+            "RMSE": 15.3188,
+            "R-squared": 0.1189,
+            "MAPE (%)": 16.99,
+            "wMAPE (%)": 18.08,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "recent_mean": {
+            "MAE": 8.7976,
+            "RMSE": 12.2578,
+            "R-squared": 0.4358,
+            "MAPE (%)": 11.0,
+            "wMAPE (%)": 12.39,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_naive": {
+            "MAE": 12.6667,
+            "RMSE": 13.7235,
+            "R-squared": 0.2929,
+            "MAPE (%)": 18.11,
+            "wMAPE (%)": 17.84,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_smoothing": {
+            "MAE": 12.5586,
+            "RMSE": 18.5049,
+            "R-squared": -0.2857,
+            "MAPE (%)": 15.62,
+            "wMAPE (%)": 17.69,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          }
+        },
+        "weekly_complete_7_day_periods": {
+          "selected": {
+            "MAE": 3.0665,
+            "RMSE": 4.4213,
+            "R-squared": 0.2332,
+            "MAPE (%)": 16.66,
+            "wMAPE (%)": 18.68,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "recent_mean": {
+            "MAE": 3.3125,
+            "RMSE": 4.3553,
+            "R-squared": 0.2559,
+            "MAPE (%)": 18.17,
+            "wMAPE (%)": 20.18,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_naive": {
+            "MAE": 4.0833,
+            "RMSE": 4.7697,
+            "R-squared": 0.1076,
+            "MAPE (%)": 26.05,
+            "wMAPE (%)": 24.87,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_smoothing": {
+            "MAE": 3.6292,
+            "RMSE": 5.4361,
+            "R-squared": -0.1592,
+            "MAPE (%)": 18.25,
+            "wMAPE (%)": 22.11,
+            "Observations": 24,
+            "Zero actuals excluded from MAPE": 0
+          }
+        },
+        "partial_2_day_periods": {
+          "selected": {
+            "MAE": 2.2835,
+            "RMSE": 2.6493,
+            "R-squared": -0.974,
+            "MAPE (%)": 42.44,
+            "wMAPE (%)": 42.82,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "recent_mean": {
+            "MAE": 1.2976,
+            "RMSE": 1.9129,
+            "R-squared": -0.0291,
+            "MAPE (%)": 21.31,
+            "wMAPE (%)": 24.33,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_naive": {
+            "MAE": 1.6667,
+            "RMSE": 2.0817,
+            "R-squared": -0.2188,
+            "MAPE (%)": 41.94,
+            "wMAPE (%)": 31.25,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          },
+          "seasonal_smoothing": {
+            "MAE": 1.7835,
+            "RMSE": 2.144,
+            "R-squared": -0.2929,
+            "MAPE (%)": 35.38,
+            "wMAPE (%)": 33.44,
+            "Observations": 6,
+            "Zero actuals excluded from MAPE": 0
+          }
+        },
+        "daily_peaks": {
+          "threshold": 4.0,
+          "actual_peaks": 28,
+          "predicted_peaks": 17,
+          "precision": 0.4706,
+          "recall": 0.2857
+        },
+        "peak_warning_configuration": {
+          "method": "booking_pickup",
+          "count_threshold": 4.0,
+          "probability_cutoff": 0.15000000000000002,
+          "available": true,
+          "validation": {
+            "constant": {
+              "brier": 0.11374408566591236
+            },
+            "weekday": {
+              "brier": 0.10954546150120432
+            },
+            "weekday_recent": {
+              "brier": 0.10904056883742984
+            },
+            "calendar_logistic": {
+              "brier": 0.1066827121571649
+            },
+            "booking_pickup": {
+              "brier": 0.07809051562358875
+            }
+          },
+          "validation_f1": 0.5306122448979592,
+          "validation_precision": 0.5,
+          "validation_observations": 180
+        },
+        "peak_warnings": {
+          "selected": {
+            "precision": 0.5455,
+            "recall": 0.6429,
+            "f1": 0.5902,
+            "brier": 0.0818,
+            "actual_peaks": 28,
+            "warnings": 33,
+            "correct_warnings": 18,
+            "false_alarms": 15,
+            "missed_peaks": 10
+          },
+          "constant": {
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "brier": 0.1367,
+            "actual_peaks": 28,
+            "warnings": 0,
+            "correct_warnings": 0,
+            "false_alarms": 0,
+            "missed_peaks": 28
+          },
+          "weekday": {
+            "precision": 0.3889,
+            "recall": 0.25,
+            "f1": 0.3043,
+            "brier": 0.1305,
+            "actual_peaks": 28,
+            "warnings": 18,
+            "correct_warnings": 7,
+            "false_alarms": 11,
+            "missed_peaks": 21
+          },
+          "always_warn": {
+            "precision": 0.1556,
+            "recall": 1.0,
+            "f1": 0.2692,
+            "brier": 0.8444,
+            "actual_peaks": 28,
+            "warnings": 180,
+            "correct_warnings": 28,
+            "false_alarms": 152,
+            "missed_peaks": 0
+          },
+          "never_warn": {
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "brier": 0.1556,
+            "actual_peaks": 28,
+            "warnings": 0,
+            "correct_warnings": 0,
+            "false_alarms": 0,
+            "missed_peaks": 28
+          },
+          "already_booked_only": {
+            "precision": 1.0,
+            "recall": 0.2143,
+            "f1": 0.3529,
+            "brier": 0.1222,
+            "actual_peaks": 28,
+            "warnings": 6,
+            "correct_warnings": 6,
+            "false_alarms": 0,
+            "missed_peaks": 22
+          }
+        },
+        "peak_warning_known_booking_context": {
+          "days_already_above_peak_threshold_at_origin": 6,
+          "remaining_days": 174,
+          "selected_on_remaining_days": {
+            "precision": 0.4444,
+            "recall": 0.5455,
+            "f1": 0.4898,
+            "brier": 0.0846,
+            "actual_peaks": 22,
+            "warnings": 27,
+            "correct_warnings": 12,
+            "false_alarms": 15,
+            "missed_peaks": 10
+          }
+        },
+        "last_90_days": {
+          "selected": {
+            "daily": {
+              "MAE": 1.4648,
+              "RMSE": 2.1199,
+              "R-squared": 0.3174,
+              "MAPE (%)": 45.8,
+              "wMAPE (%)": 51.7,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 29
+            },
+            "total_30_days": {
+              "MAE": 19.2061,
+              "RMSE": 20.2474,
+              "R-squared": -2.0901,
+              "MAPE (%)": 22.64,
+              "wMAPE (%)": 22.6,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          },
+          "recent_mean": {
+            "daily": {
+              "MAE": 2.1746,
+              "RMSE": 2.5978,
+              "R-squared": -0.0251,
+              "MAPE (%)": 48.81,
+              "wMAPE (%)": 76.75,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 29
+            },
+            "total_30_days": {
+              "MAE": 13.7857,
+              "RMSE": 16.7694,
+              "R-squared": -1.1197,
+              "MAPE (%)": 15.3,
+              "wMAPE (%)": 16.22,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          },
+          "seasonal_naive": {
+            "daily": {
+              "MAE": 1.8,
+              "RMSE": 2.6625,
+              "R-squared": -0.0768,
+              "MAPE (%)": 81.79,
+              "wMAPE (%)": 63.53,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 29
+            },
+            "total_30_days": {
+              "MAE": 15.3333,
+              "RMSE": 15.5563,
+              "R-squared": -0.8241,
+              "MAPE (%)": 18.11,
+              "wMAPE (%)": 18.04,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          },
+          "seasonal_smoothing": {
+            "daily": {
+              "MAE": 1.5245,
+              "RMSE": 2.1351,
+              "R-squared": 0.3076,
+              "MAPE (%)": 49.77,
+              "wMAPE (%)": 53.8,
+              "Observations": 90,
+              "Zero actuals excluded from MAPE": 29
+            },
+            "total_30_days": {
+              "MAE": 20.8317,
+              "RMSE": 25.7698,
+              "R-squared": -4.0057,
+              "MAPE (%)": 23.82,
+              "wMAPE (%)": 24.51,
+              "Observations": 3,
+              "Zero actuals excluded from MAPE": 0
+            }
+          }
+        },
+        "weekly_peaks": {
+          "threshold": 18.0,
+          "actual_peaks": 8,
+          "predicted_peaks": 4,
+          "precision": 0.5,
+          "recall": 0.25
+        }
+      }
+    }
+  }
+}

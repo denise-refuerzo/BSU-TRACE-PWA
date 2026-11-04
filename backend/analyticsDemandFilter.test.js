@@ -101,3 +101,31 @@ test('monthly forecast summary reports expected totals and daily patterns', asyn
   assert.equal(summary.dominantDemand, 'facilities');
   assert.equal(summary.forecastBasis, 'Conservative weekday baseline');
 });
+
+
+test('weekly forecast preserves all 30 daily counts and labels the partial period', async () => {
+  const { weeklyDemandForecast } = await import(analyticsModuleUrl);
+  const rows = Array.from({ length: 30 }, (_, index) => ({
+    date: new Date(Date.UTC(2026, 9, 22 + index)).toISOString().slice(0, 10),
+    type: 'forecast', vehicle_demand: 1.5, facility_demand: 2
+  }));
+  rows.push({ date: '2026-10-21', type: 'historical', vehicle_demand: 1000 });
+  const weeks = weeklyDemandForecast(rows);
+  assert.deepEqual(weeks.map(row => row.days), [7, 7, 7, 7, 2]);
+  assert.equal(weeks.reduce((sum, row) => sum + row.van_fore, 0), 45);
+  assert.match(weeks.at(-1).date, /2 days, partial/);
+});
+
+test('peak summary uses only available forecast warnings and retains stale-history notice', async () => {
+  const { summarizeDemandForecast } = await import(analyticsModuleUrl);
+  const row = { date: '2026-10-27', type: 'forecast', vehicle_demand: 3,
+    facility_demand: 2, vehicle_demand_peak_warning_available: true,
+    vehicle_demand_peak: true, vehicle_demand_peak_probability: 0.4,
+    vehicle_demand_peak_threshold: 4, facility_demand_peak: true,
+    history_gap_warning: true, days_since_last_request: 18 };
+  const summary = summarizeDemandForecast([row, { ...row, type: 'historical' }]);
+  assert.deepEqual(summary.peakWarnings, [{ date: row.date, category: 'Van', probability: 0.4, countThreshold: 4 }]);
+  assert.equal(summary.vehicleTotal, 3);
+  assert.equal(summary.historyGapWarning, true);
+  assert.equal(summary.daysSinceLastRequest, 18);
+});

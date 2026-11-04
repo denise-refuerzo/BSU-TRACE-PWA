@@ -114,15 +114,15 @@ export default function OfficeDocumentsTab({
                 return (
                   <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-[#2b1317]/50 transition-colors group">
                     <td className="p-4">
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className="p-2 rounded-lg bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800 group-hover:bg-white dark:group-hover:bg-[#180e10] group-hover:border-gray-200 dark:group-hover:border-gray-700 group-hover:shadow-sm transition-all">
                           <FileText size={16} className="text-gray-500 dark:text-gray-400 group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors" />
                         </div>
-                        <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight">{doc.title}</p>
+                        <p title={doc.title} className="min-w-0 max-w-[16rem] truncate font-bold text-gray-900 dark:text-white text-sm leading-tight">{doc.title}</p>
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className="px-2.5 py-1 bg-red-50 dark:bg-red-900/30 text-[#D32F2F] dark:text-red-400 border border-red-100 dark:border-red-800 font-bold text-[9px] uppercase tracking-wider rounded-md shadow-sm">
+                      <span title={doc.process_name} className="block max-w-[12rem] truncate px-2.5 py-1 bg-red-50 dark:bg-red-900/30 text-[#D32F2F] dark:text-red-400 border border-red-100 dark:border-red-800 font-bold text-[9px] uppercase tracking-wider rounded-md shadow-sm">
                         {doc.process_name}
                       </span>
                     </td>

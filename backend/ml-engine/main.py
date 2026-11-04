@@ -37,7 +37,7 @@ def get_bottlenecks(start: str | None = None, end: str | None = None):
 # Add this endpoint below your bottleneck route
 @app.get("/api/analytics/edc")
 def get_edc_forecasts(route: str | None = None):
-    """Endpoint serving Linear Regression EDC forecasts."""
+    """Endpoint serving selected working-time EDC forecasts with a separate safety allowance."""
     try:
         ids = [int(x) for x in route.split(',') if x.strip()] if route else None
         data = calculate_edc(ids)

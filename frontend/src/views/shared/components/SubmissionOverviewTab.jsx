@@ -89,9 +89,9 @@ export default function SubmissionOverviewTab({ type, scopes }) {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {visible.map(document => (
                 <tr key={document.ini_id} onClick={() => setSelectedDocument(document)} className="cursor-pointer hover:bg-gray-50/70 dark:hover:bg-[#2b1317]/50 transition-colors">
-                  <td className="px-5 py-4"><p className="flex items-center gap-2 font-bold text-gray-900 dark:text-white"><FileText size={15} className="text-red-700 dark:text-red-400" /> {document.title}</p></td>
-                  <td className="px-5 py-4"><p className="font-semibold text-gray-800 dark:text-gray-200">{document.submitted_by}</p><p className="text-xs text-gray-500 dark:text-gray-400">{document.office_name || document.department_name || 'No affiliation listed'}</p></td>
-                  <td className="px-5 py-4 text-gray-600 dark:text-gray-400">{document.process_name}</td>
+                  <td className="px-5 py-4"><p className="flex min-w-0 items-center gap-2 font-bold text-gray-900 dark:text-white"><FileText size={15} className="shrink-0 text-red-700 dark:text-red-400" /><span title={document.title} className="block max-w-[14rem] truncate">{document.title}</span></p></td>
+                  <td className="px-5 py-4"><p title={document.submitted_by} className="max-w-[12rem] truncate font-semibold text-gray-800 dark:text-gray-200">{document.submitted_by}</p><p title={document.office_name || document.department_name || 'No affiliation listed'} className="max-w-[12rem] truncate text-xs text-gray-500 dark:text-gray-400">{document.office_name || document.department_name || 'No affiliation listed'}</p></td>
+                  <td className="px-5 py-4 text-gray-600 dark:text-gray-400"><span title={document.process_name} className="block max-w-[12rem] truncate">{document.process_name}</span></td>
                   <td className="px-5 py-4"><span className="rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2.5 py-1 text-[10px] font-black uppercase text-gray-700 dark:text-gray-300">{document.current_status}</span></td>
                   <td className="px-5 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{new Date(document.created_at).toLocaleDateString()}</td>
                 </tr>

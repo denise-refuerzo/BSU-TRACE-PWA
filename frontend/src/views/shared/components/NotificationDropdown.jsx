@@ -1,34 +1,32 @@
-import {parsePhilippineTime} from '../../../utils/philippineTime';
-import React, { useState, useEffect, useRef } from 'react';
-import { Bell, X, Inbox, CheckCheck, CheckSquare, Square } from 'lucide-react';
+import {parsePhilippineTime, formatPhilippineDate} from '../../../utils/philippineTime';
+import { useState, useEffect, useRef } from 'react';
+import { Bell, X, Inbox, CheckCheck, CheckSquare, Square, Trash2 } from 'lucide-react';
+
+const storedIds = key => {
+  try { return JSON.parse(localStorage.getItem(key) || '[]'); }
+  catch { return []; }
+};
 
 export default function NotificationDropdown({
   notifications = [],
   onNotificationClick,
-  userId = null
+  userId = null,
+  filters = []
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [readNotificationIds, setReadNotificationIds] = useState([]);
+  const [readNotificationIds, setReadNotificationIds] = useState(() => storedIds(`bsu_read_notifications_${userId || 'guest'}`));
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [clearedIds, setClearedIds] = useState(() => storedIds(`bsu_cleared_notifications_${userId || 'guest'}`));
+  const [sortOrder, setSortOrder] = useState('newest');
+  const [category, setCategory] = useState('all');
   
   const containerRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const isLongPressTriggeredRef = useRef(false);
 
   const storageKey = `bsu_read_notifications_${userId || 'guest'}`;
-
-  // Load read notifications from localStorage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        setReadNotificationIds(JSON.parse(stored));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, [storageKey]);
+  const clearedStorageKey = `bsu_cleared_notifications_${userId || 'guest'}`;
 
   // Persist read notifications
   const persistReadIds = (updatedIds) => {
@@ -39,6 +37,21 @@ export default function NotificationDropdown({
       console.error(e);
     }
   };
+
+  const persistClearedIds = (updatedIds) => {
+    const limited = [...new Set(updatedIds.map(String))].slice(-500);
+    setClearedIds(limited);
+    try { localStorage.setItem(clearedStorageKey, JSON.stringify(limited)); }
+    catch (error) { console.error(error); }
+  };
+
+  const visibleNotifications = notifications.filter(n => !clearedIds.includes(String(n.id)));
+  const filteredNotifications = visibleNotifications
+    .filter(n => category === 'all' || (n.categories || [n.category]).includes(category))
+    .sort((a,b) => {
+      const difference = (parsePhilippineTime(b.time)?.getTime() || 0) - (parsePhilippineTime(a.time)?.getTime() || 0);
+      return sortOrder === 'newest' ? difference : -difference;
+    });
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -55,25 +68,26 @@ export default function NotificationDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  const unreadNotifications = notifications.filter(
+  const unreadNotifications = visibleNotifications.filter(
     (n) => !readNotificationIds.includes(String(n.id))
   );
   const hasUnread = unreadNotifications.length > 0;
 
   const formatRelativeTime = (timestamp) => {
     if (!timestamp) return 'Just now';
-    const localizedString = timestamp;
     const now = new Date();
-    const past = parsePhilippineTime(localizedString);
+    const past = parsePhilippineTime(timestamp);
+    if (!past) return '—';
     const msPerMinute = 60 * 1000;
     const msPerHour = msPerMinute * 60;
     const msPerDay = msPerHour * 24;
     
     const elapsed = now - past;
+    if (elapsed < 0) return formatPhilippineDate(timestamp);
     if (elapsed < msPerMinute) return 'Just now';
     if (elapsed < msPerHour) return `${Math.round(elapsed / msPerMinute)}m ago`;
     if (elapsed < msPerDay) return `${Math.round(elapsed / msPerHour)}h ago`;
-    return `${Math.round(elapsed / msPerDay)}d ago`;
+    return formatPhilippineDate(timestamp);
   };
 
   // -------------------------------------------------------------
@@ -136,19 +150,26 @@ export default function NotificationDropdown({
   };
 
   const handleMarkAllAsRead = () => {
-    const allIds = notifications.map((n) => String(n.id));
+    const allIds = visibleNotifications.map((n) => String(n.id));
     persistReadIds(allIds);
     setIsSelectMode(false);
     setSelectedIds([]);
   };
 
   const handleToggleSelectAll = () => {
-    if (selectedIds.length === notifications.length) {
+    if (selectedIds.length === filteredNotifications.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(notifications.map((n) => n.id));
+      setSelectedIds(filteredNotifications.map((n) => n.id));
     }
   };
+
+  const handleClear = () => {
+    persistClearedIds([...clearedIds, ...visibleNotifications.map(n => n.id)]);
+    setSelectedIds([]);
+    setIsSelectMode(false);
+  };
+  const handleClearOne = id => persistClearedIds([...clearedIds, id]);
 
   return (
     <div className="relative" ref={containerRef}>
@@ -201,7 +222,7 @@ export default function NotificationDropdown({
                     onClick={handleToggleSelectAll}
                     className="text-[11px] font-bold text-neutral-600 dark:text-gray-300 hover:text-neutral-900 dark:hover:text-white cursor-pointer"
                   >
-                    {selectedIds.length === notifications.length ? 'Deselect All' : 'Select All'}
+                    {selectedIds.length === filteredNotifications.length ? 'Deselect All' : 'Select All'}
                   </button>
                   <button
                     onClick={() => {
@@ -224,6 +245,7 @@ export default function NotificationDropdown({
                       <CheckCheck size={14} /> Mark all
                     </button>
                   )}
+                  {visibleNotifications.length > 0 && <button onClick={handleClear} className="text-[11px] font-bold text-neutral-600 dark:text-gray-300 hover:text-red-800 dark:hover:text-red-400 flex items-center gap-1" title="Clear all notifications"><Trash2 size={14}/> Clear</button>}
                   <button
                     onClick={() => setIsOpen(false)}
                     className="text-neutral-400 dark:text-gray-400 hover:text-neutral-600 dark:hover:text-gray-200 p-1 rounded-lg cursor-pointer md:hidden"
@@ -235,9 +257,19 @@ export default function NotificationDropdown({
             </div>
           </div>
 
+          {!isSelectMode && <div className="flex flex-wrap gap-2 border-b border-neutral-100 dark:border-[#42292f] px-4 py-2">
+            {filters.length > 0 && <select aria-label="Filter notifications" value={category} onChange={event => setCategory(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] px-2 py-1.5 text-[11px] text-neutral-700 dark:text-gray-200">
+              <option value="all">All notifications</option>
+              {filters.map(filter => <option key={filter.value} value={filter.value}>{filter.label}</option>)}
+            </select>}
+            <select aria-label="Sort notifications" value={sortOrder} onChange={event => setSortOrder(event.target.value)} className="rounded-lg border border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] px-2 py-1.5 text-[11px] text-neutral-700 dark:text-gray-200">
+              <option value="newest">Newest first</option><option value="oldest">Oldest first</option>
+            </select>
+          </div>}
+
           {/* Notification List */}
           <div className="overflow-y-auto divide-y divide-neutral-100 dark:divide-gray-800 flex-1">
-            {notifications.map((n) => {
+            {filteredNotifications.map((n) => {
               const isRead = readNotificationIds.includes(String(n.id));
               const isSelected = selectedIds.includes(n.id);
 
@@ -287,15 +319,20 @@ export default function NotificationDropdown({
                       {n.message}
                     </p>
                   </div>
+                  {!isSelectMode && <button type="button" onClick={event => { event.stopPropagation(); handleClearOne(n.id); }}
+                    onMouseDown={event => event.stopPropagation()} aria-label={`Clear notification: ${n.title}`}
+                    title="Clear notification" className="shrink-0 rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-700 dark:hover:bg-[#2b1317]">
+                    <X size={13}/>
+                  </button>}
                 </div>
               );
             })}
 
-            {notifications.length === 0 && (
+            {filteredNotifications.length === 0 && (
               <div className="p-8 text-center flex flex-col items-center justify-center text-neutral-400 dark:text-gray-500">
                 <Inbox size={28} className="mb-2 opacity-40 text-neutral-300 dark:text-gray-600" />
                 <p className="text-xs font-bold">No active notifications</p>
-                <p className="text-[10px] text-neutral-400 dark:text-gray-500 mt-0.5">You're all caught up with your documents.</p>
+                <p className="text-[10px] text-neutral-400 dark:text-gray-500 mt-0.5">No notifications in this view.</p>
               </div>
             )}
           </div>
@@ -316,7 +353,7 @@ export default function NotificationDropdown({
             </div>
           )}
 
-          {!isSelectMode && notifications.length > 0 && (
+          {!isSelectMode && filteredNotifications.length > 0 && (
             <div className="px-4 py-2 border-t border-neutral-100 dark:border-[#42292f] bg-neutral-50/60 dark:bg-[#1c1113] text-[10px] text-neutral-400 dark:text-gray-500 text-center select-none">
               Tip: Press & hold any notification to enter multi-select mode
             </div>

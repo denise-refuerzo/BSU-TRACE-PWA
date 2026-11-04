@@ -29,10 +29,10 @@ function CandidateRows({ people, selectedCandidates, busy, candidateLoading, onT
               {checked && <Check size={13}/>}
             </span>
             <span className="min-w-0 flex-1">
-              <strong className="block truncate text-sm text-neutral-900 dark:text-white">{candidate.full_name}</strong>
-              <span className="block truncate text-xs text-neutral-500 dark:text-gray-400">{candidate.uni_email}</span>
+              <strong title={candidate.full_name} className="block truncate text-sm text-neutral-900 dark:text-white">{candidate.full_name}</strong>
+              <span title={candidate.uni_email} className="block truncate text-xs text-neutral-500 dark:text-gray-400">{candidate.uni_email}</span>
               {(candidate.office_name || candidate.department_name) && (
-                <span className="mt-0.5 block truncate text-[10px] font-semibold text-neutral-400 dark:text-gray-500">
+                <span title={[candidate.office_name, candidate.department_name].filter(Boolean).join(' · ')} className="mt-0.5 block truncate text-[10px] font-semibold text-neutral-400 dark:text-gray-500">
                   {[candidate.office_name, candidate.department_name].filter(Boolean).join(' · ')}
                 </span>
               )}

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Bar, Doughnut, Line, Pie } from 'react-chartjs-2';
 import { baseChartOptions, buildForecastChartData, forecastChartOptions } from '../analyticsCharts';
-import { sortMetricRows, summarizeDemandForecast } from '../demandAnalytics';
+import { sortMetricRows, summarizeDemandForecast, weeklyDemandForecast } from '../demandAnalytics';
 
 const COLORS = ['#991b1b', '#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4b5563'];
 const GSO_LAYOUT = [
@@ -163,6 +163,7 @@ export default function OperationalAnalyticsTab({
   const [frequencyMode, setFrequencyMode] = useState('documents');
   const [frequencyChart, setFrequencyChart] = useState('bar');
   const [forecastChart, setForecastChart] = useState('line');
+  const [forecastPeriod, setForecastPeriod] = useState('daily');
   const [routingView, setRoutingView] = useState('bar');
   const [inventorySort, setInventorySort] = useState('desc');
   const [frequencySort, setFrequencySort] = useState('desc');
@@ -226,7 +227,7 @@ export default function OperationalAnalyticsTab({
     scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { beginAtZero: true, grid: { color: 'rgba(150,150,150,0.1)' }, ticks: { precision: 0 } } }
   };
 
-  const forecastData = buildForecastChartData(chartReadyDemandData || [], forecastChart === 'line');
+  const forecastData = buildForecastChartData(forecastPeriod === 'weekly' ? weeklyDemandForecast(chartReadyDemandData || []) : chartReadyDemandData || [], forecastChart === 'line');
   const demandSummary = summarizeDemandForecast(chartReadyDemandData || []);
   const formatExpected = value => Number(value || 0).toFixed(1);
 
@@ -299,23 +300,27 @@ export default function OperationalAnalyticsTab({
     forecast: card => (
       <Fragment key={card.id}>
         <DashboardCard card={card} editMode={editMode} onResize={cycleCardSize} onDragStart={setDraggedId} onDrop={moveCard}
-          title="Demand Planning: Vans & Facilities" subtitle="Historical usage with a 30-day demand forecast shown as dashed lines."
+          title="Demand Planning: Vans & Facilities" subtitle="All booking requests by reservation date. Daily and weekly views cover the same next 30 days."
           icon={<Activity className="text-emerald-600 dark:text-emerald-400" size={18} />} accent="border-t-emerald-500">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <select value={demandTimeFilter} onChange={event => setDemandTimeFilter(Number(event.target.value))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 sm:w-auto"><option value={2}>2 months</option><option value={3}>3 months</option><option value={6}>6 months</option><option value={9}>9 months</option><option value={12}>12 months</option></select>
+            <ChartSwitch value={forecastPeriod} onChange={setForecastPeriod} options={[{ value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly totals' }]} />
             <ChartSwitch value={forecastChart} onChange={setForecastChart} options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]} />
           </div>
           <div className="h-64">{chartReadyDemandData?.length ? (forecastChart === 'line' ? <Line data={forecastData} options={forecastChartOptions} /> : <Bar data={forecastData} options={forecastChartOptions} />) : <EmptyState message="No booking history is available for demand planning." />}</div>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{forecastPeriod === 'weekly' ? 'Four complete 7-day periods plus a final 2-day partial period. Partial totals are not comparable with full weeks.' : 'Expected booking counts may be fractional; they are forecasts, not confirmed bookings.'}</p>
+          {(chartReadyDemandData || []).some(row => row.synthetic_history) && <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">Based on synthetic history; real-world accuracy has not been established.</p>}
         </DashboardCard>
         {demandSummary && (
           <section className="xl:col-span-3 rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-900/10 p-4 shadow-sm sm:p-6">
             <div className="flex flex-col gap-2 border-b border-emerald-100 dark:border-emerald-900/50 pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white"><Lightbulb className="text-emerald-600 dark:text-emerald-400" size={18} /> 30-Day Forecast Interpretation</h3>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Expected request averages across the complete projection period.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Expected request totals and peak-risk warnings across the next 30 days.</p>
               </div>
               <span className="w-fit rounded-full border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-[#180e10] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-400">{demandSummary.forecastBasis}</span>
             </div>
+            {demandSummary.historyGapWarning && <p className="mt-3 text-sm text-amber-800 dark:text-amber-300">No requests have been recorded for {demandSummary.daysSinceLastRequest} days. Check that booking history is current before using this forecast for planning.</p>}
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl border border-blue-100 dark:border-blue-900 bg-white dark:bg-[#1c1113] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Van demand</p><p className="mt-1 text-2xl font-black text-blue-700 dark:text-blue-400">{formatExpected(demandSummary.vehicleTotal)}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">requests expected · {formatExpected(demandSummary.vehicleDailyAverage)} daily</p></div>
               <div className="rounded-xl border border-emerald-100 dark:border-emerald-900 bg-white dark:bg-[#1c1113] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Facility demand</p><p className="mt-1 text-2xl font-black text-emerald-700 dark:text-emerald-400">{formatExpected(demandSummary.facilityTotal)}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">requests expected · {formatExpected(demandSummary.facilityDailyAverage)} daily</p></div>
@@ -323,6 +328,17 @@ export default function OperationalAnalyticsTab({
               <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Daily pattern</p><p className="mt-1 text-lg font-black text-gray-900 dark:text-white">{formatExpected(demandSummary.weekdayDailyAverage)} weekdays</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{formatExpected(demandSummary.weekendDailyAverage)} combined requests on weekends</p></div>
             </div>
             <p className="mt-4 text-sm leading-relaxed text-gray-700 dark:text-gray-300"><strong className="text-gray-900 dark:text-white">Overall interpretation:</strong> Demand for {demandSummary.dominantDemand} is expected to be higher over the next {demandSummary.days} days. Plan for approximately {formatExpected(demandSummary.facilityTotal)} facility requests and {formatExpected(demandSummary.vehicleTotal)} van requests, with the strongest average demand occurring on {demandSummary.busiestWeekday}s.</p>
+            <div className="mt-4 border-t border-emerald-100 pt-4 dark:border-emerald-900">
+              <h4 className="text-sm font-bold text-gray-900 dark:text-white">Potential peak-demand days</h4>
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">Warnings estimate the chance of unusually high request counts. They can produce false alarms and do not indicate confirmed bookings or resource availability.</p>
+              {!demandSummary.peakWarningAvailable ? <p className="mt-2 text-sm">Insufficient history to evaluate peak warnings.</p> : !demandSummary.peakWarnings.length ? <p className="mt-2 text-sm">No dates crossed the warning threshold. This does not rule out unexpected peaks.</p> : (
+                <div className="mt-3 max-h-60 overflow-auto">
+                  <table className="w-full text-left text-xs"><thead><tr><th className="p-2">Date</th><th className="p-2">Demand</th><th className="p-2">Peak definition</th><th className="p-2">Estimated chance</th></tr></thead><tbody>
+                    {demandSummary.peakWarnings.map(warning => <tr key={`${warning.date}-${warning.category}`} className="border-t border-emerald-100 dark:border-emerald-900"><td className="p-2">{warning.date}</td><td className="p-2">{warning.category}</td><td className="p-2">More than {warning.countThreshold} requests</td><td className="p-2">{Math.round(warning.probability * 100)}%</td></tr>)}
+                  </tbody></table>
+                </div>
+              )}
+            </div>
           </section>
         )}
       </Fragment>

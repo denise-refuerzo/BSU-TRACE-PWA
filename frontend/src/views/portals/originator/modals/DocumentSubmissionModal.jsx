@@ -13,6 +13,7 @@ export default function DocumentSubmissionModal({
   processTypes,
   workflowsLoading, workflowError, retryWorkflows,
   estimatedDate,
+  estimatedWorkingHours,
   selectedRoutePreview,
   canCompleteOriginProcessing = false,
   submitting = false,
@@ -97,7 +98,7 @@ export default function DocumentSubmissionModal({
           </label>
           {custom && <div className="space-y-4 border-2 border-rose-100 dark:border-rose-900 rounded-2xl p-5 bg-gradient-to-br from-rose-50/70 dark:from-rose-950/40 via-white dark:via-[#180e10] to-amber-50/50 dark:to-amber-950/30 shadow-sm">
             <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20 px-4 py-3"><p className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-400">Custom route · immediate processing</p><p className="text-xs text-amber-900/80 dark:text-amber-300 mt-1">ICT reviews this route separately before making it available to everyone.</p></div>
-            <div className="rounded-xl border border-rose-100 dark:border-rose-900 bg-white dark:bg-[#1c1113] px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-gray-400">Estimated delivery</p><p className="text-sm font-bold text-rose-900 dark:text-rose-400 mt-1">{estimatedDate || 'Complete the route stops to calculate'}</p></div>
+            <div className="rounded-xl border border-rose-100 dark:border-rose-900 bg-white dark:bg-[#1c1113] px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-gray-400">Estimated delivery</p><p className="text-sm font-bold text-rose-900 dark:text-rose-400 mt-1">{estimatedDate || 'Complete the route stops to calculate'}</p><p className="mt-1 text-xs text-neutral-500 dark:text-gray-400">{estimatedWorkingHours != null ? `Expected processing: ${Number(estimatedWorkingHours).toFixed(2)} working hours. ` : ''}Delivery includes an additional 24 working hours (3 working days). Lunch, weekends and recorded closures are excluded.</p></div>
             <p className="text-xs text-gray-600 dark:text-gray-300">Your document starts processing immediately. ICT reviews this route separately before making it available to everyone.</p>
             {catalogLoading && <p role="status" className="text-xs text-gray-500 dark:text-gray-400">Loading offices and categories…</p>}
             {catalogError && <p role="alert" className="text-xs text-red-800 dark:text-red-400">{catalogError} <button type="button" className="underline cursor-pointer" onClick={()=>{setCatalogLoading(true);setRetry(retry+1);}}>Retry</button></p>}
@@ -127,6 +128,7 @@ export default function DocumentSubmissionModal({
             <div>
               <label className="block text-[10px] font-bold text-neutral-400 dark:text-gray-500 uppercase tracking-wider mb-1">Automatic Estimate Based On Route (EDC)</label>
               <input type="text" readOnly value={estimatedDate || "Select a process type..."} className="w-full border bg-neutral-50 dark:bg-neutral-900 font-medium text-neutral-500 dark:text-gray-400 rounded-lg px-3 py-2 text-xs outline-none cursor-not-allowed border-neutral-200 dark:border-gray-800" />
+              <p className="mt-1 text-xs text-neutral-500 dark:text-gray-400">{estimatedWorkingHours != null ? `Expected processing: ${Number(estimatedWorkingHours).toFixed(2)} working hours. ` : ''}Delivery includes an additional 24 working hours (3 working days). Lunch, weekends and recorded closures are excluded.</p>
             </div>
           </div>}
           {!custom && routePreview.length > 0 && (

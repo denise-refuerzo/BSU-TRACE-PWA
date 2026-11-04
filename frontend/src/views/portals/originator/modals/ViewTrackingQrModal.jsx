@@ -1,5 +1,6 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import TrackingId from '../../../shared/components/TrackingId';
 
 export default function ViewTrackingQrModal({ selectedDoc, setShowQrOverlay }) {
   return (
@@ -18,9 +19,7 @@ export default function ViewTrackingQrModal({ selectedDoc, setShowQrOverlay }) {
             includeMargin={true}
             fgColor={"#171717"}
           />
-          <code className="text-[10px] mt-3 font-mono bg-white dark:bg-[#180e10] px-2 py-0.5 border border-neutral-200 dark:border-gray-700 rounded text-neutral-600 dark:text-gray-300 tracking-wider font-bold">
-            {selectedDoc.qr_code}
-          </code>
+          <div className="mt-3"><TrackingId value={selectedDoc.qr_code}/></div>
         </div>
         <button onClick={() => setShowQrOverlay(false)} className="w-full py-2 bg-neutral-900 dark:bg-gray-800 hover:bg-neutral-800 dark:hover:bg-gray-700 text-white font-medium text-xs rounded-lg transition-colors cursor-pointer">
           Dismiss Viewer

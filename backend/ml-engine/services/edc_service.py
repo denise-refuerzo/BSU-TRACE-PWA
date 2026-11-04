@@ -1,127 +1,188 @@
+"""EDC in working minutes: first scan to completion, including transfers.
+
+Selection uses an inner chronological holdout; the validator reserves a separate
+final test. The 24-working-hour allowance never enters the training target.
+"""
+from collections import defaultdict
+from threading import Lock
+from time import monotonic
 import numpy as np
 import pandas as pd
+from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import Ridge
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 from database import get_db_connection
-from business_calendar import add_business_minutes, MANILA
+from business_calendar import (add_business_minutes, business_minutes_between,
+                               calendar_covers, normalize_start, CALENDAR_NOTE, MANILA)
 
-TRANSFER_MINUTES = 30
+BUFFER_HOURS = 24
+METHODS = ('dwell_transfer', 'ridge', 'ridge_log')
+_MODEL_CACHE = {}
+_MODEL_LOCK = Lock()
 
-def train_linear_edc_model():
-    """
-    Pulls historical tracked documents and trains a Ridge Regularized 
-    Log-Linear Regression model with engineered routing features.
-    """
-    dwell_query = """
-        SELECT current_office_id,
-               AVG(COALESCE(duration_minutes, EXTRACT(EPOCH FROM (time_out - time_in))/60.0)) AS avg_minutes,
-               COALESCE(STDDEV(COALESCE(duration_minutes, EXTRACT(EPOCH FROM (time_out - time_in))/60.0)), 30.0) AS std_minutes
-        FROM public.processed_document
-        WHERE time_in IS NOT NULL AND time_out IS NOT NULL
-        GROUP BY current_office_id;
-    """
-    doc_history_query = """
-        SELECT 
-            id.ini_id,
-            id.created_at,
-            id.route_snapshot,
-            EXTRACT(EPOCH FROM (MAX(pd.time_out) - MIN(pd.time_in))) / 60.0 AS actual_total_minutes,
-            COUNT(pd.pd_id) AS total_hops,
-            BOOL_OR(pd.is_adhoc) AS had_detour
-        FROM public.initial_document id
-        JOIN public.processed_document pd ON id.ini_id = pd.ini_id
-        WHERE pd.time_in IS NOT NULL AND pd.time_out IS NOT NULL AND id.route_snapshot IS NOT NULL
-        GROUP BY id.ini_id, id.created_at, id.route_snapshot
-        HAVING COUNT(pd.pd_id) >= 2;
+
+def load_edc_history():
+    query = """
+        SELECT d.ini_id, d.route_snapshot, d.title LIKE 'Synthetic %%' AS synthetic,
+               pd.pd_id, pd.s_id, pd.current_office_id, pd.time_in, pd.time_out
+        FROM public.initial_document d
+        JOIN public.processed_document pd ON pd.ini_id = d.ini_id
+        WHERE d.route_snapshot IS NOT NULL
+        ORDER BY d.ini_id, pd.time_in NULLS LAST, pd.pd_id
     """
     with get_db_connection() as conn:
-        dwell_df = pd.read_sql_query(dwell_query, conn)
-        docs_df = pd.read_sql_query(doc_history_query, conn)
+        steps = pd.read_sql_query(query.replace('%%', '%'), conn)
+    return prepare_edc_history(steps)
 
-    dwell_mean_map = dict(zip(dwell_df['current_office_id'].astype(int), dwell_df['avg_minutes'].astype(float)))
-    dwell_std_map = dict(zip(dwell_df['current_office_id'].astype(int), dwell_df['std_minutes'].astype(float)))
-    
-    global_mean = float(dwell_df['avg_minutes'].mean()) if not dwell_df.empty else 240.0
-    global_std = float(dwell_df['std_minutes'].mean()) if not dwell_df.empty else 60.0
 
-    if len(docs_df) < 20:
-        return None, dwell_mean_map, global_mean
+def prepare_edc_history(steps):
+    records, excluded = [], 0
+    for ini_id, group in steps.groupby('ini_id', sort=False):
+        group = group.sort_values(['time_in', 'pd_id'])
+        route = [int(x) for x in group.iloc[0].route_snapshot if x is not None]
+        if (len(group) < 2 or not route or group[['time_in', 'time_out']].isna().any().any()
+                or int(group.iloc[-1].s_id) != 5):
+            excluded += 1
+            continue
+        dwells, transfers, previous = [], [], None
+        invalid = False
+        for row in group.itertuples():
+            start, end = pd.Timestamp(row.time_in).to_pydatetime(), pd.Timestamp(row.time_out).to_pydatetime()
+            if end < start or (previous is not None and start < previous[1]):
+                invalid = True
+                break
+            dwells.append((int(row.current_office_id), business_minutes_between(start, end)))
+            if previous is not None:
+                transfers.append((previous[0], int(row.current_office_id),
+                                  business_minutes_between(previous[1], start)))
+            previous = (int(row.current_office_id), end)
+        if invalid:
+            excluded += 1
+            continue
+        start, end = pd.Timestamp(group.iloc[0].time_in), pd.Timestamp(group.iloc[-1].time_out)
+        target = business_minutes_between(start.to_pydatetime(), end.to_pydatetime())
+        if target <= 0:
+            excluded += 1
+            continue
+        records.append(dict(ini_id=int(ini_id), route=route, start=start, end=end,
+                            minutes=target, dwells=dwells, transfers=transfers,
+                            synthetic=bool(group.iloc[0].get('synthetic', False))))
+    docs = pd.DataFrame(records, columns=['ini_id','route','start','end','minutes','dwells','transfers','synthetic'])
+    docs = docs.sort_values(['start', 'ini_id']).reset_index(drop=True)
+    docs.attrs['excluded_documents'] = excluded
+    return docs
 
-    # Filter extreme right-tail outlier anomalies (> 99th percentile)
-    upper_threshold = docs_df['actual_total_minutes'].quantile(0.99)
-    docs_df = docs_df[docs_df['actual_total_minutes'] <= upper_threshold].copy()
 
-    X, y = [], []
-    for _, row in docs_df.iterrows():
-        route = [int(s) for s in row['route_snapshot'] if s is not None]
-        base_dwell_sum = sum(dwell_mean_map.get(s, global_mean) for s in route)
-        dwell_volatility = sum(dwell_std_map.get(s, global_std) for s in route)
-        hops = float(row['total_hops'])
-        detour = 1.0 if row['had_detour'] else 0.0
-        
-        # Day of week feature (Thu/Fri submission captures weekend lag)
-        created_dt = pd.to_datetime(row['created_at'])
-        weekend_risk = 1.0 if created_dt.weekday() in [3, 4] else 0.0
+def temporal_split(docs, fraction=0.8):
+    """Do not train on documents whose completion was unknown at prediction time."""
+    if len(docs) < 2:
+        return docs.iloc[:0], docs
+    boundary = docs.iloc[min(len(docs)-1, max(1, int(len(docs)*fraction)))].start
+    return docs[(docs.start < boundary) & (docs.end < boundary)], docs[docs.start >= boundary]
 
-        X.append([base_dwell_sum, dwell_volatility, hops, detour, weekend_risk])
-        y.append(np.log1p(row['actual_total_minutes']))
 
-    model = Ridge(alpha=1.0)
-    model.fit(X, y)
-    return model, dwell_mean_map, global_mean
+class EDCModel:
+    def __init__(self, method='dwell_transfer'):
+        self.method = method
+
+    def fit(self, docs):
+        dwell, transfer = defaultdict(list), defaultdict(list)
+        for row in docs.itertuples():
+            for office, minutes in row.dwells:
+                dwell[office].append(minutes)
+            for a, b, minutes in row.transfers:
+                transfer[(a, b)].append(minutes)
+        all_dwell = [x for values in dwell.values() for x in values]
+        all_transfer = [x for values in transfer.values() for x in values]
+        self.global_dwell = float(np.mean(all_dwell)) if all_dwell else 240.0
+        self.global_transfer = float(np.mean(all_transfer)) if all_transfer else 30.0
+        self.dwell = {k: float(np.mean(v)) for k,v in dwell.items()}
+        self.transfer = {k: float(np.mean(v)) for k,v in transfer.items()}
+        self.pipeline = None
+        if self.method != 'dwell_transfer' and len(docs) >= 20:
+            self.pipeline = make_pipeline(DictVectorizer(sparse=False), StandardScaler(), Ridge(alpha=10))
+            y = docs.minutes.to_numpy(float)
+            target = np.log1p(y) if self.method == 'ridge_log' else y
+            features = [self.features(row.route, row.start) for row in docs.itertuples()]
+            self.pipeline.fit(features, target)
+            # Training-only retransformation correction for log predictions.
+            self.smearing = float(np.mean(np.exp(target-self.pipeline.predict(features)))) if self.method == 'ridge_log' else 1
+        return self
+
+    def features(self, route, start):
+        start = pd.Timestamp(start)
+        f = {'dwell': sum(self.dwell.get(x, self.global_dwell) for x in route),
+             'transfer': sum(self.transfer.get((a,b), self.global_transfer) for a,b in zip(route,route[1:])),
+             'stops': len(route), 'start_hour': start.hour + start.minute/60,
+             'weekday': str(start.weekday()), 'month': str(start.month)}
+        for office in route:
+            key = f'office_{office}'
+            f[key] = f.get(key, 0) + 1
+        return f
+
+    def predict(self, docs):
+        features = [self.features(row.route, row.start) for row in docs.itertuples()]
+        if not features:
+            return np.array([])
+        if self.pipeline is None:
+            return np.array([f['dwell'] + f['transfer'] for f in features])
+        pred = self.pipeline.predict(features)
+        if self.method == 'ridge_log':
+            pred = np.exp(pred) * self.smearing - 1
+        return np.maximum(pred, 0)
+
+
+def select_edc_model(docs):
+    train, validation = temporal_split(docs)
+    scores = {}
+    if len(train) >= 50 and len(validation) >= 20:
+        for method in METHODS:
+            pred = EDCModel(method).fit(train).predict(validation)
+            error = validation.minutes.to_numpy(float) - pred
+            scores[method] = {'mae_minutes': float(np.abs(error).mean()),
+                              'rmse_minutes': float(np.sqrt(np.mean(error**2)))}
+    method = min(scores, key=lambda m: (scores[m]['mae_minutes'], scores[m]['rmse_minutes'])) if scores else 'dwell_transfer'
+    return EDCModel(method).fit(docs), scores
+
+
+def prediction_record(model, route, start, process_id=None):
+    raw = float(model.predict(pd.DataFrame([{'route':route, 'start':start}]))[0])
+    raw_end = add_business_minutes(start, raw)
+    buffered_end = add_business_minutes(start, raw + BUFFER_HOURS*60)
+    return {'process_id': process_id, 'estimated_hours_to_complete': round(raw/60, 2),
+            'safety_buffer_working_hours': BUFFER_HOURS,
+            'buffered_working_hours': round(raw/60 + BUFFER_HOURS, 2),
+            'estimated_completion_at': raw_end.isoformat(),
+            'estimated_delivery_date': buffered_end.date().isoformat(),
+            'buffered_delivery_at': buffered_end.isoformat(),
+            'prediction_method': model.method, 'duration_unit': 'working hours',
+            'estimate_start': start.isoformat(),
+            'calendar_coverage_available': calendar_covers(start, buffered_end),
+            'calendar_note': CALENDAR_NOTE}
+
+
+def serving_model():
+    # Repeated route previews should not reread/retrain the full history.
+    with _MODEL_LOCK:
+        if not _MODEL_CACHE or monotonic()-_MODEL_CACHE['at'] >= 900:
+            docs = load_edc_history()
+            now = pd.Timestamp.now(tz=MANILA).tz_localize(None)
+            docs = docs[docs.end <= now]
+            model, _ = select_edc_model(docs)
+            _MODEL_CACHE.update(model=model, at=monotonic())
+        return _MODEL_CACHE['model']
 
 
 def calculate_edc(route_ids=None):
-    model, dwell_map, global_avg = train_linear_edc_model()
-    now_manila = pd.Timestamp.now(tz=MANILA)
-    weekend_risk = 1.0 if now_manila.weekday() in [3, 4] else 0.0
-
+    model = serving_model()
+    start = normalize_start(pd.Timestamp.now(tz=MANILA).to_pydatetime())
     if route_ids:
-        valid_route = [int(stop) for stop in route_ids if stop is not None]
-        base_sum = sum(dwell_map.get(stop, global_avg) for stop in valid_route)
-        hops = float(len(valid_route))
-        
-        if model is not None:
-            features = np.array([[base_sum, hops * 30.0, hops, 0.0, weekend_risk]])
-            pred_minutes = float(np.expm1(model.predict(features)[0]))
-            pred_minutes = max(base_sum, pred_minutes)
-        else:
-            pred_minutes = base_sum + max(0, len(valid_route) - 1) * TRANSFER_MINUTES
-
-        delivery = add_business_minutes(now_manila.to_pydatetime(), pred_minutes)
-        return [{
-            "process_id": None,
-            "estimated_hours_to_complete": float(round(pred_minutes / 60.0, 2)),
-            "estimated_delivery_date": delivery.date().isoformat(),
-        }]
-
-    query_processes = """
-        SELECT p.p_id, r.stop_1, r.stop_2, r.stop_3, r.stop_4, r.stop_5, r.stop_6, r.stop_7
-        FROM public.process_type p
-        JOIN public.route r ON p.r_id = r.r_id
-        WHERE p.is_active IS TRUE
-    """
+        route = [int(x) for x in route_ids if x is not None]
+        return [prediction_record(model, route, start)]
     with get_db_connection() as conn:
-        processes = pd.read_sql_query(query_processes, conn)
-
-    predictions = []
-    for _, proc in processes.iterrows():
-        raw_stops = [proc[f'stop_{i}'] for i in range(1, 8)]
-        valid_stops = [int(s) for s in raw_stops if pd.notna(s)]
-        base_sum = sum(dwell_map.get(s, global_avg) for s in valid_stops)
-        hops = float(len(valid_stops))
-
-        if model is not None:
-            features = np.array([[base_sum, hops * 30.0, hops, 0.0, weekend_risk]])
-            pred_minutes = float(np.expm1(model.predict(features)[0]))
-            pred_minutes = max(base_sum, pred_minutes)
-        else:
-            pred_minutes = base_sum + max(0, len(valid_stops) - 1) * TRANSFER_MINUTES
-
-        delivery = add_business_minutes(now_manila.to_pydatetime(), pred_minutes)
-        predictions.append({
-            "process_id": int(proc['p_id']),
-            "estimated_hours_to_complete": float(round(pred_minutes / 60.0, 2)),
-            "estimated_delivery_date": delivery.date().isoformat(),
-        })
-
-    return predictions
+        processes = pd.read_sql_query("""SELECT p.p_id, r.stop_1,r.stop_2,r.stop_3,r.stop_4,r.stop_5,r.stop_6,r.stop_7
+            FROM public.process_type p JOIN public.route r ON p.r_id=r.r_id WHERE p.is_active IS TRUE""", conn)
+    return [prediction_record(model, [int(getattr(p,f'stop_{i}')) for i in range(1,8)
+                                      if pd.notna(getattr(p,f'stop_{i}'))], start, int(p.p_id))
+            for p in processes.itertuples()]

@@ -1368,49 +1368,78 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
   const officeId = req.user.o_id || 0;
 
   try {
-    let alertRows = [];
-    
-    if (roleId === 1) {
-      // 1. ORIGINATOR: Alerts every time any action occurs on their document
-      const query = `
-        SELECT 
-          h.public_id as id,
-          idoc.public_id AS ini_id,
-          idoc.title,
-          h.action_type as title_alert,
-          ('Action performed at ' || COALESCE(off.office_name, 'Origin Station')) as message,
-          CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp - INTERVAL '8 hours' ELSE h.action_timestamp END as time
-        FROM public.office_action_history h
-        JOIN public.initial_document idoc ON h.ini_id = idoc.ini_id
-        LEFT JOIN public.offices off ON h.o_id = off.o_id
-        WHERE idoc.u_id = $1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=$1)
-        ORDER BY h.history_id DESC LIMIT 10;
-      `;
-      const result = await pool.query(query, [userId]);
-      alertRows = result.rows.map(row => ({
-        id: row.id,
-        ini_id: row.ini_id, /* Passed cleanly down to client tracking layer */
-        title: row.title_alert,
-        message: `"${row.title}": ${row.message}`,
-        time: row.time
-      }));
-
-    } else if ([2,3,4].includes(roleId)) {
-      const result=await pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,h.action_type AS title,
-        u.full_name || ' · ' || o.office_name AS message,
-        CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
-        FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
-        JOIN public."User" u ON h.u_id=u.u_id JOIN public.offices o ON h.o_id=o.o_id
-        WHERE i.submission_office_id=$1 OR EXISTS (SELECT 1 FROM public.processed_document pd
-          WHERE pd.ini_id=i.ini_id AND pd.current_office_id=$1 AND pd.time_out IS NULL)
-        ORDER BY h.history_id DESC LIMIT 20`,[officeId]);
-      alertRows=result.rows;
+    const jobs = [pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,
+      h.action_type AS action_type,o.office_name,
+      CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
+      FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
+      LEFT JOIN public.offices o ON h.o_id=o.o_id
+      WHERE i.u_id=$1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=i.ini_id AND dc.user_id=$1)
+      ORDER BY h.history_id DESC LIMIT 30`,[userId])];
+    jobs.push([2,3,4].includes(roleId) && officeId ? pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,
+      h.action_type AS action_type,o.office_name,
+      CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
+      FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
+      LEFT JOIN public."User" actor ON h.u_id=actor.u_id
+      LEFT JOIN public.offices o ON actor.o_id=o.o_id
+      WHERE h.o_id=$1 AND (i.submission_office_id=$1 OR EXISTS
+        (SELECT 1 FROM public.processed_document pd WHERE pd.ini_id=i.ini_id AND pd.current_office_id=$1))
+      ORDER BY h.history_id DESC LIMIT 30`,[officeId]) : Promise.resolve({rows:[]}));
+    jobs.push(pool.query(`SELECT su.update_id,b.public_id AS booking_id,b.booking_type,b.purpose,
+      su.new_status,su.notification_message,to_char(su.created_at,'YYYY-MM-DD"T"HH24:MI:SS') AS time
+      FROM public.booking_status_updates su JOIN public.bookings b USING(booking_id)
+      WHERE b.u_id=$1 ORDER BY su.update_id DESC LIMIT 30`,[userId]));
+    jobs.push(roleId === 4 ? pool.query(`SELECT b.public_id AS booking_id,b.booking_type,b.purpose,
+      to_char(b.created_at,'YYYY-MM-DD"T"HH24:MI:SS') AS time,u.full_name
+      FROM public.bookings b JOIN public."User" u ON b.u_id=u.u_id
+      ORDER BY b.booking_id DESC LIMIT 30`) : Promise.resolve({rows:[]}));
+    const [personal, office, requestUpdates, incomingRequests] = await Promise.all(jobs);
+    const documentNotice = (row, category) => {
+      const action = row.action_type || 'Document updated';
+      let title = action;
+      let message = `"${row.doc_title}" was updated at ${row.office_name || 'an office'}.`;
+      if (action.startsWith('Ad-Hoc Incoming:')) {
+        title = 'Document routed to your office';
+        message = `"${row.doc_title}" has been routed to you by ${action.slice('Ad-Hoc Incoming:'.length).trim()}.`;
+      } else if (action.startsWith('Ad-Hoc Returned:')) {
+        title = 'Document returned for processing';
+        message = `"${row.doc_title}" has finished processing at ${action.slice('Ad-Hoc Returned:'.length).trim()} and is routed back to you for processing.`;
+      } else if (action.startsWith('Halted:')) {
+        title = 'Processing halted';
+        const source = action.slice('Halted:'.length).trim();
+        message = `"${row.doc_title}" needs correction. It was sent back by ${source.startsWith('Document ') ? row.office_name || 'another office' : source || 'another office'} and processing at your office has been halted.`;
+      } else if (action.startsWith('Sent Back for Revision:')) {
+        title = 'Needs correction';
+        message = `"${row.doc_title}" was returned for correction by ${row.office_name || 'an office'}.`;
+      }
+      return {id:`doc-${row.id}`,ini_id:row.ini_id,title,message,time:row.time,category,categories:[category]};
+    };
+    const alerts = personal.rows.map(row => documentNotice(row,'personal'));
+    if (office) alerts.push(...office.rows.map(row => documentNotice(row,'work')));
+    alerts.push(...requestUpdates.rows.map(row => ({
+      id:`booking-update-${row.update_id}`,booking_id:row.booking_id,category:'personal',
+      title:`${row.booking_type} request ${row.new_status?.toLowerCase() || 'updated'}`,
+      message:row.notification_message || `Your ${row.booking_type?.toLowerCase()} request has been updated.`,time:row.time
+    })));
+    if (incomingRequests) alerts.push(...incomingRequests.rows.map(row => ({
+      id:`booking-new-${row.booking_id}`,booking_id:row.booking_id,category:'requests',
+      title:`New ${row.booking_type?.toLowerCase()} request`,
+      message:`${row.full_name} submitted a request: ${row.purpose || 'No purpose provided'}.`,time:row.time
+    })));
+    const epoch = value => {
+      const time = String(value || '');
+      return Date.parse(/(Z|[+-]\d{2}:?\d{2})$/i.test(time) ? time : `${time}+08:00`) || 0;
+    };
+    const unique = new Map();
+    for (const alert of alerts) {
+      const previous = unique.get(alert.id);
+      if (previous) previous.categories = [...new Set([...(previous.categories || [previous.category]), ...(alert.categories || [alert.category])])];
+      else unique.set(alert.id,alert);
     }
-
-    res.json(alertRows);
+    const feed = [...unique.values()].sort((a,b) => epoch(b.time)-epoch(a.time));
+    res.json(feed.slice(0,80));
   } catch (err) {
     console.error("Notification pull error:", err);
-    res.json([]);
+    res.status(500).json({error:'Unable to load notifications.'});
   }
 });
 
@@ -1707,7 +1736,7 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
         FROM public.initial_document idoc
         JOIN LATERAL (
           SELECT pd.current_office_id,pd.s_id FROM public.processed_document pd
-          WHERE pd.ini_id=idoc.ini_id AND pd.time_out IS NULL
+          WHERE pd.ini_id=idoc.ini_id AND pd.time_out IS NULL AND pd.is_returned_from_adhoc IS NOT TRUE
           ORDER BY pd.pd_id DESC LIMIT 1
         ) active ON active.s_id<>5
         WHERE idoc.lifecycle_state <> 'cancelled' AND
@@ -2345,7 +2374,7 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     await client.query('BEGIN');
     await lockSchedule(client);
     if (typeof isChecked !== 'boolean') throw new Error('Invalid checklist value.');
-    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1 FOR UPDATE', [bookingId]);
+    const booking = await client.query('SELECT booking_id,booking_type,purpose,status FROM public.bookings WHERE public_id=$1 FOR UPDATE', [bookingId]);
     if (!booking.rows.length) throw new Error('Request not found.');
     const internalBookingId = booking.rows[0].booking_id;
     
@@ -2362,8 +2391,16 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
   if (allChecked && allItems.rows.length > 0) {
     await assertConfirmable(client, internalBookingId);
     await client.query("UPDATE public.bookings SET status = 'Approved', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [internalBookingId]);
+    if (!['Approved','Confirmed'].includes(booking.rows[0].status)) await client.query(`INSERT INTO public.booking_status_updates
+      (booking_id,previous_status,new_status,notification_message,updated_by)
+      VALUES ($1,$2,'Approved',$3,$4)`,[internalBookingId,booking.rows[0].status,
+      `Your ${booking.rows[0].booking_type.toLowerCase()} request "${booking.rows[0].purpose}" has been approved. Open the request for details.`,req.user.u_id]);
   } else {
     await client.query("UPDATE public.bookings SET status = 'Pending' WHERE booking_id = $1", [internalBookingId]);
+    if (['Approved','Confirmed'].includes(booking.rows[0].status)) await client.query(`INSERT INTO public.booking_status_updates
+      (booking_id,previous_status,new_status,notification_message,updated_by)
+      VALUES ($1,$2,'Pending',$3,$4)`,[internalBookingId,booking.rows[0].status,
+      `Your ${booking.rows[0].booking_type.toLowerCase()} request "${booking.rows[0].purpose}" needs another review. Open the request for details.`,req.user.u_id]);
   }
 
     await client.query('COMMIT');
@@ -2471,7 +2508,7 @@ app.get('/api/admin/infrastructure-summary', async (req, res) => {
 app.get('/api/admin/dashboard-metrics', async (req, res) => {
   try {
     const activeTracksRes = await pool.query(
-      'SELECT COUNT(DISTINCT ini_id)::int as total FROM public.processed_document WHERE time_out IS NULL'
+      'SELECT COUNT(DISTINCT ini_id)::int as total FROM public.processed_document WHERE time_out IS NULL AND is_returned_from_adhoc IS NOT TRUE'
     );
 
     const systemUsersRes = await pool.query(
@@ -2510,6 +2547,7 @@ app.get('/api/admin/dashboard-metrics', async (req, res) => {
       JOIN public.offices off ON pdoc.current_office_id = off.o_id
       WHERE pdoc.time_in IS NOT NULL 
         AND pdoc.time_out IS NULL
+        AND pdoc.is_returned_from_adhoc IS NOT TRUE
         AND pdoc.time_in < TIMEZONE('Asia/Manila', NOW()) - INTERVAL '48 hours'
       ORDER BY pdoc.time_in ASC;
     `;

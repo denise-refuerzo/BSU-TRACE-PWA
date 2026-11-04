@@ -275,7 +275,7 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
               }`}
             >
               <div className="flex items-center justify-between w-full">
-                <p className={`text-xs font-bold truncate pr-2 ${selectedDoc?.ini_id === doc.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-900 dark:text-white group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors'}`}>
+                <p title={doc.title} className={`min-w-0 text-xs font-bold truncate pr-2 ${selectedDoc?.ini_id === doc.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-900 dark:text-white group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors'}`}>
                   {doc.title}
                 </p>
                 {doc.hasAnyChat && <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shrink-0 animate-pulse"></span>}
@@ -330,7 +330,7 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                 }`}
               >
                 <div className="flex items-center justify-between w-full">
-                  <p className="text-xs font-bold truncate pr-2">{chan.officeName}</p>
+                  <p title={chan.officeName} className="min-w-0 text-xs font-bold truncate pr-2">{chan.officeName}</p>
                   {chan.hasChat && activeChannel?.officeId !== chan.officeId && (
                     <span className="w-2 h-2 bg-amber-500 rounded-full shrink-0"></span>
                   )}

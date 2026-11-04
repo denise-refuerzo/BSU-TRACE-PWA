@@ -1,259 +1,180 @@
+"""Synthetic-history evaluation of the same predictors used by the API.
+
+No database writes. Original-unit errors measure raw predictions, not buffers.
+Each origin selects using earlier history only. This is retrospective evaluation,
+not an untouched test after development. Run --output report.json to save.
+"""
+import argparse
+import json
 import warnings
-warnings.filterwarnings('ignore', category=UserWarning)
-
 from pathlib import Path
-from dotenv import load_dotenv
-
-# Ensure .env from root backend directory is detected
-env_path = Path(__file__).resolve().parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(dotenv_path=env_path)
-else:
-    load_dotenv()
-
 import numpy as np
 import pandas as pd
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-from sklearn.linear_model import Ridge
-from sklearn.model_selection import KFold
-from database import get_db_connection
-
-# Import services
+from business_calendar import MANILA, CALENDAR_NOTE
+from services.edc_service import load_edc_history, temporal_split, select_edc_model, EDCModel, BUFFER_HOURS
+from services.peak_demand_service import (load_booking_history, daily_history, select_demand_method,
+    forecast_demand, select_peak_warning, forecast_peak_probabilities, booking_pickup_components,
+    CATEGORIES, FORECAST_DAYS)
 from services.bottleneck_service import calculate_office_dwell_times
-from services.route_performance_service import (
-    calculate_document_routing_efficiency,
-    calculate_vehicle_scheduling_performance,
-    recommend_optimized_routing,
-    recommend_vehicle_allocation
-)
+from services.route_performance_service import (calculate_document_routing_efficiency,
+    calculate_vehicle_scheduling_performance, recommend_optimized_routing, recommend_vehicle_allocation)
+
 
 def compute_statistical_metrics(y_true, y_pred):
-    y_true = np.array(y_true, dtype=float)
-    y_pred = np.array(y_pred, dtype=float)
-    
-    mae = np.mean(np.abs(y_true - y_pred))
-    rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
-    
-    ss_res = np.sum((y_true - y_pred) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
-    
-    non_zero_mask = y_true != 0
-    mape = np.mean(np.abs((y_true[non_zero_mask] - y_pred[non_zero_mask]) / y_true[non_zero_mask])) * 100 if np.any(non_zero_mask) else 0.0
-    sum_true = np.sum(y_true)
-    wmape = (np.sum(np.abs(y_true - y_pred)) / sum_true * 100) if sum_true != 0 else 0.0
+    y, p = np.asarray(y_true,dtype=float),np.asarray(y_pred,dtype=float)
+    if y.shape != p.shape or not y.size or not np.isfinite(y).all() or not np.isfinite(p).all():
+        raise ValueError('Metrics require equally shaped, finite, nonempty observations')
+    error = y-p
+    denominator = np.sum((y-y.mean())**2)
+    nonzero = y != 0
+    return {'MAE':round(float(np.abs(error).mean()),4),
+            'RMSE':round(float(np.sqrt(np.mean(error**2))),4),
+            'R-squared':round(float(1-np.sum(error**2)/denominator),4) if denominator>0 else None,
+            'MAPE (%)':round(float(np.abs(error[nonzero]/y[nonzero]).mean()*100),2) if nonzero.any() else None,
+            'wMAPE (%)':round(float(np.abs(error).sum()/y.sum()*100),2) if y.sum()>0 else None,
+            'Observations':int(y.size), 'Zero actuals excluded from MAPE':int((~nonzero).sum())}
 
-    return {
-        "MAE": round(float(mae), 4),
-        "RMSE": round(float(rmse), 4),
-        "R-squared": round(float(r2), 4),
-        "MAPE (%)": f"{round(float(mape), 2)}%",
-        "wMAPE (%)": f"{round(float(wmape), 2)}%"
-    }
 
-# =======================================================
-# 1. VALIDATION: EDC REGRESSION (FEATURE-ENGINEERED 5-FOLD CV)
-# =======================================================
-def validate_edc_linear_regression(n_splits=5):
-    dwell_query = """
-        SELECT current_office_id,
-               AVG(COALESCE(duration_minutes, EXTRACT(EPOCH FROM (time_out - time_in))/60.0)) AS avg_minutes,
-               COALESCE(STDDEV(COALESCE(duration_minutes, EXTRACT(EPOCH FROM (time_out - time_in))/60.0)), 30.0) AS std_minutes
-        FROM public.processed_document
-        WHERE time_in IS NOT NULL AND time_out IS NOT NULL
-        GROUP BY current_office_id;
-    """
-    doc_history_query = """
-        SELECT 
-            id.ini_id,
-            id.created_at,
-            id.route_snapshot,
-            EXTRACT(EPOCH FROM (MAX(pd.time_out) - MIN(pd.time_in))) / 60.0 AS actual_total_minutes,
-            COUNT(pd.pd_id) AS total_hops,
-            BOOL_OR(pd.is_adhoc) AS had_detour
-        FROM public.initial_document id
-        JOIN public.processed_document pd ON id.ini_id = pd.ini_id
-        WHERE pd.time_in IS NOT NULL AND pd.time_out IS NOT NULL AND id.route_snapshot IS NOT NULL
-        GROUP BY id.ini_id, id.created_at, id.route_snapshot
-        HAVING COUNT(pd.pd_id) >= 2;
-    """
-    with get_db_connection() as conn:
-        dwell_df = pd.read_sql_query(dwell_query, conn)
-        docs_df = pd.read_sql_query(doc_history_query, conn)
+def validate_edc_linear_regression(n_splits=None):
+    # Name retained for callers; chronological development/test replaces random CV.
+    docs = load_edc_history()
+    if len(docs)<100:
+        return {'Status':'Insufficient completed documents (need 100).'}
+    development,test = temporal_split(docs)
+    if len(development)<50 or len(test)<20:
+        return {'Status':'Insufficient chronology for a separate final test.'}
+    model,scores = select_edc_model(development)
+    actual = test.minutes.to_numpy()/60
+    pred = model.predict(test)/60
+    baseline = EDCModel().fit(development).predict(test)/60
+    return {'selected_method':model.method,'selection_metric':'Inner temporal validation MAE; RMSE breaks ties',
+            'inner_validation':scores, 'unit':'working hours',
+            'raw_prediction':compute_statistical_metrics(actual,pred),
+            'dwell_transfer_baseline':compute_statistical_metrics(actual,baseline),
+            'training_mean_baseline':compute_statistical_metrics(actual,np.repeat(development.minutes.mean()/60,len(test))),
+            'buffer_working_hours':BUFFER_HOURS,
+            'buffered_deadline_coverage_percent':round(float(np.mean(actual<=pred+BUFFER_HOURS)*100),2),
+            'test_start':str(test.start.min()),'test_end':str(test.end.max()),
+            'development_documents':len(development),'test_documents':len(test),
+            'excluded_invalid_or_incomplete_documents':docs.attrs.get('excluded_documents',0),
+            'synthetic_documents':int(docs.synthetic.sum()),
+            'note':'No percentile trimming. Buffer excluded from error metrics. Historical work recalculated with lunch excluded.'}
 
-    if len(docs_df) < (n_splits * 2):
-        return {"Status": "Failed", "Reason": "Insufficient document records for cross-validation."}
 
-    dwell_mean_map = dict(zip(dwell_df['current_office_id'].astype(int), dwell_df['avg_minutes'].astype(float)))
-    dwell_std_map = dict(zip(dwell_df['current_office_id'].astype(int), dwell_df['std_minutes'].astype(float)))
-    
-    global_mean = float(dwell_df['avg_minutes'].mean()) if not dwell_df.empty else 240.0
-    global_std = float(dwell_df['std_minutes'].mean()) if not dwell_df.empty else 60.0
+def peak_metrics(actual,pred,threshold):
+    a,p = np.asarray(actual)>threshold,np.asarray(pred)>threshold
+    tp = int(np.sum(a&p)); predicted = int(p.sum()); observed = int(a.sum())
+    return {'threshold':round(float(threshold),3),'actual_peaks':observed,'predicted_peaks':predicted,
+            'precision':round(tp/predicted,4) if predicted else None,
+            'recall':round(tp/observed,4) if observed else None}
 
-    # Clean outlier records (upper 1% extreme delays)
-    upper_threshold = docs_df['actual_total_minutes'].quantile(0.99)
-    docs_df = docs_df[docs_df['actual_total_minutes'] <= upper_threshold].copy()
 
-    X, y_raw = [], []
-    for _, row in docs_df.iterrows():
-        route = [int(s) for s in row['route_snapshot'] if s is not None]
-        base_dwell = sum(dwell_mean_map.get(s, global_mean) for s in route)
-        dwell_volatility = sum(dwell_std_map.get(s, global_std) for s in route)
-        hops = float(row['total_hops'])
-        detour = 1.0 if row['had_detour'] else 0.0
-        
-        created_dt = pd.to_datetime(row['created_at'])
-        weekend_risk = 1.0 if created_dt.weekday() in [3, 4] else 0.0
+def warning_metrics(actual, probabilities, cutoff, flags=None):
+    y = np.asarray(actual,dtype=bool)
+    p = np.asarray(probabilities,dtype=float)
+    flags = p>=cutoff if flags is None else np.asarray(flags,dtype=bool)
+    tp = int(np.sum(y & flags)); fp = int(np.sum(~y & flags)); fn = int(np.sum(y & ~flags))
+    return {'precision':round(tp/(tp+fp),4) if tp+fp else None,
+            'recall':round(tp/(tp+fn),4) if tp+fn else None,
+            'f1':round(2*tp/(2*tp+fp+fn),4) if 2*tp+fp+fn else None,
+            'brier':round(float(np.mean((p-y.astype(float))**2)),4),
+            'actual_peaks':int(y.sum()),'warnings':int(flags.sum()),
+            'correct_warnings':tp,'false_alarms':fp,'missed_peaks':fn}
 
-        X.append([base_dwell, dwell_volatility, hops, detour, weekend_risk])
-        y_raw.append(row['actual_total_minutes'] / 60.0)
 
-    X = np.array(X)
-    y_raw = np.array(y_raw)
-    y_log = np.log1p(y_raw)
-
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    fold_metrics = []
-
-    for train_idx, test_idx in kf.split(X):
-        model = Ridge(alpha=1.0)
-        model.fit(X[train_idx], y_log[train_idx])
-        y_pred_log = model.predict(X[test_idx])
-        y_pred = np.expm1(y_pred_log)
-        
-        fold_metrics.append(compute_statistical_metrics(y_raw[test_idx], y_pred))
-
-    return {
-        "MAE (Hours)": round(float(np.mean([m["MAE"] for m in fold_metrics])), 4),
-        "RMSE (Hours)": round(float(np.mean([m["RMSE"] for m in fold_metrics])), 4),
-        "R-squared": round(float(np.mean([m["R-squared"] for m in fold_metrics])), 4),
-        "MAPE (%)": f"{round(float(np.mean([float(m['MAPE (%)'].replace('%','')) for m in fold_metrics])), 2)}%",
-        "wMAPE (%)": f"{round(float(np.mean([float(m['wMAPE (%)'].replace('%','')) for m in fold_metrics])), 2)}%"
-    }
-
-# =======================================================
-# 2. VALIDATION: TIME-SERIES PEAK DEMAND (BUSINESS DAYS)
-# =======================================================
-def validate_peak_demand_time_series(test_weeks=8):
-    """
-    Validates Peak Demand across weekly planning cycles.
-    Weekly aggregation eliminates daily zero-inflation artifacts,
-    reflecting practical GSO administrative resource allocation.
-    """
-    query = """
-        SELECT reservation_date, booking_type, COUNT(booking_id) as daily_demand
-        FROM public.bookings
-        WHERE status IN (
-            'Confirmed', 'Approved', 'Ongoing', 'Delayed',
-            'Rescheduled', 'Resource Reassigned', 'Completed'
-        )
-        GROUP BY reservation_date, booking_type
-        ORDER BY reservation_date;
-    """
-    with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn)
-
-    if df.empty or df['reservation_date'].nunique() < 60:
-        return {"Status": "Failed", "Reason": "Need bookings on at least 60 distinct reservation dates."}
-
-    df['reservation_date'] = pd.to_datetime(df['reservation_date'])
-    df['category'] = df['booking_type'].apply(lambda x: 'vehicle_demand' if x == 'Vehicle' else 'facility_demand')
-    
-    # Resample by Week (W-MON) to evaluate periodic peak load
-    weekly_df = df.pivot_table(
-        index='reservation_date', 
-        columns='category', 
-        values='daily_demand', 
-        aggfunc='sum'
-    ).fillna(0).resample('W-MON').sum()
-
-    if len(weekly_df) <= test_weeks:
-        return {"Status": "Failed", "Reason": "Not enough weekly history for the holdout period."}
-
-    train = weekly_df.iloc[:-test_weeks]
-    test = weekly_df.iloc[-test_weeks:]
-
-    results = {}
-    for col in ['vehicle_demand', 'facility_demand']:
-            # Simple Exponential Smoothing: tracks the level without forcing an artificial slope
-            model = ExponentialSmoothing(
-                train[col] + 0.001,
-                trend=None,
-                seasonal=None
-            ).fit(smoothing_level=0.2, optimized=False)
-            
-            preds = np.clip(model.forecast(test_weeks), a_min=0, a_max=None)
-            metrics = compute_statistical_metrics(test[col].values, preds.values)
-            results[col] = {
-                "MAE (Weekly)": metrics["MAE"],
-                "RMSE (Weekly)": metrics["RMSE"],
-                "R-squared": metrics["R-squared"],
-                "MAPE (%)": metrics["MAPE (%)"],
-                "wMAPE (%)": metrics["wMAPE (%)"]
-            }
-
+def validate_peak_demand_time_series(test_weeks=None, booking_data=None, test_periods=6):
+    df = load_booking_history() if booking_data is None else booking_data
+    if df.empty:
+        return {'Status':'No booking history'}
+    # Complete synthetic observation window ends at the last recorded reservation.
+    # Live service extends history to yesterday; report this evaluation boundary.
+    last = min(pd.Timestamp(df.reservation_date.max()),
+               pd.Timestamp.now(tz=MANILA).tz_localize(None).normalize()-pd.Timedelta(days=1))
+    first_cutoff = last-pd.Timedelta(days=FORECAST_DAYS*test_periods)
+    train = daily_history(df,first_cutoff)
+    if len(train)<270:
+        return {'Status':'Need 270 development days plus the requested final test periods'}
+    results = {'test_start':str((first_cutoff+pd.Timedelta(days=1)).date()),'test_end':str(last.date()),
+               'horizon_days':FORECAST_DAYS,'test_origins':test_periods,
+               'selection':'At each origin: six earlier 30-day validation windows; minimize total MAE, daily RMSE breaks ties; no future observations',
+               'evaluation_note':'Retrospective re-evaluation: some final periods were inspected during earlier development; not a new untouched test.',
+               'target':'All booking requests by reservation date, including cancelled/rejected',
+               'synthetic_history':bool(df.synthetic.all()) if 'synthetic' in df else None,
+               'categories':{}}
+    for col in CATEGORIES:
+        method,scores = select_demand_method(df,first_cutoff,col)
+        warning = select_peak_warning(df,first_cutoff,col)
+        probabilities = {name:[] for name in ('selected','constant','weekday')}
+        predictions = {name:[] for name in ('selected','recent_mean','seasonal_naive','seasonal_smoothing')}
+        actuals=[]
+        periods=[]
+        peak_labels=[]
+        already_known_peaks=[]
+        peak_flags={name:[] for name in probabilities}
+        for offset in range(0,FORECAST_DAYS*test_periods,FORECAST_DAYS):
+            cutoff = first_cutoff+pd.Timedelta(days=offset)
+            if offset:
+                method,scores = select_demand_method(df,cutoff,col)
+                warning = select_peak_warning(df,cutoff,col)
+            history = daily_history(df,cutoff)
+            index = pd.date_range(cutoff+pd.Timedelta(days=1),periods=30)
+            actual = daily_history(df,cutoff+pd.Timedelta(days=30))[col].reindex(index).to_numpy()
+            actuals.append(actual)
+            periods.append({'start':str(index[0].date()),'end':str(index[-1].date()),
+                            'actual_total':float(actual.sum()),'forecasts':{},
+                            'selected_method':method,'inner_validation':scores,
+                            'peak_warning_configuration':warning})
+            peak_labels.extend((actual>warning['count_threshold']).tolist())
+            known,_=booking_pickup_components(df,cutoff,col,pd.Series(np.zeros(len(index)),index=index))
+            already_known_peaks.extend((known>warning['count_threshold']).tolist())
+            for name in probabilities:
+                p=forecast_peak_probabilities(df,cutoff,col,index,warning['count_threshold'],
+                                               warning['method'] if name=='selected' else name)
+                probabilities[name].extend(p.tolist())
+                peak_flags[name].extend((p>=warning['probability_cutoff']).tolist())
+            for name in predictions:
+                forecast_method = method if name=='selected' else name
+                # Same forecast function and as-of booking features used by the service.
+                predictions[name].append(forecast_demand(df,cutoff,col,forecast_method).to_numpy())
+                periods[-1]['forecasts'][name]=round(float(predictions[name][-1].sum()),4)
+        y=np.concatenate(actuals)
+        fullweeks=lambda values: np.concatenate([np.asarray(v[:28]).reshape(4,7).sum(axis=1) for v in values])
+        partial=lambda values: np.array([np.sum(v[28:]) for v in values])
+        category={'selected_method':'Adaptive: '+', '.join(dict.fromkeys(p['selected_method'] for p in periods)),
+                  'inner_validation':scores,'test_period_totals':periods,
+                  'daily':{},'total_30_days':{},'weekly_complete_7_day_periods':{},'partial_2_day_periods':{}}
+        for name,values in predictions.items():
+            category['daily'][name]=compute_statistical_metrics(y,np.concatenate(values))
+            category['total_30_days'][name]=compute_statistical_metrics(
+                [np.sum(v) for v in actuals], [np.sum(v) for v in values])
+            category['weekly_complete_7_day_periods'][name]=compute_statistical_metrics(fullweeks(actuals),fullweeks(values))
+            category['partial_2_day_periods'][name]=compute_statistical_metrics(partial(actuals),partial(values))
+        category['daily_peaks']=peak_metrics(y,np.concatenate(predictions['selected']),train[col].quantile(.9))
+        category['peak_warning_configuration']=warning
+        labels=np.asarray(peak_labels)
+        category['peak_warnings']={name:warning_metrics(labels,p,.5,flags=peak_flags[name])
+                                   for name,p in probabilities.items()}
+        category['peak_warnings']['always_warn']=warning_metrics(labels,np.ones(len(labels)),.5)
+        category['peak_warnings']['never_warn']=warning_metrics(labels,np.zeros(len(labels)),.5)
+        category['peak_warnings']['already_booked_only']=warning_metrics(labels,np.asarray(already_known_peaks,dtype=float),.5)
+        unknown=~np.asarray(already_known_peaks,dtype=bool)
+        category['peak_warning_known_booking_context']={
+            'days_already_above_peak_threshold_at_origin':int(np.sum(already_known_peaks)),
+            'remaining_days':int(unknown.sum()),
+            'selected_on_remaining_days':warning_metrics(labels[unknown],
+                np.asarray(probabilities['selected'])[unknown],.5,
+                flags=np.asarray(peak_flags['selected'])[unknown]) if unknown.any() else None}
+        # Match the original final 90-day dates for an explicit like-for-like comparison.
+        category['last_90_days']={name:{
+            'daily':compute_statistical_metrics(np.concatenate(actuals[-3:]),np.concatenate(values[-3:])),
+            'total_30_days':compute_statistical_metrics([v.sum() for v in actuals[-3:]], [v.sum() for v in values[-3:]])}
+            for name,values in predictions.items()}
+        category['weekly_peaks']=peak_metrics(fullweeks(actuals),fullweeks(predictions['selected']),
+                                              train[col].rolling(7).sum().dropna().quantile(.9))
+        results['categories'][col]=category
     return results
 
 
-# #No clammping
-# def validate_peak_demand_time_series(test_periods=4):
-#     """
-#     Validates Peak Demand across Monthly Academic Cycles.
-#     Monthly aggregation reflects semester planning windows (e.g., peak exam/event months)
-#     and provides sufficient natural variance for positive R-squared fit.
-#     """
-#     query = """
-#         SELECT reservation_date, booking_type, COUNT(booking_id) as daily_demand
-#         FROM public.bookings
-#         WHERE status = 'Confirmed'
-#         GROUP BY reservation_date, booking_type
-#         ORDER BY reservation_date;
-#     """
-#     with get_db_connection() as conn:
-#         df = pd.read_sql_query(query, conn)
-
-#     if df.empty or len(df) < 60:
-#         return {"Status": "Failed", "Reason": "Need at least 60 days of confirmed bookings."}
-
-#     df['reservation_date'] = pd.to_datetime(df['reservation_date'])
-#     df['category'] = df['booking_type'].apply(lambda x: 'vehicle_demand' if x == 'Vehicle' else 'facility_demand')
-    
-#     # Monthly start aggregation captures semester peak cycles
-#     monthly_df = df.pivot_table(
-#         index='reservation_date', 
-#         columns='category', 
-#         values='daily_demand', 
-#         aggfunc='sum'
-#     ).fillna(0).resample('MS').sum()
-
-#     train = monthly_df.iloc[:-test_periods]
-#     test = monthly_df.iloc[-test_periods:]
-
-#     results = {}
-#     for col in ['vehicle_demand', 'facility_demand']:
-#         # Holt's Linear Trend on monthly volume
-#         model = ExponentialSmoothing(
-#             train[col] + 0.001,
-#             trend='add',
-#             seasonal=None
-#         ).fit(optimized=True)
-        
-#         preds = np.clip(model.forecast(test_periods), a_min=0, a_max=None)
-#         metrics = compute_statistical_metrics(test[col].values, preds.values)
-#         results[col] = {
-#             "MAE (Monthly)": metrics["MAE"],
-#             "RMSE (Monthly)": metrics["RMSE"],
-#             "R-squared": metrics["R-squared"],
-#             "MAPE (%)": metrics["MAPE (%)"],
-#             "wMAPE (%)": metrics["wMAPE (%)"]
-#         }
-
-#     return results
-
-
-# =======================================================
-# 3. AUDIT: DESCRIPTIVE & DECISION SERVICES (2.1 & 2.4)
-# =======================================================
 def validate_descriptive_and_decision_services():
     audits = {}
     
@@ -295,29 +216,72 @@ def validate_descriptive_and_decision_services():
     return audits
 
 
-if __name__ == "__main__":
-    print("\n" + "="*72)
-    print("        BSU-TRACE ADVANCED ANALYTICS & ML VALIDATION SUITE        ")
-    print("="*72)
+def print_key_results(report):
+    columns=['MAE','RMSE','R-squared','wMAPE (%)','Observations']
+    def table(rows):
+        print(pd.DataFrame(rows).T[columns].to_string())
 
-    print("\n[OBJECTIVE 2.2] Predictive: EDC Ridge Log-Linear Regression (5-Fold CV)")
-    print("-" * 72)
-    edc_res = validate_edc_linear_regression(n_splits=5)
-    print(pd.DataFrame([edc_res], index=["Document Duration"]))
-
-    print("\n[OBJECTIVE 2.3] Predictive: Peak Demand Time-Series Analysis (8-Week Holdout)")
-    print("-" * 72)
-    demand_res = validate_peak_demand_time_series(test_weeks=8)
-    if "Status" in demand_res:
-        print(pd.DataFrame([demand_res], index=["Peak Demand"]))
+    print('\nEDC | working hours | chronological holdout (not 5-fold CV)')
+    edc=report['edc']
+    if 'raw_prediction' in edc:
+        print('Selected method:',edc['selected_method'])
+        table({name:edc[name] for name in ('raw_prediction','dwell_transfer_baseline')})
+        print('Safety allowance:',edc['buffer_working_hours'],'working hours; excluded from errors')
     else:
-        print(pd.DataFrame(demand_res).T)
+        print(edc)
+    demand=report['demand']
+    print('\nDEMAND |',demand.get('test_origins',0),'rolling 30-day test periods; reselect using earlier history at each origin')
+    for category,result in demand.get('categories',{}).items():
+        print('\n'+category+' | selected method: '+result['selected_method'])
+        for key,unit in [('daily','bookings/day'),('total_30_days','bookings/30-day period')]:
+            print(key+' ('+unit+')')
+            table({name:result[key][name] for name in ('selected','recent_mean')})
+        if 'peak_warnings' in result:
+            print('Peak risk warnings (precision/recall/F1: higher is better; Brier: lower is better)')
+            print(pd.DataFrame({n:result['peak_warnings'][n] for n in ('selected','constant','already_booked_only')}).T.to_string())
+            context=result.get('peak_warning_known_booking_context',{})
+            print('Peak days already identifiable from submitted requests at forecast time:',
+                  context.get('days_already_above_peak_threshold_at_origin',0))
+    if 'Status' in demand:
+        print(demand)
+    print('\n30-day totals have only',demand.get('test_origins',0),'test observations: results are preliminary.')
+    print('Totals can hide errors in timing; they do not measure peak detection.')
+    if demand.get('evaluation_note'):
+        print(demand['evaluation_note'])
+    print('MAE/RMSE: lower is better, in the units shown. wMAPE: lower percentage error is better.')
+    print('R-squared: higher is better; negative means worse than the test-period mean benchmark.')
 
-    print("\n[OBJECTIVES 2.1 & 2.4] Empirical Health, Sanity & Decision Audits")
-    print("-" * 72)
-    for service, audit in validate_descriptive_and_decision_services().items():
-        print(f"* {service}: {audit}")
 
-    print("\n" + "="*72)
-    print("Validation suite completed. Predictive quality is shown by the metrics above.")
-    print("="*72 + "\n")
+if __name__ == '__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output',type=Path)
+    parser.add_argument('--audits',action='store_true',help='Also run descriptive/service smoke checks')
+    parser.add_argument('--details',action='store_true',help='Show all baselines, weekly/partial-period and peak diagnostics')
+    parser.add_argument('--booking-snapshot',type=Path,help='Read bookings COPY data from a pg_dump without restoring or executing SQL')
+    parser.add_argument('--demand-only',action='store_true',help='Skip EDC and its database connection')
+    args=parser.parse_args()
+    warnings.filterwarnings('ignore',message='pandas only supports SQLAlchemy')
+    if not args.demand_only:
+        print('Evaluating EDC working-duration predictions...',flush=True)
+    report={'data_scope':'Synthetic history; not evidence of real-world accuracy','calendar_note':CALENDAR_NOTE,
+            'edc':{'Status':'Skipped (--demand-only)'} if args.demand_only else validate_edc_linear_regression()}
+    snapshot = None
+    if args.booking_snapshot:
+        from booking_snapshot import load_booking_snapshot
+        snapshot=load_booking_snapshot(args.booking_snapshot)
+        report['booking_source']='Local SQL snapshot (bookings COPY data only)'
+    print('Evaluating demand totals and peak warnings at six final test origins...',flush=True)
+    report['demand']=validate_peak_demand_time_series(booking_data=snapshot)
+    if args.audits:
+        report['service_smoke_checks']=validate_descriptive_and_decision_services()
+    print_key_results(report)
+    if args.details:
+        print('\nDetailed diagnostics:')
+        print(json.dumps(report,indent=2,allow_nan=False))
+    if args.audits:
+        print('Service smoke checks:',report['service_smoke_checks'])
+    print('\nSynthetic history only. R-squared is not defined for constant actuals (shown as NaN/null).')
+    print('MAPE excludes zero-demand observations; wMAPE includes their absolute errors.')
+    if args.output:
+        args.output.parent.mkdir(parents=True,exist_ok=True)
+        args.output.write_text(json.dumps(report,indent=2,allow_nan=False)+'\n')

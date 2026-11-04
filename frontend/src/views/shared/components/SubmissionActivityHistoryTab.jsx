@@ -86,8 +86,8 @@ export default function SubmissionActivityHistoryTab({ includeOfficeActivity = f
                     {formatPhilippineDateTime(event.occurred_at)}
                   </td>
                   <td className="p-4">
-                    <p className="font-bold text-neutral-900 dark:text-white">{event.title}</p>
-                    <p className="mt-1 font-mono text-[10px] text-neutral-500 dark:text-gray-400">{event.qr_code} · {event.relationship_label}</p>
+                    <p title={event.title} className="max-w-[16rem] truncate font-bold text-neutral-900 dark:text-white">{event.title}</p>
+                    <p className="mt-1 text-[10px] text-neutral-500 dark:text-gray-400">{event.relationship_label}</p>
                   </td>
                   <td className="p-4 text-xs font-semibold text-neutral-700 dark:text-gray-300">
                     {event.actor_name}

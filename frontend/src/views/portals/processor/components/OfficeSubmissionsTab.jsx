@@ -13,7 +13,6 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
   const userId = localStorage.getItem('userId');
 
   // --- STATE ---
-  const [estimateBase, setEstimateBase] = useState(() => Date.now());
   const [documents, setDocuments] = useState([]);
   const [processTypes, setProcessTypes] = useState(providedProcessTypes);
   const [loading, setLoading] = useState(true);
@@ -30,7 +29,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [predictions, setPredictions] = useState([]);
-  const [customEstimate, setCustomEstimate] = useState({ routeKey: '', hours: null });
+  const [customEstimate, setCustomEstimate] = useState({ routeKey: '', deliveryDate: null });
   const [form, setForm] = useState({ title: '', processTypeId: '', confirmation: false, completeOriginProcessing: false, placeholderSelections: {} });
 
   // --- OPTIMIZATION: Search Debouncing ---
@@ -75,7 +74,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
       secure: true, 
       reconnection: true 
     });
-    
+
     socket.on('connect', () => {
       // Listen to this specific office's updates
       socket.emit('join-office-room', officeId);
@@ -92,15 +91,15 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
     };
   }, [officeId, userId, load]);
 
-  useEffect(() => { 
-    let cancelled = false; 
+  useEffect(() => {
+    let cancelled = false;
     fetchWithAuth('/api/analytics/edc').then(async res => { 
       if (res.ok) { 
         const data = await res.json(); 
         if (!cancelled && Array.isArray(data)) setPredictions(data); 
       } 
     }).catch(() => {}); 
-    return () => { cancelled = true; }; 
+    return () => { cancelled = true; };
   }, []);
 
   const process = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
@@ -113,9 +112,9 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
     if (!customRouteKey) return undefined;
     let cancelled = false;
     fetchWithAuth(`/api/analytics/edc?route=${customRouteKey}`).then(async r => r.ok ? r.json() : []).then(d => {
-      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, hours: d[0]?.estimated_hours_to_complete ?? null });
+      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, deliveryDate: d[0]?.estimated_delivery_date ?? null, hours: d[0]?.estimated_hours_to_complete ?? null });
     }).catch(() => {
-      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, hours: null });
+      if (!cancelled) setCustomEstimate({ routeKey: customRouteKey, deliveryDate: null });
     });
     return () => { cancelled = true; };
   }, [customRouteKey]);
@@ -123,11 +122,9 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
   // --- LOGIC ---
   const originOfficeId = form.customRoute ? form.customRoute.stops[0] : selectedStops[0]?.officeId;
   const eligible = Boolean(originOfficeId && Number(originOfficeId) === Number(officeId));
-  const hours = Number(predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete);
-  const estimate = Number.isFinite(hours) && hours >= 0 ? new Date(estimateBase + hours * 3600000) : null;
-  const edc = estimate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(estimate) : null;
-  const customHours = customEstimate.routeKey === customRouteKey ? customEstimate.hours : null;
-  const customEdc = customRouteKey && customHours !== null ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(estimateBase + customHours * 3600000)) : null;
+  // The service applies working hours, lunch, closures and the 24-hour allowance.
+  const edc = predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_delivery_date || null;
+  const customEdc = customEstimate.routeKey === customRouteKey ? customEstimate.deliveryDate : null;
   const resolvedEdc = needsRouteEstimate ? customEdc : edc;
 
   const submit = async e => {
@@ -169,12 +166,12 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
 
   return (
     <div className="space-y-6 max-w-8xl mx-auto text-left animate-in fade-in duration-200">
-      
+
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Manage and track only the documents you submitted.</p>
         <button 
-          onClick={() => { setEstimateBase(Date.now()); setLoading(true); setShowModal(true); workflows(); }} 
+          onClick={() => { setLoading(true); setShowModal(true); workflows(); }}
           className="flex items-center justify-center gap-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transform active:scale-95 hover:-translate-y-0.5 transition-[transform,colors] duration-200 w-full sm:w-auto"
         >
           <Plus size={16} /> Submit Document
@@ -189,7 +186,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
 
       {/* MATRIX TABLE CONTAINER */}
       <div className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl shadow-sm overflow-hidden flex flex-col scroll-mt-6">
-        
+
         {/* Table Controls Header */}
         <div className="p-5 border-b border-gray-100 dark:border-[#42292f] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-gray-50/50 dark:bg-[#1c1113]">
           <div className="flex items-center gap-3">
@@ -233,19 +230,17 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
 
         {/* Table Body - Mobile Friendly Horizontal Scroll */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-[1180px] table-fixed text-left text-sm border-collapse">
+          <table className="w-full min-w-[900px] table-fixed text-left text-sm border-collapse">
             <colgroup>
+              <col className="w-[28%]" />
               <col className="w-[24%]" />
-              <col className="w-[19%]" />
+              <col className="w-[16%]" />
               <col className="w-[18%]" />
-              <col className="w-[12%]" />
-              <col className="w-[13%]" />
               <col className="w-[14%]" />
             </colgroup>
             <thead>
               <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
                 <th className="p-4">Document Name</th>
-                <th className="p-4">Reference ID (QR)</th>
                 <th className="p-4">Process Type</th>
                 <th className="p-4">Est. Completion</th>
                 <th className="p-4">Current Location</th>
@@ -253,7 +248,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
-              
+
               {isDocsLoading && documents.length === 0 ? (
                 [...Array(4)].map((_, i) => (
                   <tr key={`skeleton-${i}`}>
@@ -266,7 +261,6 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                         </div>
                       </div>
                     </td>
-                    <td className="p-4"><div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
                     <td className="p-4"><div className="h-4 w-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
                     <td className="p-4"><div className="h-4 w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
                     <td className="p-4"><div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 rounded-md animate-pulse"></div></td>
@@ -292,11 +286,6 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                       </div>
                     </td>
                     <td className="p-4 align-middle">
-                      <span title={d.qr_code} className="block max-w-full truncate rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-2 py-1 font-mono text-xs font-bold text-gray-600 dark:text-gray-300">
-                        {d.qr_code}
-                      </span>
-                    </td>
-                    <td className="p-4 align-middle">
                       <span className="flex items-start gap-1.5 text-xs font-medium leading-5 text-gray-700 dark:text-gray-300">
                         <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
                         <span className="line-clamp-2" title={d.process_name}>{d.process_name}</span>
@@ -306,10 +295,10 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                       {d.edc ? new Date(d.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
                     </td>
                     <td className="p-4 align-middle">
-                      <span className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
-                        {d.status?.toLowerCase() === 'completed' ? 'Completed' :
+                      <span title={d.current_office || d.status || ''} className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
+                        <span className="truncate">{d.status?.toLowerCase() === 'completed' ? 'Completed' :
                           d.status?.toLowerCase() === 'cancelled' ? 'Cancelled' :
-                          d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
+                          d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}</span>
                       </span>
                     </td>
                     <td className="p-4 text-center align-middle">
@@ -319,7 +308,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                       >
                         <MoreVertical size={16} />
                       </button>
-                      
+
                       {d.status?.toLowerCase() === 'action required' && (
                         <div className="mt-3 w-full rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-3 text-left" onClick={e => e.stopPropagation()}>
                           <p className="text-[11px] text-red-800 dark:text-red-300 font-medium mb-2 leading-relaxed">
@@ -345,7 +334,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="p-12 text-center bg-gray-50/50 dark:bg-[#1c1113]">
+                  <td colSpan="5" className="p-12 text-center bg-gray-50/50 dark:bg-[#1c1113]">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-3">
                         <Inbox className="w-8 h-8 text-gray-300 dark:text-gray-600" />
@@ -373,14 +362,17 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
           workflowsLoading={loading} 
           workflowError={workflowError} 
           retryWorkflows={() => { setLoading(true); workflows(); }} 
-          estimatedDate={needsRouteEstimate ? (customEdc ? formatPhilippineDate(customEdc) : 'Complete the route to calculate') : (estimate ? formatPhilippineDate(estimate) : "Estimate unavailable")}
+          estimatedDate={needsRouteEstimate ? (customEdc ? formatPhilippineDate(customEdc) : 'Complete the route to calculate') : (edc ? formatPhilippineDate(edc) : "Estimate unavailable")}
+          estimatedWorkingHours={needsRouteEstimate
+            ? (customEstimate.routeKey === customRouteKey ? customEstimate.hours : null)
+            : predictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete}
           selectedRoutePreview={process?.resolved_route_names || []} 
           canCompleteOriginProcessing={eligible} 
           submitting={busy} 
           submissionError={error} 
         />
       )}
-      
+
       {selected && (
         <OfficeDocumentModal 
           selectedDoc={selected} 
@@ -397,7 +389,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
       {revision && (
         <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-xs z-[100] p-4 flex items-center justify-center animate-in fade-in duration-150">
           <form onSubmit={resubmit} className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl shadow-2xl max-w-md w-full mx-auto overflow-hidden animate-in zoom-in-95 duration-200 text-left">
-            
+
             <div className="p-4 bg-neutral-900 dark:bg-[#1c1113] text-white font-bold text-sm flex items-center justify-between border-b dark:border-[#42292f]">
               <div className="flex items-center gap-2">
                 <RefreshCw size={16} />

@@ -245,8 +245,8 @@ export default function SystemManagementTab({ matrixProps, section = 'offices' }
                   <tbody className="divide-y divide-neutral-100 dark:divide-gray-800">
                     {displayedRows.map(row => (
                       <tr key={row.p_id} onClick={() => matrixProps.openWorkflowEditor(row)} className="cursor-pointer hover:bg-rose-50/40 dark:hover:bg-[#2b1317]/50 transition-colors">
-                        <td className="px-5 py-4 font-bold text-neutral-900 dark:text-white">{row.process_name}</td>
-                        <td className="px-5 py-4 text-neutral-600 dark:text-gray-400">{row.category_name}</td>
+                        <td className="px-5 py-4 font-bold text-neutral-900 dark:text-white"><span title={row.process_name} className="block max-w-[15rem] truncate">{row.process_name}</span></td>
+                        <td className="px-5 py-4 text-neutral-600 dark:text-gray-400"><span title={row.category_name} className="block max-w-[12rem] truncate">{row.category_name}</span></td>
                         <td className="px-5 py-4"><WorkflowRoute workflow={row} /></td>
                         <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${row.is_active === false ? 'bg-neutral-200 dark:bg-gray-800 text-neutral-700 dark:text-gray-300' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'}`}>{row.is_active === false ? 'Hidden' : 'Available'}</span></td>
                         <td className="px-5 py-4 text-right">

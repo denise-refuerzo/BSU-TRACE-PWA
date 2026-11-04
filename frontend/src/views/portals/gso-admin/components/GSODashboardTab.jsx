@@ -64,8 +64,8 @@ export default function GSODashboardTab({
               </svg>
             </div>
             <div className="flex flex-col items-start min-w-0 flex-1">
-              <h3 className="text-2xl font-black text-gray-900 dark:text-white leading-tight truncate w-full">{userName}</h3>
-              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2.5 truncate w-full">GSO Admin / {gsoOfficeName}</p>
+              <h3 title={userName} className="text-2xl font-black text-gray-900 dark:text-white leading-tight truncate w-full">{userName}</h3>
+              <p title={`GSO Admin / ${gsoOfficeName || ''}`} className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2.5 truncate w-full">GSO Admin / {gsoOfficeName}</p>
               <button 
                 onClick={() => setActiveTab('profile')} 
                 className="px-3 py-1.5 bg-gray-900 dark:bg-gray-800 text-white rounded-md text-[11px] font-bold hover:bg-black dark:hover:bg-gray-700 transition-colors shrink-0 whitespace-nowrap"
@@ -176,7 +176,7 @@ export default function GSODashboardTab({
           return (
             <div 
               key={col.id} 
-              className={`w-[85vw] sm:w-80 md:w-auto md:flex-1 shrink-0 flex flex-col bg-gray-50/80 dark:bg-[#1f1214] rounded-xl border border-gray-200 dark:border-[#42292f] overflow-hidden transition-opacity snap-start ${isFiltered ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}
+              className={`w-[85vw] sm:w-80 md:w-auto md:min-w-0 md:flex-1 shrink-0 flex flex-col bg-gray-50/80 dark:bg-[#1f1214] rounded-xl border border-gray-200 dark:border-[#42292f] overflow-hidden transition-opacity snap-start ${isFiltered ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}
             >
               <div 
                 onClick={() => { setFilterStatus(prev => prev === col.id ? 'All' : col.id); setDashboardPage(1); }}
@@ -196,15 +196,15 @@ export default function GSODashboardTab({
                     <div 
                       key={doc.ini_id || idx}
                       onClick={() => handleOpenDetails(doc, false)}
-                      className="bg-white dark:bg-[#180e10] p-3 rounded-lg border border-gray-200 dark:border-[#42292f] shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all cursor-pointer group flex flex-col gap-2"
+                      className="min-w-0 bg-white dark:bg-[#180e10] p-3 rounded-lg border border-gray-200 dark:border-[#42292f] shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all cursor-pointer group flex flex-col gap-2"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <h5 className="text-xs font-bold text-gray-900 dark:text-gray-100 group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors line-clamp-2 leading-snug">
+                        <h5 title={doc.title} className="min-w-0 flex-1 text-xs font-bold text-gray-900 dark:text-gray-100 group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors line-clamp-2 break-words leading-snug">
                           {doc.title}
                         </h5>
                         <FileText size={14} className="text-gray-400 shrink-0 mt-0.5" />
                       </div>
-                      <span className="w-max px-2 py-0.5 bg-gray-100 dark:bg-[#2b1317] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#42292f] font-bold text-[9px] uppercase tracking-wider rounded">
+                      <span title={doc.process_name || 'GENERAL FORM'} tabIndex={0} className="block min-w-0 max-w-full self-start truncate focus:whitespace-normal focus:break-all focus:overflow-visible focus-visible:outline-2 focus-visible:outline-red-700 px-2 py-0.5 bg-gray-100 dark:bg-[#2b1317] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#42292f] font-bold text-[9px] uppercase tracking-wider rounded">
                         {doc.process_name || 'GENERAL FORM'}
                       </span>
                     </div>
