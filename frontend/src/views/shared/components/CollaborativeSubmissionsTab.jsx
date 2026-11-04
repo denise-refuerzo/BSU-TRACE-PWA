@@ -101,8 +101,7 @@ export default function CollaborativeSubmissionsTab({ mode = 'shared', onOpenCha
                         <FileText size={16}/>
                       </span>
                       <div>
-                        <p className="font-bold text-neutral-900 dark:text-white">{document.title}</p>
-                        <p className="mt-1 font-mono text-[10px] text-neutral-500 dark:text-gray-400">{document.qr_code}</p>
+                        <p title={document.title} className="max-w-[16rem] truncate font-bold text-neutral-900 dark:text-white">{document.title}</p>
                       </div>
                     </div>
                   </td>

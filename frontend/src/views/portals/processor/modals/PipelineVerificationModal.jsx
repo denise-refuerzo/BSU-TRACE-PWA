@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import TrackingId from '../../../shared/components/TrackingId';
 
 export default function PipelineVerificationModal({
   setShowPipelineModal,
@@ -27,7 +28,7 @@ export default function PipelineVerificationModal({
             <div className="space-y-4">
               <div>
                 <span className="text-[9px] font-black text-neutral-400 uppercase tracking-wider block">Reference Number</span>
-                <h4 className="text-sm font-black text-red-800 dark:text-red-400 font-mono tracking-wide mt-0.5">{selectedDoc.qr_code}</h4>
+                <div className="mt-0.5"><TrackingId value={selectedDoc.qr_code}/></div>
               </div>
               <div>
                 <span className="text-[9px] font-black text-neutral-400 uppercase tracking-wider block">Date Created</span>

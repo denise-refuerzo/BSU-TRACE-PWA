@@ -8,7 +8,7 @@ import ResourceDayModal from './request-facilities/ResourceDayModal';
 import ResourceBookingModal from './request-facilities/ResourceBookingModal';
 import SubmittedRequestDetailsModal from './request-facilities/SubmittedRequestDetailsModal';
 
-export default function RequestFacilitiesPage({ userId, officeName = '', facility = null, view = 'calendar' }) {
+export default function RequestFacilitiesPage({ userId, officeName = '', facility = null, view = 'calendar', targetBookingId = null, onClearTargetBookingId }) {
   const userName = localStorage.getItem('user') || 'Faculty User';
   
   const [selectedFacility, setSelectedFacility] = useState('Gymnasium');
@@ -70,8 +70,19 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
     try {
       const res = await fetchWithAuth('/api/resources/my-requests');
       const data = await res.json();
-      if (res.ok) setMyRequests(Array.isArray(data) ? data : []);
+      if (res.ok) {
+        const requests = Array.isArray(data) ? data : [];
+        setMyRequests(requests);
+      }
     } catch (err) { console.error('Could not load submitted facility requests:', err); }
+  };
+
+  const displayedRequest = targetBookingId
+    ? myRequests.find(request => String(request.booking_id) === String(targetBookingId)) || selectedRequest
+    : selectedRequest;
+  const closeRequestDetails = () => {
+    setSelectedRequest(null);
+    onClearTargetBookingId?.();
   };
 
   const fetchSignatories = async () => {
@@ -288,7 +299,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
                     <td className="px-5 py-4"><p className="font-semibold text-gray-800 dark:text-gray-200">{formatRequestDate(item.reservation_date)}</p><p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{item.start_time?.slice(0, 5) || '—'}{item.end_time ? ` – ${item.end_time.slice(0, 5)}` : ''}</p></td>
                     <td className="max-w-xs px-5 py-4 text-gray-600 dark:text-gray-300"><p className="truncate">{item.purpose || '—'}</p></td>
                     <td className="px-5 py-4"><span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${requestStatusClass(item.status)}`}>{item.status === 'Reserved' ? 'Pending' : (item.status || 'Pending')}</span></td>
-                    <td className="px-5 py-4 text-right"><button onClick={() => setSelectedRequest(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 hover:border-red-300 hover:text-red-700 dark:hover:text-red-400 cursor-pointer"><Eye size={14} /> Details</button></td>
+                    <td className="px-5 py-4 text-right"><button onClick={() => { onClearTargetBookingId?.(); setSelectedRequest(item); }} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 hover:border-red-300 hover:text-red-700 dark:hover:text-red-400 cursor-pointer"><Eye size={14} /> Details</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -297,7 +308,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
 
           <div className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
             {visibleRequests.map(item => (
-              <button key={item.booking_id} onClick={() => setSelectedRequest(item)} className="w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-[#2b1317]/40">
+              <button key={item.booking_id} onClick={() => { onClearTargetBookingId?.(); setSelectedRequest(item); }} className="w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-[#2b1317]/40">
                 <div className="flex items-start justify-between gap-3"><div><p className="font-bold text-gray-900 dark:text-white">{requestTypeLabel(item.booking_type)} request</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{formatRequestDate(item.reservation_date)} · {item.asset_name || 'Assignment pending'}</p></div><span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase ${requestStatusClass(item.status)}`}>{item.status === 'Reserved' ? 'Pending' : (item.status || 'Pending')}</span></div>
                 <p className="mt-3 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{item.purpose || 'No purpose provided'}</p>
                 <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-400"><Eye size={13} /> View details</span>
@@ -308,7 +319,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
           {visibleRequests.length === 0 && <div className="px-5 py-12 text-center text-sm font-medium text-gray-500 dark:text-gray-400">No requests match the current search and status filter.</div>}
         </div>
 
-        <SubmittedRequestDetailsModal request={selectedRequest} officeName={officeName} onClose={() => setSelectedRequest(null)} />
+        <SubmittedRequestDetailsModal request={displayedRequest} officeName={officeName} onClose={closeRequestDetails} />
       </div>
     );
   }

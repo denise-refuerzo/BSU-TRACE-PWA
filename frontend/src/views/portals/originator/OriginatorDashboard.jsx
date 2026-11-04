@@ -26,11 +26,14 @@ import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActi
 // Modals
 import DocumentSubmissionModal from './modals/DocumentSubmissionModal';
 import NewSubmissionQrModal from './modals/NewSubmissionQrModal';
+import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 
 export default function OriginatorDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [targetChatDoc, setTargetChatDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
+  const [notificationTrackingDocId, setNotificationTrackingDocId] = useState(null);
+  const [targetBookingId, setTargetBookingId] = useState(null);
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -80,9 +83,13 @@ export default function OriginatorDashboard() {
   };
 
   const handleNotificationClick = (notif) => {
-    if (!notif.ini_id) return;
-    setActiveNotificationDocId(notif.ini_id);
-    setActiveTab('documents');
+    if (notif.booking_id) {
+      setTargetBookingId(notif.booking_id);
+      setActiveTab('resource-requests');
+    } else if (notif.ini_id) {
+      setNotificationTrackingDocId(notif.ini_id);
+      setActiveTab('documents');
+    }
   };
 
   const handleOpenChatWithDoc = (doc) => {
@@ -274,9 +281,11 @@ export default function OriginatorDashboard() {
           {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Gymnasium" />}
           {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Multimedia Room" />}
           {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Van" />}
-          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} view="requests" />}
+          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} view="requests" targetBookingId={targetBookingId} onClearTargetBookingId={() => setTargetBookingId(null)} />}
         </div>
       </div>
+
+      {notificationTrackingDocId && <DocumentTrackingModal selectedDoc={{ini_id:notificationTrackingDocId}} readOnly onClose={() => setNotificationTrackingDocId(null)} />}
 
       <FloatingChat
         isOpen={isChatOpen}

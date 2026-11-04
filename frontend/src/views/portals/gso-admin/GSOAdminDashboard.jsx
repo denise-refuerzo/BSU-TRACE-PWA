@@ -1,9 +1,9 @@
 import OfficeSubmissionsTab from '../processor/components/OfficeSubmissionsTab';
-import { lazy, Suspense, useState, useRef, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
-  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, Bell, User, LogOut, QrCode, Menu, X,
+  LayoutDashboard, Archive, ShoppingCart, BarChart3, History, User, LogOut, QrCode, Menu, X,
   ChevronDown, Boxes, CalendarClock, Link2
 } from 'lucide-react';
 import { endSession, fetchWithAuth } from '../../../api';
@@ -51,6 +51,8 @@ import ExportLogsModal from './modals/ExportLogsModal';
 import FacilityBlackoutModal from './modals/FacilityBlackoutModal';
 import InventoryActionModal from './modals/InventoryActionModal';
 import BookingRequirementsModal from './modals/BookingRequirementsModal';
+import NotificationDropdown from '../../shared/components/NotificationDropdown';
+import SubmittedRequestDetailsModal from '../../shared/components/request-facilities/SubmittedRequestDetailsModal';
 
 const minimalSwal = Swal.mixin({
   customClass: {
@@ -65,14 +67,13 @@ const minimalSwal = Swal.mixin({
 
 export default function GSOAdminDashboard() {
   const navigate = useNavigate();
-  const notificationRef = useRef(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [previousTab, setPreviousTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [resourcesExpanded, setResourcesExpanded] = useState(true);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [manageRefreshKey, setManageRefreshKey] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [personalRequest, setPersonalRequest] = useState(null);
   const [procurementTargetSection, setProcurementTargetSection] = useState(null);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -109,7 +110,7 @@ export default function GSOAdminDashboard() {
   const {
     userId, userName, gsoOfficeName, gsoOfficeId, profileName, setProfileName, profileEmail, setProfileEmail,
     facultyId, departmentName, twoFaEnabled, setTwoFaEnabled, twoFaCode,
-    notifications, setNotifications, hasUnreadChats, setHasUnreadChats,
+    notifications, hasUnreadChats, setHasUnreadChats,
     pipelineDocs, processTypes, officesList, expectedIncomingCount,
     assetsList, equipmentInventory, assetBlackouts,
     reservationsList, logisticsList, resourceRevision,
@@ -493,14 +494,6 @@ export default function GSOAdminDashboard() {
     setTimeout(() => { printWindow.print(); }, 250);
   };
 
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (notificationRef.current && !notificationRef.current.contains(event.target)) setShowNotifications(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   const handleLogout = () => {
     minimalSwal.fire({
       title: 'Sign Out?',
@@ -526,16 +519,32 @@ export default function GSOAdminDashboard() {
     setShowDetailsModal(true);
   };
 
-  const formatRelativeTime = (timestamp) => {
-    if (!timestamp) return 'Just now';
-    const localizedString = String(timestamp).replace(/(\+00:00|\+00|Z)$/i, '');
-    const now = new Date();
-    const past = new Date(localizedString);
-    const elapsed = now - past;
-    if (elapsed < 60000) return 'Just now';
-    else if (elapsed < 3600000) return `${Math.round(elapsed / 60000)} minutes ago`;   
-    else if (elapsed < 86400000) return `${Math.round(elapsed / 3600000)} hours ago`;   
-    else return `${Math.round(elapsed / 86400000)} days ago`; 
+  const handleNotificationClick = async notification => {
+    if (notification.ini_id) {
+      setActiveTab('documents');
+      handleOpenDetails({ini_id:notification.ini_id});
+      return;
+    }
+    if (!notification.booking_id) return;
+    try {
+      if (notification.category === 'requests') {
+        const response = await fetchWithAuth('/api/procurement/reservations');
+        if (!response.ok) throw new Error('Unable to load this request.');
+        const requests = await response.json();
+        const request = requests.find(item => String(item.booking_id) === String(notification.booking_id));
+        if (!request) throw new Error('This request is no longer available.');
+        setActiveTab('procurement');
+        setProcurementTargetSection(request.booking_type === 'Vehicle' ? 'vehicle' : request.booking_type === 'Room' ? 'multimedia' : 'gym');
+        await handleViewChecklist(request);
+      } else {
+        const response = await fetchWithAuth('/api/resources/my-requests');
+        if (!response.ok) throw new Error('Unable to load your request.');
+        const requests = await response.json();
+        const request = requests.find(item => String(item.booking_id) === String(notification.booking_id));
+        if (!request) throw new Error('This request is no longer available.');
+        setPersonalRequest(request);
+      }
+    } catch (error) { minimalSwal.fire({icon:'error',text:error.message}); }
   };
 
   const handleGenerateAuditReport = () => setShowAnalyticsReport(true);
@@ -708,33 +717,8 @@ export default function GSOAdminDashboard() {
           <div className="ml-auto flex items-center gap-2 text-neutral-600 dark:text-gray-300 md:gap-4">
             <ThemeToggle />
             
-            <div className="relative" ref={notificationRef}>
-              <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-[#2b1317] relative transition-colors">
-                <Bell size={20} />
-                {notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></span>}
-              </button>
-
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white dark:bg-[#180e10] border border-neutral-200 dark:border-[#42292f] rounded-2xl shadow-xl z-50 overflow-hidden text-left">
-                  <div className="p-4 border-b border-neutral-100 dark:border-[#42292f] bg-[#FDFBF9] dark:bg-[#1c1113] font-bold text-xs uppercase text-neutral-900 dark:text-white tracking-wide">Notifications</div>
-                  <div className="max-h-64 overflow-y-auto divide-y divide-neutral-100 dark:divide-gray-800">
-                    {notifications.map(n => (
-                      <div key={n.id} className="p-4 text-xs border-b last:border-b-0 hover:bg-neutral-50/50 dark:hover:bg-[#2b1317]/50 transition-colors">
-                        <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <p className="font-bold text-neutral-900 dark:text-white">{n.title}</p>
-                            <span className="text-[8px] bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-400 border border-red-100 dark:border-red-800 px-1 rounded uppercase font-black tracking-tight mt-0.5 inline-block">{n.roleSource || 'System'}</span>
-                          </div>
-                          <span className="text-[10px] text-neutral-400 whitespace-nowrap">{formatRelativeTime(n.time)}</span>
-                        </div>
-                        <p className="text-neutral-500 dark:text-gray-400 mt-1.5 font-medium leading-relaxed">{n.message}</p>
-                      </div>
-                    ))}
-                    {notifications.length === 0 && <div className="p-6 text-center text-neutral-400 font-bold text-xs"> No active system notifications.</div>}
-                  </div>
-                </div>
-              )}
-            </div>
+            <NotificationDropdown userId={userId} notifications={notifications} onNotificationClick={handleNotificationClick}
+              filters={[{value:'work',label:'Documents to process'},{value:'personal',label:'My submissions'},{value:'requests',label:'Incoming requests'}]} />
 
             <button 
               onClick={() => { 
@@ -904,6 +888,7 @@ export default function GSOAdminDashboard() {
         targetDoc={chatTargetDoc} onClearTargetDoc={() => setChatTargetDoc(null)} label="Chat Inbox" />
       
       {assignmentRequest && <VehicleAssignmentModal key={assignmentRequest.booking_id} request={assignmentRequest} onClose={() => setAssignmentRequest(null)} onSaved={async () => { await fetchProcurementData(); setManageRefreshKey(value => value + 1); }} />}
+      <SubmittedRequestDetailsModal request={personalRequest} officeName={gsoOfficeName} onClose={() => setPersonalRequest(null)} />
       
       <QRScannerModal 
         showScannerModal={showScannerModal} setShowScannerModal={setShowScannerModal}

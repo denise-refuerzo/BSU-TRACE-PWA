@@ -176,7 +176,8 @@ export function useProcessorData(userId) {
     socketRef.current.on('connect', () => {
       socketRef.current.emit('join-office-room', processorOfficeId);
       socketRef.current.emit('join-user-room', userId);
-      if (connectedOnce) checkChatBadgeStatus();
+      socketRef.current.emit('join-resource-room');
+      if (connectedOnce) { checkChatBadgeStatus(); fetchLiveNotifications(processorOfficeId); }
       connectedOnce = true;
     });
 
@@ -201,6 +202,8 @@ export function useProcessorData(userId) {
 
     // Listeners
     socketRef.current.on('pipeline-updated', refreshOfficeFeed);
+    socketRef.current.on('document-updated', () => fetchLiveNotifications(processorOfficeId));
+    socketRef.current.on('resource-schedule-updated', () => fetchLiveNotifications(processorOfficeId));
     socketRef.current.on('chat-badge-updated', checkChatBadgeStatus);
 
     return () => {
@@ -211,6 +214,7 @@ export function useProcessorData(userId) {
   // --- UNIFIED OFFICE STATUS FILTERING ---
   const resolveOfficeStatus = (doc) => {
     const ownStatus = doc.office_status_id;
+    if (doc.office_halted) return 'Halted';
     if (ownStatus === 4) return 'Action Required';
     if (doc.pdoc_office_time_out || doc.time_out) return 'Completed';
     if (ownStatus === 2) return 'In Verification';
@@ -232,7 +236,7 @@ export function useProcessorData(userId) {
     if (!matchesSearch) return false;
     if (filterStatus === 'All') return true;
 
-    if (['Signed','Action Required'].includes(filterStatus)) return resolveOfficeStatus(doc) === filterStatus;
+    if (['Signed','Action Required','Halted'].includes(filterStatus)) return resolveOfficeStatus(doc) === filterStatus;
     
     const hasTimeIn = Boolean(doc.time_in || doc.pdoc_office_time_in);
     const hasTimeOut = Boolean(doc.time_out || doc.pdoc_office_time_out);
@@ -275,7 +279,8 @@ export function useProcessorData(userId) {
 
   return {
     signedCount: pipelineDocs.filter(doc => resolveOfficeStatus(doc) === "Signed").length,
-    sentBackCount: pipelineDocs.filter(doc => resolveOfficeStatus(doc) === "Action Required").length,
+    sentBackCount: pipelineDocs.filter(doc => resolveOfficeStatus(doc) === 'Action Required').length,
+    haltedCount: pipelineDocs.filter(doc => resolveOfficeStatus(doc) === 'Halted').length,
     processorOfficeName, processorOfficeId,
     profileName, setProfileName, profileEmail, setProfileEmail,
     facultyId, departmentName, twoFaEnabled, setTwoFaEnabled, twoFaCode, setTwoFaCode,

@@ -160,6 +160,12 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
         await client.query(`INSERT INTO public.booking_status_updates
           (booking_id,previous_status,new_status,reason,notification_message,previous_date,new_date,previous_start,new_start,previous_end,new_end,updated_by)
           VALUES($1,$2,'Resource Reassigned',$3,$4,$5,$5,$6,$6,$7,$7,$8)`,[bookingId,result.rows[0].status,'Vehicle or driver reassigned by GSO.',notice,window.date,window.start,window.end,req.user.u_id]);
+      } else if (!wasAssigned) {
+        await client.query(`INSERT INTO public.booking_status_updates
+          (booking_id,previous_status,new_status,notification_message,previous_date,new_date,previous_start,new_start,previous_end,new_end,updated_by)
+          VALUES($1,$2,$2,$3,$4,$4,$5,$5,$6,$6,$7)`,[bookingId,result.rows[0].status,
+          `A vehicle (${v.vehicle_name}) and driver (${d.full_name}) have been assigned to your request "${result.rows[0].purpose}".`,
+          window.date,window.start,window.end,req.user.u_id]);
       }
 
       await client.query('COMMIT');

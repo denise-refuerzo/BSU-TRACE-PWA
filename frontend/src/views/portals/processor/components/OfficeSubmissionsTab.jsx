@@ -230,19 +230,17 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
 
         {/* Table Body - Mobile Friendly Horizontal Scroll */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-[1180px] table-fixed text-left text-sm border-collapse">
+          <table className="w-full min-w-[900px] table-fixed text-left text-sm border-collapse">
             <colgroup>
+              <col className="w-[28%]" />
               <col className="w-[24%]" />
-              <col className="w-[19%]" />
+              <col className="w-[16%]" />
               <col className="w-[18%]" />
-              <col className="w-[12%]" />
-              <col className="w-[13%]" />
               <col className="w-[14%]" />
             </colgroup>
             <thead>
               <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
                 <th className="p-4">Document Name</th>
-                <th className="p-4">Reference ID (QR)</th>
                 <th className="p-4">Process Type</th>
                 <th className="p-4">Est. Completion</th>
                 <th className="p-4">Current Location</th>
@@ -263,7 +261,6 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                         </div>
                       </div>
                     </td>
-                    <td className="p-4"><div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
                     <td className="p-4"><div className="h-4 w-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
                     <td className="p-4"><div className="h-4 w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
                     <td className="p-4"><div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 rounded-md animate-pulse"></div></td>
@@ -289,11 +286,6 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                       </div>
                     </td>
                     <td className="p-4 align-middle">
-                      <span title={d.qr_code} className="block max-w-full truncate rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-2 py-1 font-mono text-xs font-bold text-gray-600 dark:text-gray-300">
-                        {d.qr_code}
-                      </span>
-                    </td>
-                    <td className="p-4 align-middle">
                       <span className="flex items-start gap-1.5 text-xs font-medium leading-5 text-gray-700 dark:text-gray-300">
                         <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
                         <span className="line-clamp-2" title={d.process_name}>{d.process_name}</span>
@@ -303,10 +295,10 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                       {d.edc ? new Date(d.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
                     </td>
                     <td className="p-4 align-middle">
-                      <span className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
-                        {d.status?.toLowerCase() === 'completed' ? 'Completed' :
+                      <span title={d.current_office || d.status || ''} className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
+                        <span className="truncate">{d.status?.toLowerCase() === 'completed' ? 'Completed' :
                           d.status?.toLowerCase() === 'cancelled' ? 'Cancelled' :
-                          d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}
+                          d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}</span>
                       </span>
                     </td>
                     <td className="p-4 text-center align-middle">
@@ -342,7 +334,7 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="p-12 text-center bg-gray-50/50 dark:bg-[#1c1113]">
+                  <td colSpan="5" className="p-12 text-center bg-gray-50/50 dark:bg-[#1c1113]">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-3">
                         <Inbox className="w-8 h-8 text-gray-300 dark:text-gray-600" />

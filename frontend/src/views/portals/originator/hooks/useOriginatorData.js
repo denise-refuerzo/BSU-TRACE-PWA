@@ -168,7 +168,8 @@ export default function useOriginatorData() {
 
     socketRef.current.on('connect', () => {
       socketRef.current.emit('join-user-room', userId);
-      if (connectedOnce) checkChatBadgeStatus();
+      socketRef.current.emit('join-resource-room');
+      if (connectedOnce) { checkChatBadgeStatus(); fetchLiveNotificationFeeds(); }
       connectedOnce = true;
     });
 
@@ -191,6 +192,7 @@ export default function useOriginatorData() {
       fetchDashboardLedger();
       fetchLiveNotificationFeeds();
     });
+    socketRef.current.on('resource-schedule-updated', fetchLiveNotificationFeeds);
     socketRef.current.on('chat-badge-updated', checkChatBadgeStatus);
 
     return () => {
@@ -210,14 +212,7 @@ export default function useOriginatorData() {
       const res = await fetchWithAuth(`/api/notifications/${userId}/1/0`);
       const data = await res.json();
       if (res.ok) {
-        const alertCollection = data.map(n => ({
-          id: n.id,
-          ini_id: n.ini_id,
-          title: n.title,
-          message: n.message,
-          time: n.time
-        }));
-        setNotifications(alertCollection);
+        setNotifications(Array.isArray(data) ? data : []);
       }
     } catch (err) { console.error("Error retrieving notifications:", err); }
   };
@@ -253,9 +248,6 @@ export default function useOriginatorData() {
       const data = await res.json();
       if (res.ok) {
         setDocuments(data);
-        if (data.length > 0) {
-          setNotifications([{ id: 1, title: "Pipeline Active", message: `Tracking is now active for your submission: "${data[0].title}".`, time: "Just now", unread: true }]);
-        }
       }
     } catch (err) { console.error(err); }
   };

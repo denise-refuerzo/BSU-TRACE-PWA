@@ -225,8 +225,8 @@ export default function InteractiveVisualizerTab({
               >
                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${isSelectedCard ? 'bg-[#D32F2F] dark:bg-red-600' : p.is_active === false ? 'bg-gray-300 dark:bg-gray-700' : 'bg-gray-200 dark:bg-gray-700 group-hover:bg-gray-300'}`}></div>
                 
-                <div className="flex justify-between items-start pl-2">
-                  <p className={`font-bold text-sm ${isSelectedCard ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                <div className="flex min-w-0 justify-between items-start gap-2 pl-2">
+                  <p title={p.process_name} className={`min-w-0 flex-1 truncate font-bold text-sm ${isSelectedCard ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                     {p.process_name}
                   </p>
                   <button type="button" aria-label={`Delete ${p.process_name}`} onClick={e => { e.stopPropagation(); deletePipeline(p); }} className="text-xs text-red-800 dark:text-red-400 underline shrink-0 cursor-pointer">Delete</button>

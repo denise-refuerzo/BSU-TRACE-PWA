@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProfilePicture from './ProfilePicture';
-import { Building, User, ShieldCheck, Landmark, Download, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Building, User, ShieldCheck, Landmark, Download, CheckCircle2 } from 'lucide-react';
 import { usePWA } from '../context/PWAContext';
 import Swal from 'sweetalert2';
 import { fetchWithAuth } from '../../../api'; 
@@ -15,8 +15,7 @@ export default function UserProfileTab({
   twoFaEnabled,
   setTwoFaEnabled, 
   handleUpdateProfile,
-  setShowPassModal,
-  handleBack // Added callback prop to return to dashboard
+  setShowPassModal
 }) {
   const { isInstallable, isInstalled, installApp } = usePWA();
   const userId = localStorage.getItem('userId');
@@ -181,18 +180,7 @@ export default function UserProfileTab({
         </div>
       )}
 
-      {/* TOP NAVIGATION / BACK BUTTON */}
-      <div className="flex items-center justify-between">
-        {handleBack ? (
-          <button
-            onClick={handleBack}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-[#180e10] border border-gray-300 dark:border-[#42292f] hover:bg-gray-50 dark:hover:bg-[#2b1317] text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-          >
-            <ArrowLeft size={15} /> Back to Dashboard
-          </button>
-        ) : (
-          <div />
-        )}
+      <div className="flex justify-end">
         <p className="text-xs text-neutral-500 dark:text-gray-400 font-medium">Manage your administrative credentials and security preferences.</p>
       </div>
 

@@ -92,19 +92,9 @@ export function useGSOAdminData() {
   const fetchGSOCombinedNotificationFeeds = async (officeId) => {
     if (!officeId) return;
     try {
-      const procRes = await fetchWithAuth(`/api/notifications/${userId}/2/${officeId}`);
-      const procData = await procRes.json();
-      const signRes = await fetchWithAuth(`/api/notifications/${userId}/3/${officeId}`);
-      const signData = await signRes.json();
-      
-      if (procRes.ok && signRes.ok) {
-        const combined = [
-          ...procData.map(n => ({ ...n, roleSource: 'Processor' })),
-          ...signData.map(n => ({ ...n, roleSource: 'Signee' }))
-        ];
-        combined.sort((a, b) => new Date(b.time) - new Date(a.time));
-        setNotifications(combined.slice(0, 10));
-      }
+      const response = await fetchWithAuth(`/api/notifications/${userId}/4/${officeId}`);
+      const data = await response.json();
+      if (response.ok) setNotifications(Array.isArray(data) ? data : []);
     } catch (err) { console.error("Error aggregating combined GSO alerts trail:", err); }
   };
 
@@ -244,7 +234,7 @@ export function useGSOAdminData() {
       socketRef.current.emit('join-user-room', userId);
       // Resource assignments, availability, and booking status changes.
       socketRef.current.emit('join-resource-room');
-      if (connectedOnce) checkChatBadgeStatus();
+      if (connectedOnce) { checkChatBadgeStatus(); fetchGSOCombinedNotificationFeeds(gsoOfficeId); }
       connectedOnce = true;
     });
 
@@ -268,6 +258,7 @@ export function useGSOAdminData() {
       fetchOfficeActionHistory(gsoOfficeId);
       fetchProcurementData();
       fetchInventoryMetrics();
+      fetchGSOCombinedNotificationFeeds(gsoOfficeId);
     });
 
     socketRef.current.on('document-updated', () => {
@@ -285,6 +276,7 @@ export function useGSOAdminData() {
       fetchMasterAssets();
       fetchBlackouts();
       setResourceRevision(value => value + 1);
+      fetchGSOCombinedNotificationFeeds(gsoOfficeId);
     });
 
     return () => {
