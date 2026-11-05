@@ -9,7 +9,7 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import PoissonRegressor, LogisticRegression
 from sklearn.pipeline import make_pipeline
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
-from database import get_db_connection
+from database import read_combined_query
 from business_calendar import MANILA, HOLIDAYS
 
 FORECAST_DAYS = 30
@@ -35,13 +35,14 @@ _PROJECTION_LOCK = Lock()
 
 def load_booking_history():
     # All statuses, grouped by reservation AND creation date to support as-of tests.
-    with get_db_connection() as conn:
-        return pd.read_sql_query("""SELECT reservation_date, booking_type, created_at::date AS created_date,
+    return read_combined_query("""SELECT reservation_date, booking_type, created_at::date AS created_date,
             COUNT(booking_id) AS daily_demand,
             BOOL_AND(purpose LIKE 'Synthetic %') AS synthetic
             FROM public.bookings WHERE reservation_date IS NOT NULL
+              AND {booking_filter}
             GROUP BY reservation_date, booking_type, created_at::date
-            ORDER BY reservation_date""", conn)
+            ORDER BY reservation_date""",
+            predicates={'booking_filter': "purpose LIKE 'Synthetic %'"})
 
 
 def daily_history(df, end):

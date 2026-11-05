@@ -1,5 +1,5 @@
 import pandas as pd
-from database import get_db_connection
+from database import read_combined_query
 
 def calculate_office_dwell_times(start_date=None, end_date=None):
     """
@@ -22,14 +22,16 @@ def calculate_office_dwell_times(start_date=None, end_date=None):
             pdoc.time_out,
             EXTRACT(EPOCH FROM (pdoc.time_out - pdoc.time_in))/3600 as dwell_time_hours
         FROM public.processed_document pdoc
+        JOIN public.initial_document doc ON pdoc.ini_id = doc.ini_id
         JOIN public.offices off ON pdoc.current_office_id = off.o_id
         WHERE pdoc.time_in IS NOT NULL 
           AND pdoc.time_out IS NOT NULL
+          AND {{document_filter}}
           {date_filter};
     """
     
-    with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn, params=tuple(params))
+    df = read_combined_query(query, params=tuple(params),
+                             predicates={'document_filter': "doc.title LIKE 'Synthetic %'"})
         
     if df.empty:
         return []
