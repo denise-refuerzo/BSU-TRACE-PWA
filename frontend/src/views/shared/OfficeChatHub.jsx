@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useEffectEvent } from 'react';
 import { createRealtimeClient as io } from '../../utils/realtimeClient';
-import { publicReference } from '../../utils/publicReference';
-import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, Hash, ArrowLeft } from 'lucide-react';
+import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, ArrowLeft, Info } from 'lucide-react';
 import { fetchWithAuth } from "../../api";
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
@@ -15,6 +14,7 @@ function mergeMessages(previous, incoming) {
 export default function OfficeChatHub({ userId, officeId, targetDoc = null, onClearTargetDoc = null, compact = false }) {
   const [directory, setDirectory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [directoryFilter, setDirectoryFilter] = useState('all');
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [channels, setChannels] = useState([]);
   const [activeChannel, setActiveChannel] = useState(null);
@@ -24,24 +24,67 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
   const [loadingDirectory, setLoadingDirectory] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [showDocumentInfo, setShowDocumentInfo] = useState(false);
   
   const messageEndRef = useRef(null);
   const socketRef = useRef(null);
   const selectionVersion = useRef(0);
   const activeRoomRef = useRef(null);
+  const directoryRequest = useRef(0);
 
   const fetchActiveDirectory = async () => {
+    const request = ++directoryRequest.current;
     setLoadingDirectory(true);
     try {
       const res = await fetchWithAuth('/api/chat/active-documents-directory');
       const data = await res.json();
       if (!res.ok) throw new Error('Unable to load conversations. Please try again.');
-      setDirectory(Array.isArray(data) ? data : []);
+      if (request !== directoryRequest.current) return;
+      const documents = Array.isArray(data) ? data : [];
+      setDirectory(previous => documents.map(doc => ({
+        ...doc,
+        currentOffice: previous.find(item => item.ini_id === doc.ini_id)?.currentOffice || null,
+        currentOfficeId: previous.find(item => item.ini_id === doc.ini_id)?.currentOfficeId || null,
+        details: previous.find(item => item.ini_id === doc.ini_id)?.details || null
+      })));
+      // The chat directory has no office name. Resolve it from the document's active route step.
+      for (let index = 0; index < documents.length; index += 5) {
+        const batch = documents.slice(index, index + 5);
+        const offices = await Promise.all(batch.map(async doc => {
+          try {
+            const detail = await fetchWithAuth(`/api/office/documents/${doc.ini_id}`);
+            if (!detail.ok) return { id: doc.ini_id, name: null, officeId: null, details: null };
+            const data = await detail.json();
+            const activeStep = [...(data.steps || [])].reverse().find(step =>
+              step.time_out === null && step.is_returned_from_adhoc !== true
+            );
+            const lastStep = data.steps?.at(-1);
+            return { id: doc.ini_id, name: activeStep?.office_name || lastStep?.office_name || null,
+              officeId: activeStep?.current_office_id || lastStep?.current_office_id || null,
+              finalStop: !activeStep && Boolean(lastStep?.time_out),
+              details: { requestor: data.submitted_by, processType: data.process_name, submittedAt: data.created_at } };
+          } catch {
+            return { id: doc.ini_id, name: null, officeId: null, details: null };
+          }
+        }));
+        if (request !== directoryRequest.current) return;
+        const officeByDocument = new Map(offices.map(office => [office.id, office]));
+        setDirectory(previous => previous.map(doc => officeByDocument.has(doc.ini_id)
+          ? { ...doc, currentOffice: officeByDocument.get(doc.ini_id).name,
+            currentOfficeId: officeByDocument.get(doc.ini_id).officeId,
+            finalStop: officeByDocument.get(doc.ini_id).finalStop,
+            details: officeByDocument.get(doc.ini_id).details }
+          : doc));
+        setSelectedDoc(previous => previous && officeByDocument.has(previous.ini_id)
+          ? { ...previous, details: officeByDocument.get(previous.ini_id).details }
+          : previous);
+      }
     } catch (err) { 
+      if (request !== directoryRequest.current) return;
       console.error(err);
       setError('Unable to load conversations. Use Refresh to try again.');
     } finally {
-      setLoadingDirectory(false);
+      if (request === directoryRequest.current) setLoadingDirectory(false);
     }
   };
 
@@ -49,6 +92,7 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
     const version = ++selectionVersion.current;
     const directoryContext = directory.find(item => String(item.ini_id) === String(doc.ini_id));
     const selectedDocument = { ...doc, ...directoryContext };
+    setShowDocumentInfo(false);
     activeRoomRef.current = null;
     setDirectory(prev => prev.map(d => d.ini_id === doc.ini_id ? { ...d, hasAnyChat: false } : d));
     setSelectedDoc(selectedDocument);
@@ -174,6 +218,8 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
     const refresh = () => refreshDirectory();
     socket.on('connect', connect);
     socket.on('chat-badge-updated', refresh);
+    socket.on('document-updated', refresh);
+    socket.on('pipeline-updated', refresh);
     const initial = setTimeout(refresh, 0);
     return () => { clearTimeout(initial); socket.disconnect(); };
   }, [userId, officeId]);
@@ -219,7 +265,10 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages]);
 
-  const filteredDirectory = directory.filter(doc => 
+  const filteredDirectory = directory.filter(doc =>
+    (directoryFilter === 'all' ||
+      (directoryFilter === 'personal' && doc.isPersonalSubmission) ||
+      (directoryFilter === 'office' && Number(doc.currentOfficeId) === Number(officeId))) &&
     doc.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -237,7 +286,7 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
           <div className="flex justify-between items-center">
             <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
               <FileText size={14} className="text-[#D32F2F]" />
-              Document References
+              Active Documents
             </h4>
             <button 
               onClick={fetchActiveDirectory} 
@@ -247,6 +296,27 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
               <RefreshCw size={14} className={loadingDirectory ? 'animate-spin' : ''} />
             </button>
           </div>
+          {officeId && (
+            <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-[#2b1317]" role="group" aria-label="Filter documents">
+              {[
+                ['all', 'All'],
+                ['personal', 'Personal'],
+                ['office', 'Office processing']
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDirectoryFilter(value)}
+                  aria-pressed={directoryFilter === value}
+                  className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-bold transition-colors cursor-pointer ${directoryFilter === value
+                    ? 'bg-white text-[#D32F2F] shadow-sm dark:bg-[#180e10] dark:text-red-400'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
@@ -281,7 +351,9 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                 {doc.hasAnyChat && <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shrink-0 animate-pulse"></span>}
               </div>
               <div className="flex items-center justify-between text-[10px] text-gray-400 font-medium">
-                <span className="font-mono">{publicReference('DOC', doc.ini_id)}</span>
+                <span className="min-w-0 truncate" title={doc.currentOffice || ''}>
+              {doc.finalStop ? `Final stop: ${doc.currentOffice || 'Processing ended'}` : doc.currentOffice ? `At: ${doc.currentOffice}` : loadingDirectory ? 'Finding current office…' : 'Office unavailable'}
+                </span>
                 <span>{doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
               </div>
             </button>
@@ -309,11 +381,10 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                 <ArrowLeft size={16} />
               </button>
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
-                <Hash size={14} className="text-gray-400" />
-                Station Channels
+                Offices on Route
               </h4>
             </div>
-            <span className="text-[10px] font-bold text-gray-400 max-w-[90px] truncate">{selectedDoc.title}</span>
+            <span title={selectedDoc.title} className="text-[10px] font-bold text-gray-400 max-w-[90px] truncate">{selectedDoc.title}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 bg-gray-50/30 dark:bg-[#120b0c]">
@@ -402,13 +473,23 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                   <ArrowLeft size={18} />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <Hash size={15} className="text-[#D32F2F] dark:text-red-400 shrink-0" />
-                    <h4 className="text-sm md:text-base font-bold text-gray-900 dark:text-white truncate">{activeChannel.officeName}</h4>
+                  <h4 className="text-sm md:text-base font-bold text-gray-900 dark:text-white truncate">{activeChannel.officeName}</h4>
+                  <p title={selectedDoc?.title} className="text-xs text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">{selectedDoc?.title}</p>
+                  {activeChannel.statusMessage?.startsWith('Interactive Grace Period') && (
+                    <p className="mt-1 text-[10px] font-bold text-amber-700 dark:text-amber-400">{activeChannel.statusMessage}</p>
+                  )}
+                </div>
+                <div className="relative group shrink-0">
+                  <button type="button" aria-label="Document information" aria-expanded={showDocumentInfo}
+                    onClick={() => setShowDocumentInfo(value => !value)}
+                    className="rounded-full p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer">
+                    <Info size={18} />
+                  </button>
+                  <div className={`${showDocumentInfo ? 'block' : 'hidden group-hover:block'} absolute right-0 top-full z-30 w-64 rounded-xl border border-gray-200 bg-white p-3 text-xs text-gray-700 shadow-lg dark:border-[#42292f] dark:bg-[#1c1113] dark:text-gray-200`}>
+                    <p><strong>Requestor:</strong> {selectedDoc?.details?.requestor || 'Unavailable'}</p>
+                    <p className="mt-2"><strong>Process:</strong> {selectedDoc?.details?.processType || 'Unavailable'}</p>
+                    <p className="mt-2"><strong>Submitted:</strong> {selectedDoc?.details?.submittedAt ? new Date(selectedDoc.details.submittedAt).toLocaleString() : 'Unavailable'}</p>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">
-                    Subject: <span className="text-gray-900 dark:text-gray-200 font-bold">{selectedDoc?.title}</span>
-                  </p>
                 </div>
               </div>
 
@@ -445,7 +526,9 @@ export default function OfficeChatHub({ userId, officeId, targetDoc = null, onCl
                     }`}
                   >
                     <span className="text-[10px] font-bold text-gray-400 mb-1 flex items-center gap-1">
-                      {isMe ? 'You' : msg.sender_name} • {msg.role_name}
+                      {msg.sender_name || (isMe ? 'You' : 'User')} : {msg.role_name === 'Submitter' ? 'Requestor'
+                        : msg.sender_office_name && msg.sender_office_name !== activeChannel.officeName ? msg.sender_office_name
+                          : msg.role_name === 'Processing Office' ? 'Office Personnel' : msg.role_name}
                     </span>
                     <div className={`p-3 md:p-3.5 rounded-2xl text-xs md:text-sm font-medium leading-relaxed shadow-xs break-words ${
                       isMe 

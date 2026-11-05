@@ -34,5 +34,10 @@ test('overview or shared-office affiliation does not grant document chat access'
 
   await db.exec('UPDATE public.processed_document SET time_out=NOW() WHERE ini_id=1');
   assert.equal(await resolveChatDocument(db, documentId, { u_id: 1, a_id: 1, o_id: null }), null, 'inactive documents leave chat');
+  await db.exec('UPDATE public.processed_document SET s_id=5 WHERE ini_id=1');
+  assert.ok(await resolveChatDocument(db, documentId, { u_id: 1, a_id: 1, o_id: null }), 'requestor retains final grace access');
+  assert.ok(await resolveChatRoom(db, roomId, { u_id: 3, a_id: 2, o_id: 20 }), 'last office retains final grace access');
+  await db.exec("UPDATE public.processed_document SET time_out=NOW() - INTERVAL '25 hours' WHERE ini_id=1");
+  assert.equal(await resolveChatRoom(db, roomId, { u_id: 3, a_id: 2, o_id: 20 }), null, 'last office loses access after grace period');
   await db.close();
 });
