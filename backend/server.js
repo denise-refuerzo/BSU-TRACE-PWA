@@ -1606,7 +1606,7 @@ app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
     if (!room) return res.status(404).json({error:'Conversation not found.'});
     const messagesQuery = `
       SELECT m.public_id AS message_id, cr.public_id AS room_id, u.public_id AS sender_id,
-        m.message_text, m.sent_at, u.full_name as sender_name,
+        m.message_text, m.sent_at, u.full_name as sender_name, sender_office.office_name AS sender_office_name,
         CASE WHEN m.sender_id=idoc.u_id THEN 'Submitter'
           WHEN EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=cr.ini_id AND dc.user_id=m.sender_id) THEN 'Collaborator'
           WHEN u.o_id=cr.o_id THEN 'Processing Office'
@@ -1615,6 +1615,7 @@ app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
       JOIN public.chat_rooms cr ON m.room_id=cr.room_id
       JOIN public.initial_document idoc ON idoc.ini_id=cr.ini_id
       JOIN public."User" u ON m.sender_id = u.u_id
+      LEFT JOIN public.offices sender_office ON sender_office.o_id=u.o_id
       JOIN public.account a ON u.a_id = a.a_id
       WHERE m.room_id = $1
       ORDER BY m.sent_at ASC;
@@ -1650,12 +1651,13 @@ app.post('/api/chat/messages', requireAuth, chatLimiter, async (req, res) => {
 
     // Query extra metadata required by the frontend feed
     const metaRes = await pool.query(
-      `SELECT u.full_name as sender_name,
+      `SELECT u.full_name as sender_name,sender_office.office_name AS sender_office_name,
         CASE WHEN u.u_id=idoc.u_id THEN 'Submitter'
           WHEN EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=u.u_id) THEN 'Collaborator'
           WHEN u.o_id=$3 THEN 'Processing Office'
           ELSE a.account_type END AS role_name
        FROM public."User" u
+       LEFT JOIN public.offices sender_office ON sender_office.o_id=u.o_id
        JOIN public.account a ON u.a_id = a.a_id
        JOIN public.initial_document idoc ON idoc.ini_id=$2
        WHERE u.u_id = $1`,
@@ -1669,6 +1671,7 @@ app.post('/api/chat/messages', requireAuth, chatLimiter, async (req, res) => {
       message_text: savedMessage.message_text,
       sent_at: savedMessage.sent_at,
       sender_name: metaRes.rows[0]?.sender_name || 'User',
+      sender_office_name: metaRes.rows[0]?.sender_office_name || null,
       role_name: metaRes.rows[0]?.role_name || 'Staff'
     };
 
@@ -1735,10 +1738,13 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
           ) AS "hasAnyChat"
         FROM public.initial_document idoc
         JOIN LATERAL (
-          SELECT pd.current_office_id,pd.s_id FROM public.processed_document pd
-          WHERE pd.ini_id=idoc.ini_id AND pd.time_out IS NULL AND pd.is_returned_from_adhoc IS NOT TRUE
+          SELECT pd.current_office_id,pd.s_id,pd.time_out FROM public.processed_document pd
+          WHERE pd.ini_id=idoc.ini_id AND pd.is_returned_from_adhoc IS NOT TRUE
+            AND ((pd.time_out IS NULL AND pd.s_id<>5) OR
+              (pd.pd_id=(SELECT MAX(pd_id) FROM public.processed_document WHERE ini_id=idoc.ini_id)
+                AND pd.time_out > NOW() - INTERVAL '24 hours' AND pd.s_id IN (4,5)))
           ORDER BY pd.pd_id DESC LIMIT 1
-        ) active ON active.s_id<>5
+        ) active ON TRUE
         WHERE idoc.lifecycle_state <> 'cancelled' AND
           (idoc.u_id=$1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=$1)
           OR ($2::integer IS NOT NULL AND active.current_office_id=$2))
