@@ -663,7 +663,7 @@ export default function GSOAdminDashboard() {
             </div>
 
             <button onClick={() => handleTabSelect('registration-management')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'registration-management' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>
-              <Link2 size={18} /> Registration Management
+              <Link2 size={18} className="shrink-0" /><span className="whitespace-nowrap text-xs">Registration Management</span>
             </button>
 
             <button onClick={() => handleTabSelect('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors ${activeTab === 'analytics' ? 'bg-[#3b2a29] text-white border-l-4 border-red-700' : 'text-neutral-400 hover:bg-[#3b2a29] hover:text-white'}`}>

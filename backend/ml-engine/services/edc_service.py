@@ -12,7 +12,7 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from database import get_db_connection
+from database import read_combined_query, read_live_query
 from business_calendar import (add_business_minutes, business_minutes_between,
                                calendar_covers, normalize_start, CALENDAR_NOTE, MANILA)
 
@@ -29,19 +29,44 @@ def load_edc_history():
         FROM public.initial_document d
         JOIN public.processed_document pd ON pd.ini_id = d.ini_id
         WHERE d.route_snapshot IS NOT NULL
+          AND {document_filter}
         ORDER BY d.ini_id, pd.time_in NULLS LAST, pd.pd_id
     """
-    with get_db_connection() as conn:
-        steps = pd.read_sql_query(query.replace('%%', '%'), conn)
+    steps = read_combined_query(query.replace('%%', '%'), predicates={
+        'document_filter': "d.title LIKE 'Synthetic %'",
+    })
+    if steps.empty:
+        return prepare_edc_history(steps)
+
+    # Source-local IDs are not interchangeable. Translate them through office
+    # names so the trained model accepts the live route IDs sent by the app.
+    offices = read_combined_query('SELECT o_id, office_name FROM public.offices')
+    live_offices = offices[offices._source == 'live']
+    if live_offices.empty:
+        live_offices = offices
+    live_ids = {str(row.office_name).strip().casefold(): int(row.o_id)
+                for row in live_offices.itertuples()}
+    id_map = {(source, int(office_id)): live_ids.get(str(name).strip().casefold())
+              for source, office_id, name in zip(offices['_source'], offices.o_id, offices.office_name)}
+    steps['current_office_id'] = [id_map.get((source, int(office_id))) if pd.notna(office_id) else None
+                                  for source, office_id in zip(steps._source, steps.current_office_id)]
+    steps['route_snapshot'] = [
+        [id_map.get((source, int(office_id))) for office_id in (route or [])]
+        for source, route in zip(steps._source, steps.route_snapshot)
+    ]
     return prepare_edc_history(steps)
 
 
 def prepare_edc_history(steps):
     records, excluded = [], 0
-    for ini_id, group in steps.groupby('ini_id', sort=False):
+    if '_source' not in steps:
+        steps = steps.copy()
+        steps['_source'] = 'single'
+    for (source, ini_id), group in steps.groupby(['_source', 'ini_id'], sort=False):
         group = group.sort_values(['time_in', 'pd_id'])
         route = [int(x) for x in group.iloc[0].route_snapshot if x is not None]
-        if (len(group) < 2 or not route or group[['time_in', 'time_out']].isna().any().any()
+        if (len(group) < 2 or not route or group[['time_in', 'time_out', 'current_office_id']].isna().any().any()
+                or any(x is None for x in group.iloc[0].route_snapshot)
                 or int(group.iloc[-1].s_id) != 5):
             excluded += 1
             continue
@@ -65,10 +90,10 @@ def prepare_edc_history(steps):
         if target <= 0:
             excluded += 1
             continue
-        records.append(dict(ini_id=int(ini_id), route=route, start=start, end=end,
+        records.append(dict(ini_id=int(ini_id), source=source, route=route, start=start, end=end,
                             minutes=target, dwells=dwells, transfers=transfers,
                             synthetic=bool(group.iloc[0].get('synthetic', False))))
-    docs = pd.DataFrame(records, columns=['ini_id','route','start','end','minutes','dwells','transfers','synthetic'])
+    docs = pd.DataFrame(records, columns=['ini_id','source','route','start','end','minutes','dwells','transfers','synthetic'])
     docs = docs.sort_values(['start', 'ini_id']).reset_index(drop=True)
     docs.attrs['excluded_documents'] = excluded
     return docs
@@ -163,14 +188,25 @@ def prediction_record(model, route, start, process_id=None):
 
 
 def serving_model():
-    # Repeated route previews should not reread/retrain the full history.
+    # Refit when either source gains a completed step, with a timed refresh for
+    # edits that do not change the latest completion timestamp.
+    signature_frame = read_combined_query("""
+        SELECT COUNT(*) AS step_count, COUNT(*) FILTER (WHERE pd.time_out IS NOT NULL) AS completed_count,
+               MAX(pd.time_out) AS latest_completion
+        FROM public.processed_document pd
+        JOIN public.initial_document doc ON pd.ini_id = doc.ini_id
+        WHERE {document_filter}
+    """, predicates={'document_filter': "doc.title LIKE 'Synthetic %'"})
+    signature = tuple((row['_source'], int(row.step_count), int(row.completed_count),
+                       str(row.latest_completion)) for _, row in signature_frame.iterrows())
     with _MODEL_LOCK:
-        if not _MODEL_CACHE or monotonic()-_MODEL_CACHE['at'] >= 900:
+        if (_MODEL_CACHE.get('signature') != signature or
+                monotonic()-_MODEL_CACHE.get('at', 0) >= 900):
             docs = load_edc_history()
             now = pd.Timestamp.now(tz=MANILA).tz_localize(None)
             docs = docs[docs.end <= now]
             model, _ = select_edc_model(docs)
-            _MODEL_CACHE.update(model=model, at=monotonic())
+            _MODEL_CACHE.update(model=model, at=monotonic(), signature=signature)
         return _MODEL_CACHE['model']
 
 
@@ -180,9 +216,8 @@ def calculate_edc(route_ids=None):
     if route_ids:
         route = [int(x) for x in route_ids if x is not None]
         return [prediction_record(model, route, start)]
-    with get_db_connection() as conn:
-        processes = pd.read_sql_query("""SELECT p.p_id, r.stop_1,r.stop_2,r.stop_3,r.stop_4,r.stop_5,r.stop_6,r.stop_7
-            FROM public.process_type p JOIN public.route r ON p.r_id=r.r_id WHERE p.is_active IS TRUE""", conn)
+    processes = read_live_query("""SELECT p.p_id, r.stop_1,r.stop_2,r.stop_3,r.stop_4,r.stop_5,r.stop_6,r.stop_7
+            FROM public.process_type p JOIN public.route r ON p.r_id=r.r_id WHERE p.is_active IS TRUE""")
     return [prediction_record(model, [int(getattr(p,f'stop_{i}')) for i in range(1,8)
                                       if pd.notna(getattr(p,f'stop_{i}'))], start, int(p.p_id))
             for p in processes.itertuples()]

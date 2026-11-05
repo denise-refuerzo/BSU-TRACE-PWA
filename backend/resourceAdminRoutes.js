@@ -1,5 +1,6 @@
 const {availability, lockSchedule, validateWindow} = require('./resourceScheduling');
-module.exports = (app, pool, requireAuth) => {
+const {sendBookingUpdateEmail} = require('./mailer');
+module.exports = (app, pool, requireAuth, sendBookingEmail = sendBookingUpdateEmail) => {
   const gso = (req,res,next) => Number(req.user.a_id) === 4 ? next() : res.status(403).json({error:'GSO access required.'});
   const handle = fn => async(req,res) => {try {await fn(req,res);} catch(e) {res.status(400).json({error:e.code === '23503' ? 'This record is linked to requests or blocks and cannot be deleted. Keep it for history and mark it unavailable instead.' : e.code === '23505' ? 'That plate or license number is already registered.' : e.message});}};
   const broadcast = req => {
@@ -68,7 +69,8 @@ module.exports = (app, pool, requireAuth) => {
       LEFT JOIN public.asset_details ad ON ad.asd_id=COALESCE(gm.asd_id,vr.asd_id)
       LEFT JOIN LATERAL (SELECT reason,notification_message,created_at FROM public.booking_status_updates
         WHERE booking_id=b.booking_id ORDER BY created_at DESC LIMIT 1) latest ON true
-      WHERE b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
+      WHERE b.booking_type IN ('Vehicle','Room','Gymnasium')
+        AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
       ORDER BY b.reservation_date,COALESCE(gm.start_time,vr.pick_up_time)`);
     res.json(result.rows.map(row=>({...row,status:row.status==='Confirmed'?'Approved':row.status})));
   }));
@@ -80,23 +82,24 @@ module.exports = (app, pool, requireAuth) => {
     if(!allowed.has(nextStatus)) throw new Error('Select a valid booking update.');
     if(nextStatus!=='Completed'&&!reason) throw new Error('Enter the reason for this booking update.');
     const client=await pool.connect();
+    let booking,newDate,newStart,newEnd,message,affectedBooking=null,affectedNotice=null;
     try {
       await client.query('BEGIN');await lockSchedule(client);
       const found=await client.query(`SELECT b.booking_id,b.booking_type,b.status,b.purpose,to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date,
         COALESCE(gm.start_time,vr.pick_up_time)::text AS start_time,
         COALESCE(gm.end_time,vr.drop_off_time)::text AS end_time,gm.asd_id AS facility_id,
-        vr.asd_id AS vehicle_asset_id,vr.assigned_vehicle_id,ad.asset_name,u.full_name
+        vr.asd_id AS vehicle_asset_id,vr.assigned_vehicle_id,ad.asset_name,u.full_name,u.uni_email AS requestor_email
         FROM public.bookings b JOIN public."User" u ON u.u_id=b.u_id
         LEFT JOIN public.gm_requirements gm USING(booking_id) LEFT JOIN public.vehicle_requirements vr USING(booking_id)
         LEFT JOIN public.asset_details ad ON ad.asd_id=COALESCE(gm.asd_id,vr.asd_id)
         WHERE b.public_id=$1 FOR UPDATE OF b`,[req.params.id]);
       if(!found.rows.length) throw new Error('Booking not found.');
-      const booking=found.rows[0];
+      booking=found.rows[0];
       if(!['Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned'].includes(booking.status)) throw new Error('Only approved or active bookings can be managed.');
 
-      let newDate=booking.reservation_date;
-      let newStart=booking.start_time;
-      let newEnd=booking.end_time;
+      newDate=booking.reservation_date;
+      newStart=booking.start_time;
+      newEnd=booking.end_time;
       if(nextStatus==='Delayed') {
         newStart=String(req.body.start||'').trim();
         newEnd=String(req.body.end||'').trim();
@@ -119,7 +122,7 @@ module.exports = (app, pool, requireAuth) => {
 
       const subject=booking.booking_type==='Vehicle'?'trip':'event';
       const displayStatus=nextStatus.toLowerCase();
-      const message=nextStatus==='Completed'
+      message=nextStatus==='Completed'
         ? `The ${subject} “${booking.purpose}” has been marked completed.`
         : nextStatus==='Rescheduled'
           ? `The ${subject} “${booking.purpose}” was rescheduled to ${newDate}, ${String(newStart).slice(0,5)}–${String(newEnd).slice(0,5)}, due to: ${reason}. Contact the GSO Office for any concerns.`
@@ -132,10 +135,13 @@ module.exports = (app, pool, requireAuth) => {
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[booking.booking_id,booking.status,nextStatus,reason||null,message,
         booking.reservation_date,newDate,booking.start_time,newStart,booking.end_time,newEnd,req.user.u_id]);
       if(nextStatus==='Delayed') {
-        const affected=await client.query(`SELECT b.booking_id,b.status,b.reservation_date,
-          COALESCE(gm.start_time,vr.pick_up_time) AS start_time,COALESCE(gm.end_time,vr.drop_off_time) AS end_time
+        const affected=await client.query(`SELECT b.booking_id,b.booking_type,b.purpose,b.status,
+          to_char(b.reservation_date,'YYYY-MM-DD') AS reservation_date,
+          COALESCE(gm.start_time,vr.pick_up_time) AS start_time,COALESCE(gm.end_time,vr.drop_off_time) AS end_time,
+          u.uni_email AS requestor_email
           FROM public.bookings b LEFT JOIN public.gm_requirements gm USING(booking_id)
           LEFT JOIN public.vehicle_requirements vr USING(booking_id)
+          JOIN public."User" u ON u.u_id=b.u_id
           WHERE b.booking_id<>$1 AND b.reservation_date=$2::date
           AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
           AND (($3::integer IS NOT NULL AND gm.asd_id=$3) OR ($4::integer IS NOT NULL AND vr.assigned_vehicle_id=$4))
@@ -145,14 +151,35 @@ module.exports = (app, pool, requireAuth) => {
           booking.facility_id||null,booking.booking_type==='Vehicle' ? booking.assigned_vehicle_id : null,booking.start_time,newEnd]);
         if(affected.rows[0]) {
           const next=affected.rows[0];
-          const affectedNotice=`The previous ${subject} “${booking.purpose}” was delayed due to: ${reason}. Your upcoming booking may be affected. Contact the GSO Office for further updates.`;
+          affectedNotice=`The previous ${subject} “${booking.purpose}” was delayed due to: ${reason}. Your upcoming booking may be affected. Contact the GSO Office for further updates.`;
+          affectedBooking=next;
           await client.query(`INSERT INTO public.booking_status_updates
             (booking_id,previous_status,new_status,reason,notification_message,previous_date,new_date,previous_start,new_start,previous_end,new_end,updated_by)
             VALUES($1,$2,$2,$3,$4,$5,$5,$6,$6,$7,$7,$8)`,[next.booking_id,next.status,reason,affectedNotice,next.reservation_date,next.start_time,next.end_time,req.user.u_id]);
         }
       }
-      await client.query('COMMIT');broadcast(req);res.json({message:'Booking updated successfully.',notification:message});
+      await client.query('COMMIT');
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
+    broadcast(req);
+    let emailSent = false;
+    const notices = [
+      [booking.requestor_email, {bookingType:booking.booking_type,purpose:booking.purpose,status:nextStatus,
+        date:newDate,start:newStart,end:newEnd,reason,message}],
+      [affectedBooking?.requestor_email, affectedBooking && {bookingType:affectedBooking.booking_type,
+        purpose:affectedBooking.purpose,status:'Schedule alert',date:affectedBooking.reservation_date,
+        start:affectedBooking.start_time,end:affectedBooking.end_time,reason,message:affectedNotice}]
+    ];
+    for (const [index, [email, details]] of notices.entries()) {
+      if (!email || !details) continue;
+      try {
+        const sent = await sendBookingEmail(email, details);
+        if (index === 0) emailSent = sent?.success !== false;
+        if (sent?.success === false) console.error(`Booking update email failed for booking ${booking.booking_id}.`);
+      } catch (error) {
+        console.error(`Booking update email failed for booking ${booking.booking_id}:`, error);
+      }
+    }
+    res.json({message:emailSent?'Booking updated successfully.':'Booking updated, but the notification email could not be sent.',notification:message,emailSent});
   }));
   app.put('/api/resources/registry/:kind/:id',requireAuth,gso,handle(async(req,res)=>{
     const {name,number,quantity,active,assetTypeId}=req.body;

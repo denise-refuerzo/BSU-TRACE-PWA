@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Car, Filter, Inbox, Search, Settings2, X } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { resourceApi, resourceError, resourceSuccess } from '../resourceActions';
 
 const badgeClasses = {
@@ -27,7 +28,8 @@ function ManageModal({ booking, onClose, onSaved }) {
       });
       await onSaved();
       onClose();
-      await resourceSuccess(result.notification || result.message);
+      if (result.emailSent === false) await Swal.fire({icon:'warning',title:'Booking updated; email not sent',text:result.message,confirmButtonColor:'#991b1b'});
+      else await resourceSuccess(result.notification || result.message);
     } catch (error) {
       await resourceError(error);
     } finally {
@@ -70,10 +72,10 @@ function ManageModal({ booking, onClose, onSaved }) {
 
 export default function ManageBookingsTab({ onAssignVehicle }) {
   const [bookings,setBookings]=useState([]); const [loading,setLoading]=useState(true); const [error,setError]=useState('');
-  const [search,setSearch]=useState(''); const [filter,setFilter]=useState('All'); const [selected,setSelected]=useState(null);
+  const [search,setSearch]=useState(''); const [filter,setFilter]=useState('All'); const [type,setType]=useState('All'); const [selected,setSelected]=useState(null);
   const refresh=async()=>{setLoading(true);try{setBookings(await resourceApi('manage-bookings'));setError('');}catch(e){setError(e.message);}finally{setLoading(false);}};
   useEffect(()=>{let active=true;resourceApi('manage-bookings').then(data=>{if(active){setBookings(data);setError('');}}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[]);
-  const rows=useMemo(()=>bookings.filter(b=>(filter==='All'||b.status===filter)&&`${b.requestor} ${b.purpose} ${b.asset_name||''}`.toLowerCase().includes(search.toLowerCase())),[bookings,filter,search]);
+  const rows=useMemo(()=>bookings.filter(b=>(filter==='All'||b.status===filter)&&(type==='All'||b.booking_type===type)&&`${b.requestor} ${b.purpose} ${b.asset_name||''} ${b.booking_type}`.toLowerCase().includes(search.toLowerCase())),[bookings,filter,type,search]);
   
   return (
     <div className="mx-auto max-w-8xl space-y-6 text-left">
@@ -86,6 +88,9 @@ export default function ManageBookingsTab({ onAssignVehicle }) {
           <div className="relative">
             <Search size={14} className="absolute left-3 top-3 text-gray-400"/>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search booking…" className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] text-gray-900 dark:text-white py-2.5 pl-9 pr-3 text-xs sm:w-64 outline-none"/>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
+            <select aria-label="Booking type" value={type} onChange={e=>setType(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option value="All">All resources</option><option value="Vehicle">Vehicles</option><option value="Room">Multimedia Room</option><option value="Gymnasium">Gymnasium</option></select>
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
             <Filter size={14} className="text-gray-400"/>
@@ -103,7 +108,7 @@ export default function ManageBookingsTab({ onAssignVehicle }) {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {rows.map(b=>(
                 <tr key={b.booking_id} className="hover:bg-gray-50 dark:hover:bg-[#2b1317]/50">
-                  <td className="p-4"><strong className="block text-gray-900 dark:text-white">{b.purpose}</strong><span className="text-xs text-gray-500 dark:text-gray-400">{b.requestor} · {b.booking_type}</span></td>
+                  <td className="p-4"><strong className="block text-gray-900 dark:text-white">{b.purpose}</strong><span className="text-xs text-gray-500 dark:text-gray-400">{b.requestor} · {b.booking_type==='Room'?'Multimedia Room':b.booking_type}</span></td>
                   <td className="p-4"><strong className="block text-xs text-gray-800 dark:text-gray-200">{b.reservation_date}</strong><span className="text-xs text-gray-500 dark:text-gray-400">{b.start_time?.slice(0,5)}–{b.end_time?.slice(0,5)}</span></td>
                   <td className="p-4 text-xs text-gray-700 dark:text-gray-300">{b.asset_name||b.vehicle_to_be_used||'Not assigned'}{b.designated_driver&&<span className="block text-gray-400 dark:text-gray-500">{b.designated_driver}</span>}</td>
                   <td className="p-4"><span className={`rounded-md border px-2.5 py-1 text-[10px] font-black uppercase ${badgeClasses[b.status]||badgeClasses.Approved}`}>{b.status}</span></td>

@@ -1,6 +1,7 @@
 const {availability, lockSchedule, validateWindow} = require('./resourceScheduling');
 const {suggestFleetAssignment} = require('./decisionSupport');
-module.exports = function registerScheduling(app, pool, requireAuth) {
+const {sendBookingUpdateEmail} = require('./mailer');
+module.exports = function registerScheduling(app, pool, requireAuth, sendAssignmentEmail = sendBookingUpdateEmail) {
   const gso = (req,res,next) => Number(req.user.a_id) === 4 ? next() : res.status(403).json({error:'GSO administrator access required.'});
   const handle = fn => async (req,res) => {try {await fn(req,res);} catch(error) {res.status(error.status || 400).json({error:error.message});}};
   const broadcast = req => {
@@ -90,19 +91,23 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
     if (endTime.length === 5) endTime += ':00';
 
     const client = await pool.connect();
+    let emailDetails = null;
+    let requestorEmail = null;
+    let responseMessage = 'Assignment unchanged.';
     try {
       await client.query('BEGIN');
       await lockSchedule(client);
 
       const result = await client.query(
-         `SELECT b.booking_id,b.status,b.purpose,
+         `SELECT b.booking_id,b.status,b.purpose,u.uni_email AS requestor_email,
                  to_char(b.reservation_date,'YYYY-MM-DD') AS date,
                  vr.pick_up_time::text AS start,
                  vr.drop_off_time::text AS end,
                  vr.assigned_vehicle_id,vr.assigned_driver_id,
                  vr.vehicle_to_be_used,vr.designated_driver
-         FROM public.bookings b 
+         FROM public.bookings b
          JOIN public.vehicle_requirements vr USING (booking_id) 
+         JOIN public."User" u ON u.u_id=b.u_id
          WHERE b.public_id = $1 FOR UPDATE OF b`,
         [bookingPublicId]
       );
@@ -138,6 +143,11 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       const d = driverRow.rows[0];
       const wasAssigned = Boolean(result.rows[0].assigned_vehicle_id && result.rows[0].assigned_driver_id);
       const changed = Number(result.rows[0].assigned_vehicle_id) !== vehicleId || Number(result.rows[0].assigned_driver_id) !== driverId;
+      const scheduleChanged = wasAssigned && (
+        result.rows[0].start?.slice(0,5) !== window.start.slice(0,5) ||
+        result.rows[0].end?.slice(0,5) !== window.end.slice(0,5)
+      );
+      requestorEmail = result.rows[0].requestor_email;
 
       await client.query(
         `UPDATE public.vehicle_requirements 
@@ -155,27 +165,63 @@ module.exports = function registerScheduling(app, pool, requireAuth) {
       );
 
       if (wasAssigned && changed) {
-        const notice=`The assigned vehicle or driver for the trip “${result.rows[0].purpose}” was changed from ${result.rows[0].vehicle_to_be_used} / ${result.rows[0].designated_driver} to ${v.vehicle_name} / ${d.full_name}. Contact the GSO Office for any concerns.`;
+        const notice=`The assigned vehicle or driver for the trip “${result.rows[0].purpose}” was changed from ${result.rows[0].vehicle_to_be_used} / ${result.rows[0].designated_driver} to ${v.vehicle_name} / ${d.full_name}.${scheduleChanged ? ` The revised time is ${window.start.slice(0,5)}–${window.end.slice(0,5)}.` : ''} Contact the GSO Office for any concerns.`;
         await client.query("UPDATE public.bookings SET status='Resource Reassigned',updated_at=timezone('Asia/Manila',now()) WHERE booking_id=$1",[bookingId]);
         await client.query(`INSERT INTO public.booking_status_updates
           (booking_id,previous_status,new_status,reason,notification_message,previous_date,new_date,previous_start,new_start,previous_end,new_end,updated_by)
-          VALUES($1,$2,'Resource Reassigned',$3,$4,$5,$5,$6,$6,$7,$7,$8)`,[bookingId,result.rows[0].status,'Vehicle or driver reassigned by GSO.',notice,window.date,window.start,window.end,req.user.u_id]);
+          VALUES($1,$2,'Resource Reassigned',$3,$4,$5,$5,$6,$7,$8,$9,$10)`,[bookingId,result.rows[0].status,'Vehicle or driver reassigned by GSO.',notice,window.date,
+          result.rows[0].start,window.start,result.rows[0].end,window.end,req.user.u_id]);
+        emailDetails = {bookingType:'Vehicle',purpose:result.rows[0].purpose,status:'Resource Reassigned',
+          event:'vehicle or driver reassigned',date:window.date,start:window.start,end:window.end,
+          vehicleName:v.vehicle_name,driverName:d.full_name,previousVehicle:result.rows[0].vehicle_to_be_used,
+          previousDriver:result.rows[0].designated_driver,message:notice};
+        responseMessage = 'Vehicle and driver reassigned successfully.';
       } else if (!wasAssigned) {
+        const notice=`A vehicle (${v.vehicle_name}) and driver (${d.full_name}) have been assigned to your request “${result.rows[0].purpose}”.`;
         await client.query(`INSERT INTO public.booking_status_updates
           (booking_id,previous_status,new_status,notification_message,previous_date,new_date,previous_start,new_start,previous_end,new_end,updated_by)
-          VALUES($1,$2,$2,$3,$4,$4,$5,$5,$6,$6,$7)`,[bookingId,result.rows[0].status,
-          `A vehicle (${v.vehicle_name}) and driver (${d.full_name}) have been assigned to your request "${result.rows[0].purpose}".`,
-          window.date,window.start,window.end,req.user.u_id]);
+          VALUES($1,$2,$2,$3,$4,$4,$5,$6,$7,$8,$9)`,[bookingId,result.rows[0].status,
+          notice,
+          window.date,result.rows[0].start,window.start,result.rows[0].end,window.end,req.user.u_id]);
+        emailDetails = {bookingType:'Vehicle',purpose:result.rows[0].purpose,
+          status:result.rows[0].status==='Confirmed'?'Approved':result.rows[0].status,
+          event:'vehicle and driver assigned',date:window.date,start:window.start,end:window.end,
+          vehicleName:v.vehicle_name,driverName:d.full_name,message:notice};
+        responseMessage = 'Vehicle and driver assigned successfully.';
+      } else if (scheduleChanged) {
+        const notice=`The time for your trip “${result.rows[0].purpose}” with ${v.vehicle_name} and ${d.full_name} was updated to ${window.start.slice(0,5)}–${window.end.slice(0,5)}. Contact the GSO Office for any concerns.`;
+        await client.query(`INSERT INTO public.booking_status_updates
+          (booking_id,previous_status,new_status,notification_message,previous_date,new_date,previous_start,new_start,previous_end,new_end,updated_by)
+          VALUES($1,$2,$2,$3,$4,$4,$5,$6,$7,$8,$9)`,[bookingId,result.rows[0].status,
+          notice,window.date,result.rows[0].start,window.start,result.rows[0].end,window.end,req.user.u_id]);
+        emailDetails = {bookingType:'Vehicle',purpose:result.rows[0].purpose,
+          status:result.rows[0].status==='Confirmed'?'Approved':result.rows[0].status,
+          event:'assignment time updated',date:window.date,start:window.start,end:window.end,
+          vehicleName:v.vehicle_name,driverName:d.full_name,message:notice};
+        responseMessage = 'Assignment time updated successfully.';
       }
 
       await client.query('COMMIT');
-      broadcast(req);
-      res.json({ message: wasAssigned && changed ? 'Vehicle and driver reassigned successfully.' : 'Vehicle and driver assigned successfully.' });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
     }
+    broadcast(req);
+    let emailSent = null;
+    if (emailDetails) {
+      emailSent = false;
+      if (requestorEmail) {
+        try {
+          const sent = await sendAssignmentEmail(requestorEmail, emailDetails);
+          emailSent = sent?.success !== false;
+        } catch (error) {
+          console.error('Assignment email failed:', error);
+        }
+      }
+      if (!emailSent) responseMessage += ' The notification email could not be sent.';
+    }
+    res.json({message:responseMessage,emailSent});
   }));
 };
