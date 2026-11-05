@@ -64,7 +64,7 @@ export default function GSOFleetPanel({assets}) {
 
       {selected && (
         <div role="dialog" aria-modal="true" aria-label="Assign vehicle and driver" className="fixed inset-0 z-[130] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <form className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] p-6 rounded-2xl w-full max-w-lg space-y-4 text-left shadow-2xl" onSubmit={e=>{e.preventDefault();action(async()=>{const result=await api(`assignments/${selected.booking_id}`,'PUT',{vehicleId,driverId,start:travelStart,end:travelEnd});setSelected(null);await Swal.fire({icon:'success',title:'Assignment saved',text:result.message});});}}>
+          <form className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] p-6 rounded-2xl w-full max-w-lg space-y-4 text-left shadow-2xl" onSubmit={e=>{e.preventDefault();action(async()=>{const result=await api(`assignments/${selected.booking_id}`,'PUT',{vehicleId,driverId,start:travelStart,end:travelEnd});setSelected(null);await Swal.fire({icon:result.emailSent===false?'warning':'success',title:result.emailSent===false?'Assignment saved; email not sent':'Assignment saved',text:result.message});});}}>
             <h4 className="font-bold text-gray-900 dark:text-white">Assign for {selected.date} · {selected.start?.slice(0,5)} – {selected.end?.slice(0,5)}</h4>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Departure<input type="time" required value={travelStart} onChange={e=>{setTravelStart(e.target.value);setVehicleId('');setDriverId('')}} className={input}/></label>

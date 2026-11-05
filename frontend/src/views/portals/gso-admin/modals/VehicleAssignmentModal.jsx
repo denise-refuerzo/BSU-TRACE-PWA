@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, Car, Clock, AlertCircle } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { resourceApi, confirmResourceAction, resourceSuccess, resourceError } from '../resourceActions';
 import { publicReference } from '../../../../utils/publicReference';
 
@@ -85,7 +86,8 @@ export default function VehicleAssignmentModal({ request, onClose, onSaved }) {
 
       await onSaved();
       onClose();
-      await resourceSuccess(result.message || 'Assignment saved successfully.');
+      if (result.emailSent === false) await Swal.fire({icon:'warning',title:'Assignment saved; email not sent',text:result.message,confirmButtonColor:'#991b1b'});
+      else await resourceSuccess(result.message || 'Assignment saved successfully.');
     } catch (e) {
       await resourceError(e);
     } finally {

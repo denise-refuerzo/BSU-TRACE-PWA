@@ -44,7 +44,7 @@ async function main() {
   };
   require.cache[require.resolve('../db')]={exports:pool};
   const suppressEmail=async()=>{console.log('[verification] External email suppressed');};
-  require.cache[require.resolve('../mailer')]={exports:{sendResetCodeEmail:suppressEmail,sendTrackingAlertEmail:suppressEmail,sendSystemEmail:suppressEmail}};
+  require.cache[require.resolve('../mailer')]={exports:{sendResetCodeEmail:suppressEmail,sendTrackingAlertEmail:suppressEmail,sendSystemEmail:suppressEmail,sendBookingUpdateEmail:suppressEmail}};
   process.env.PORT='5055';
   process.env.JWT_SECRET='isolated-local-verification-key';
   process.env.PYTHON_MICROSERVICE_URL='http://127.0.0.1:5056';

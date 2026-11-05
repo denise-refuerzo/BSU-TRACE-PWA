@@ -9,7 +9,8 @@ const {lockSchedule, availability, assertConfirmable} = require('./resourceSched
 const { resolveBookingSignatories } = require('./accountAccessRoutes');
 const { syncOfficeRouteGroup } = require('./officeRouteGroups');
 const { resolveChatDocument: resolveChatDocumentAccess, resolveChatRoom: resolveChatRoomAccess } = require('./chatAccess');
-const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require('./mailer');
+const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail, sendBookingUpdateEmail } = require('./mailer');
+const {completeExpiredBookings, cancelExpiredPendingBookings} = require('./bookingAutoCompletion');
 const crypto = require('crypto');
 const axios = require('axios');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
@@ -1290,8 +1291,19 @@ require('./officeDocumentReadRoutes')(app, pool, requireAuth);
 // 9. REAL-TIME POSTGRESQL NOTIFICATION LISTENER
 // ==========================================
 const initDatabaseListener = async () => {
+  let client;
+  let reconnectScheduled = false;
+  const reconnect = (error) => {
+    if (reconnectScheduled) return;
+    reconnectScheduled = true;
+    console.error('Document email listener disconnected. Reconnecting in 5 seconds:', error);
+    if (client) client.release(true);
+    setTimeout(initDatabaseListener, 5000);
+  };
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
+    client.on('error', reconnect);
+    client.on('end', () => reconnect(new Error('Database connection closed.')));
     await client.query('LISTEN document_status_email_channel');
     console.log('Successfully listening to database channel: document_status_email_channel');
 
@@ -1347,15 +1359,8 @@ const initDatabaseListener = async () => {
       }
     });
 
-    client.on('error', (err) => {
-      console.error('Database listener client crashed. Reconnecting...', err);
-      client.release();
-      setTimeout(initDatabaseListener, 5000);
-    });
-
   } catch (error) {
-    console.error('Failed to initialize database notification listener. Retrying in 5s...', error);
-    setTimeout(initDatabaseListener, 5000);
+    reconnect(error);
   }
 };
 
@@ -2380,8 +2385,12 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     await client.query('BEGIN');
     await lockSchedule(client);
     if (typeof isChecked !== 'boolean') throw new Error('Invalid checklist value.');
-    const booking = await client.query('SELECT booking_id,booking_type,purpose,status FROM public.bookings WHERE public_id=$1 FOR UPDATE', [bookingId]);
+    const booking = await client.query(`SELECT booking_id,booking_type,purpose,status,
+      reservation_date < timezone('Asia/Manila',now())::date AS date_passed
+      FROM public.bookings WHERE public_id=$1 FOR UPDATE`, [bookingId]);
     if (!booking.rows.length) throw new Error('Request not found.');
+    if (['Cancelled','Completed'].includes(booking.rows[0].status)) throw new Error('This request is already closed. Submit a new request if needed.');
+    if (booking.rows[0].date_passed && ['Reserved','Pending'].includes(booking.rows[0].status)) throw new Error('The requested date has passed. Submit a new request.');
     const internalBookingId = booking.rows[0].booking_id;
     
     // Update specific item
@@ -2662,4 +2671,24 @@ const PORT = process.env.PORT || 5000;
 // Change app.listen to server.listen so WebSockets run on the same port
 server.listen(PORT, () => {
   console.log(`Server & WebSocket running on port ${PORT}`);
+  void initDatabaseListener();
+  let completionRunning = false;
+  const completeBookings = async () => {
+    if (completionRunning) return;
+    completionRunning = true;
+    try {
+      const broadcastBookingChange = () => {
+        io.to('resource_updates_room').emit('resource-schedule-updated');
+        io.to('gso_admin_room').emit('system-metrics-updated');
+      };
+      await cancelExpiredPendingBookings(pool, sendBookingUpdateEmail, broadcastBookingChange);
+      await completeExpiredBookings(pool, sendBookingUpdateEmail, broadcastBookingChange);
+    } catch (error) {
+      console.error('Automatic booking completion failed:', error);
+    } finally {
+      completionRunning = false;
+    }
+  };
+  void completeBookings();
+  setInterval(completeBookings, 60 * 1000);
 });
