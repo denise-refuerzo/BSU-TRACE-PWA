@@ -8,7 +8,8 @@ test('booking email includes formatted details and a plain-text fallback', () =>
     date:'2026-11-05',start:'09:00',end:'11:00',reason:'Venue & equipment unavailable',
     message:'The request was cancelled.'
   });
-  assert.match(email.subject,/Multimedia Room booking cancelled/);
+  assert.match(email.subject,/Room booking cancelled/);
+  assert.match(email.text,/Do not reply.*GSO Office/);
   assert.match(email.text,/Venue & equipment unavailable/);
   assert.match(email.html,/Booking update/);
   assert.match(email.html,/Seminar &lt;script&gt;alert\(1\)&lt;\/script&gt;/);

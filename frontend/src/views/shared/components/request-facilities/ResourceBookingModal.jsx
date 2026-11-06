@@ -1,5 +1,7 @@
 import FacilityRequestFields from './FacilityRequestFields';
-import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Info, X } from 'lucide-react';
+import { fetchWithAuth } from '../../../../api';
 
 export default function ResourceBookingModal({
   activeFacility,
@@ -16,6 +18,25 @@ export default function ResourceBookingModal({
   signatories
 }) {
   const isVan = activeFacility === 'Van';
+  const [fleetAvailability, setFleetAvailability] = useState(null);
+  const fleetWindow = `${form.reservationDate}|${form.pickUpTime}|${form.dropOffTime}`;
+  const currentFleetAvailability = fleetAvailability?.window === fleetWindow ? fleetAvailability.data : null;
+  const [showFleetInfo, setShowFleetInfo] = useState(false);
+  useEffect(() => {
+    if (!isVan || !form.reservationDate || !form.pickUpTime || !form.dropOffTime || form.pickUpTime >= form.dropOffTime) return undefined;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const query = new URLSearchParams({date:form.reservationDate,start:form.pickUpTime,end:form.dropOffTime,type:'Vehicle'});
+        const response = await fetchWithAuth(`/api/resources/availability?${query}`);
+        const data = await response.json();
+        if (active) setFleetAvailability({window:fleetWindow,data:response.ok ? data : {available:false,reason:data.error}});
+      } catch {
+        if (active) setFleetAvailability({window:fleetWindow,data:{available:false,reason:'Availability could not be checked. Try again.'}});
+      }
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [isVan, form.reservationDate, form.pickUpTime, form.dropOffTime, fleetWindow]);
   const passengers = form.officialPassengers || [''];
   const inputClass = 'w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none focus:border-red-700 focus:ring-2 focus:ring-red-700/10 dark:border-gray-700 dark:bg-[#1c1113] dark:text-white';
   const cardClass = 'rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-5 dark:border-[#42292f] dark:bg-[#1c1113]/50';
@@ -33,6 +54,16 @@ export default function ResourceBookingModal({
         
         <form onSubmit={handleBookingSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="min-h-0 space-y-4 overflow-y-auto p-4 custom-scrollbar sm:p-6">
+          {isVan && <div className="relative flex justify-end" onMouseEnter={() => setShowFleetInfo(true)} onMouseLeave={() => setShowFleetInfo(false)}>
+            <button type="button" aria-label="Show available vehicles and drivers" aria-expanded={showFleetInfo}
+              onClick={() => setShowFleetInfo(true)}
+              className="rounded-full bg-blue-50 p-2 text-blue-700 ring-2 ring-blue-200 shadow-[0_0_14px_rgba(37,99,235,0.45)] hover:shadow-[0_0_20px_rgba(37,99,235,0.7)] focus-visible:outline-2 focus-visible:outline-blue-600 dark:bg-blue-950 dark:text-blue-300">
+              <Info size={18} />
+            </button>
+            {showFleetInfo && <div role="status" className="absolute right-0 top-11 z-20 w-72 rounded-xl border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg dark:border-blue-800 dark:bg-[#1c1113] dark:text-gray-200">
+              {!form.reservationDate || !form.pickUpTime || !form.dropOffTime ? 'Choose a date, departure, and arrival time to see available vehicles and drivers.' : currentFleetAvailability ? `${currentFleetAvailability.vehicleCount ?? 0} vehicle(s) and ${currentFleetAvailability.driverCount ?? 0} driver(s) available for this time. ${currentFleetAvailability.reason || ''}` : 'Checking availability…'}
+            </div>}
+          </div>}
           {isVan && <section className={cardClass}>
           <div className="mb-5 border-b border-neutral-100 pb-4 dark:border-[#42292f]">
             <h4 className="text-sm font-bold text-neutral-900 dark:text-white">1. Request details</h4>

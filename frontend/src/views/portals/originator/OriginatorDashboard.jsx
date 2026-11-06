@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, FileText, School, User, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList, History } from 'lucide-react';
+import { LayoutDashboard, FileText, User, LogOut, Menu, X, ChevronDown, History } from 'lucide-react';
 import { endSession } from '../../../api';
 import ThemeToggle from '../../shared/components/ThemeToggle';
 
@@ -10,6 +10,7 @@ import useOriginatorData from './hooks/useOriginatorData';
 import OriginatorOverviewTab from './components/OriginatorOverviewTab';
 import OriginatorDocumentsTab from './components/OriginatorDocumentsTab';
 import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
+import RequestFacilitiesSidebarSection from '../../shared/components/RequestFacilitiesSidebarSection';
 
 // Shared Components
 import UserProfileTab from '../../shared/components/UserProfileTab';
@@ -34,7 +35,6 @@ export default function OriginatorDashboard() {
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
   const [notificationTrackingDocId, setNotificationTrackingDocId] = useState(null);
   const [targetBookingId, setTargetBookingId] = useState(null);
-  const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [previousTab, setPreviousTab] = useState('dashboard');
@@ -64,11 +64,6 @@ export default function OriginatorDashboard() {
   const handleTabSelect = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false);
-  };
-
-  const openFacilitiesMenu = () => {
-    setFacilitiesExpanded(current => activeTab.startsWith('resource-') ? !current : true);
-    if (!activeTab.startsWith('resource-')) setActiveTab('resource-gym');
   };
 
   const openDocumentsMenu = () => {
@@ -152,26 +147,7 @@ export default function OriginatorDashboard() {
               </div>}
             </div>
 
-            <div>
-              <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
-                <ChevronDown size={15} className={`transition-transform ${facilitiesExpanded ? 'rotate-180' : ''}`} />
-              </button>
-              {facilitiesExpanded && (
-                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
-                  {[
-                    { id: 'resource-gym', label: 'Gymnasium', icon: School },
-                    { id: 'resource-room', label: 'Rooms', icon: MonitorPlay },
-                    { id: 'resource-vehicle', label: 'Vehicles', icon: Truck },
-                    { id: 'resource-requests', label: 'Submitted Requests', icon: ClipboardList }
-                  ].map(item => (
-                    <button key={item.id} onClick={() => handleTabSelect(item.id)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === item.id ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                      <item.icon size={14} /> {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <RequestFacilitiesSidebarSection activeTab={activeTab} onSelect={handleTabSelect} />
 
             <button onClick={() => handleTabSelect('submission-history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'submission-history' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><History size={18}/> History</button>
           </nav>

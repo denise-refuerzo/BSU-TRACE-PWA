@@ -85,7 +85,7 @@ function renderSystemEmail(subject, textBody) {
 
 const sendSystemEmail = (toEmail, subject, textBody) => deliver(toEmail, renderSystemEmail(subject, textBody), 'System');
 
-const bookingTypeLabel = type => type === 'Room' ? 'Multimedia Room' : type === 'Gymnasium' ? 'Gymnasium' : 'Vehicle';
+const bookingTypeLabel = type => type === 'Room' ? 'Room' : type === 'Gymnasium' ? 'Gymnasium' : 'Vehicle';
 
 function renderBookingEmail({bookingType, purpose, status, event, date, start, end, reason,
   vehicleName, driverName, previousVehicle, previousDriver, message}) {
@@ -107,7 +107,7 @@ function renderBookingEmail({bookingType, purpose, status, event, date, start, e
     title: 'Booking update',
     message,
     details,
-    note: 'For booking questions, contact the GSO Office or check your BSU-Trace request history.'
+    note: 'Do not reply to this email. For any questions or concerns about this request, contact the GSO Office.'
   });
 }
 

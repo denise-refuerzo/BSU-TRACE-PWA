@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Car, Filter, Inbox, Search, Settings2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { resourceApi, resourceError, resourceSuccess } from '../resourceActions';
+import InfoNoticeButton from '../../../shared/components/InfoNoticeButton';
 
 const badgeClasses = {
   Approved: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
@@ -78,23 +79,23 @@ export default function ManageBookingsTab({ onAssignVehicle }) {
   const rows=useMemo(()=>bookings.filter(b=>(filter==='All'||b.status===filter)&&(type==='All'||b.booking_type===type)&&`${b.requestor} ${b.purpose} ${b.asset_name||''} ${b.booking_type}`.toLowerCase().includes(search.toLowerCase())),[bookings,filter,type,search]);
   
   return (
-    <div className="mx-auto max-w-8xl space-y-6 text-left">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-6 shadow-xs md:flex-row md:items-center">
-        <p className="text-sm text-gray-500 dark:text-gray-400">Operate approved facility and vehicle bookings until completion.</p>
-        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">{bookings.length} active booking{bookings.length===1?'':'s'}</div>
-      </header>
-      <section className="overflow-hidden rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-xs">
-        <div className="flex flex-col gap-3 border-b border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] p-4 sm:flex-row sm:justify-end">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-3 text-gray-400"/>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search booking…" className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] text-gray-900 dark:text-white py-2.5 pl-9 pr-3 text-xs sm:w-64 outline-none"/>
-          </div>
-          <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
-            <select aria-label="Booking type" value={type} onChange={e=>setType(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option value="All">All resources</option><option value="Vehicle">Vehicles</option><option value="Room">Multimedia Room</option><option value="Gymnasium">Gymnasium</option></select>
-          </div>
-          <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
-            <Filter size={14} className="text-gray-400"/>
-            <select value={filter} onChange={e=>setFilter(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option>All</option><option>Approved</option><option>Ongoing</option><option>Delayed</option><option>Rescheduled</option><option>Resource Reassigned</option></select>
+    <div className="mx-auto max-w-8xl text-left">
+      <section className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-2xl border-b border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] p-4">
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-400">{bookings.length} active booking{bookings.length===1?'':'s'}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-3 text-gray-400"/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search booking…" className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] text-gray-900 dark:text-white py-2.5 pl-9 pr-3 text-xs sm:w-64 outline-none"/>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
+              <select aria-label="Booking type" value={type} onChange={e=>setType(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option value="All">All resources</option><option value="Vehicle">Vehicles</option><option value="Room">Room</option><option value="Gymnasium">Gymnasium</option></select>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
+              <Filter size={14} className="text-gray-400"/>
+              <select value={filter} onChange={e=>setFilter(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option>All</option><option>Approved</option><option>Ongoing</option><option>Delayed</option><option>Rescheduled</option><option>Resource Reassigned</option></select>
+            </div>
+            <InfoNoticeButton label="About Manage Bookings">Operate approved facility and vehicle bookings until completion.</InfoNoticeButton>
           </div>
         </div>
         {error&&<div className="m-4 rounded-xl bg-red-50 dark:bg-red-900/20 p-4 text-xs font-semibold text-red-800 dark:text-red-300">{error} <button onClick={refresh} className="underline">Retry</button></div>}
@@ -108,7 +109,7 @@ export default function ManageBookingsTab({ onAssignVehicle }) {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {rows.map(b=>(
                 <tr key={b.booking_id} className="hover:bg-gray-50 dark:hover:bg-[#2b1317]/50">
-                  <td className="p-4"><strong className="block text-gray-900 dark:text-white">{b.purpose}</strong><span className="text-xs text-gray-500 dark:text-gray-400">{b.requestor} · {b.booking_type==='Room'?'Multimedia Room':b.booking_type}</span></td>
+                  <td className="p-4"><strong className="block text-gray-900 dark:text-white">{b.purpose}</strong><span className="text-xs text-gray-500 dark:text-gray-400">{b.requestor} · {b.booking_type}</span></td>
                   <td className="p-4"><strong className="block text-xs text-gray-800 dark:text-gray-200">{b.reservation_date}</strong><span className="text-xs text-gray-500 dark:text-gray-400">{b.start_time?.slice(0,5)}–{b.end_time?.slice(0,5)}</span></td>
                   <td className="p-4 text-xs text-gray-700 dark:text-gray-300">{b.asset_name||b.vehicle_to_be_used||'Not assigned'}{b.designated_driver&&<span className="block text-gray-400 dark:text-gray-500">{b.designated_driver}</span>}</td>
                   <td className="p-4"><span className={`rounded-md border px-2.5 py-1 text-[10px] font-black uppercase ${badgeClasses[b.status]||badgeClasses.Approved}`}>{b.status}</span></td>

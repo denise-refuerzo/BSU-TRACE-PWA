@@ -176,6 +176,10 @@ export default function GSOAdminDashboard() {
 
   const [showChecklistMakerModal, setShowChecklistMakerModal] = useState(false);
   const [activeChecklistTab, setActiveChecklistTab] = useState('Vehicle');
+  const [selectedChecklistRoomId, setSelectedChecklistRoomId] = useState('');
+  const checklistRooms = assetsList.filter(asset => Number(asset.ast_id) === 1);
+  const checklistRoomId = checklistRooms.some(room => String(room.asd_id) === selectedChecklistRoomId)
+    ? selectedChecklistRoomId : String(checklistRooms[0]?.asd_id || '');
 
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printTargetTab, setPrintTargetTab] = useState('Vehicle'); 
@@ -302,33 +306,44 @@ export default function GSOAdminDashboard() {
 
   useEffect(() => {
     if (showChecklistMakerModal) {
+      let active = true;
+      fetchMasterAssets();
       const fetchTemplates = async () => {
-        const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+        const typeMapping = { 'Vehicle': 'Vehicle', 'Room': 'Room', 'Gymnasium': 'Gymnasium' };
         const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
+        if (targetType === 'Room' && !checklistRoomId) { setMasterChecklistItems([]); return; }
         try {
-          const res = await fetchWithAuth(`/api/procurement/templates/${targetType}`);
-          if (res.ok) setMasterChecklistItems(await res.json());
+          const query = targetType === 'Room' ? `?assetId=${encodeURIComponent(checklistRoomId)}` : '';
+          const res = await fetchWithAuth(`/api/procurement/templates/${targetType}${query}`);
+          if (res.ok) {
+            const items = await res.json();
+            if (active) setMasterChecklistItems(items);
+          } else if (active) setMasterChecklistItems([]);
         } catch (err) { console.error("Error fetching templates:", err); }
       };
       fetchTemplates();
+      return () => { active = false; };
     }
-  }, [showChecklistMakerModal, activeChecklistTab]);
+    return undefined;
+  }, [showChecklistMakerModal, activeChecklistTab, checklistRoomId]);
 
   const handleAddMasterChecklistItem = async (e) => {
     e.preventDefault();
     if (!newChecklistName.trim()) return;
     if (!await confirmResourceAction('Add this requirement?', newChecklistName.trim())) return;
-    const typeMapping = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+    const typeMapping = { 'Vehicle': 'Vehicle', 'Room': 'Room', 'Gymnasium': 'Gymnasium' };
     const targetType = typeMapping[activeChecklistTab] || activeChecklistTab;
+    if (targetType === 'Room' && !checklistRoomId) return;
+    const query = targetType === 'Room' ? `?assetId=${encodeURIComponent(checklistRoomId)}` : '';
     try {
       const res = await fetchWithAuth('/api/procurement/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingType: targetType, itemName: newChecklistName.trim() })
+        body: JSON.stringify({ bookingType: targetType, itemName: newChecklistName.trim(), assetId: targetType === 'Room' ? Number(checklistRoomId) : null })
       });
       if (res.ok) {
         setNewChecklistName('');
-        const updated = await fetchWithAuth(`/api/procurement/templates/${targetType}`);
+        const updated = await fetchWithAuth(`/api/procurement/templates/${targetType}${query}`);
         if (updated.ok) setMasterChecklistItems(await updated.json());
         await resourceSuccess('Requirement added.');
       } else {
@@ -920,7 +935,8 @@ export default function GSOAdminDashboard() {
       
       <MasterChecklistModal
         showChecklistMakerModal={showChecklistMakerModal} setShowChecklistMakerModal={setShowChecklistMakerModal}
-        activeChecklistTab={activeChecklistTab} setActiveChecklistTab={setActiveChecklistTab}
+        activeChecklistTab={activeChecklistTab} setActiveChecklistTab={tab => { setMasterChecklistItems([]); setActiveChecklistTab(tab); }}
+        checklistRooms={checklistRooms} checklistRoomId={checklistRoomId} setSelectedChecklistRoomId={id => { setMasterChecklistItems([]); setSelectedChecklistRoomId(id); }}
         masterChecklistItems={masterChecklistItems} 
         handleDeleteMasterChecklistItem={handleDeleteMasterChecklistItem} 
         handleAddMasterChecklistItem={handleAddMasterChecklistItem}

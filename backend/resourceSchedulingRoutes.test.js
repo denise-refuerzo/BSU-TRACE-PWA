@@ -45,6 +45,26 @@ const booking = {
   assigned_vehicle_id:null,assigned_driver_id:null,vehicle_to_be_used:null,designated_driver:null
 };
 
+test('vehicle and driver unavailable notices report approved counts without request IDs', async () => {
+  for (const kind of ['vehicles','drivers']) {
+    const routes = new Map();
+    const app = {get(){},post(){},put(path,...handlers){routes.set(path,handlers);}};
+    const queries = [];
+    const client = {async query(sql){queries.push(sql);return {rows:sql.includes('count(*)::int')?[{count:2}]:[]};},release(){}};
+    registerScheduling(app,{...client,connect:async()=>client},(req,res,next)=>next());
+    const handlers = routes.get('/api/resources/fleet/:kind/:id/active');
+    const req = {params:{kind,id:'4'},body:{active:false},user:{a_id:4}};
+    const res = {status(code){this.code=code;return this;},json(value){this.data=value;}};
+    let step=0;
+    const next=()=>handlers[step++]?.(req,res,next);
+    await next();
+    assert.equal(res.code,400);
+    assert.match(res.data.error,/2 upcoming approved requests/);
+    assert.doesNotMatch(res.data.error,/[0-9a-f]{8}-/i);
+    assert.ok(!queries.some(sql=>sql.startsWith('UPDATE public.')));
+  }
+});
+
 test('first vehicle and driver assignment sends one email with the selected pair',async()=>{
   const api=setup(booking);
   const res=await api.assign();

@@ -3,8 +3,9 @@ import { resourceApi, resourceError, resourceSuccess } from '../resourceActions'
 import { fetchWithAuth } from '../../../../api';
 import ResourceRegistry from './ResourceRegistry';
 import ResourceAdminCalendar from './ResourceAdminCalendar';
+import InfoNoticeButton from '../../../shared/components/InfoNoticeButton';
 import { 
-  Building2, Calendar, Landmark, Car, Users, Package, Boxes, ArrowRightLeft, Plus, X
+  Calendar, Landmark, Car, Users, Package, Boxes, ArrowRightLeft, Plus, X
 } from 'lucide-react';
 
 export default function ResourceManagementTab({ onOpenRequest, onSelectInventoryItem }) {
@@ -60,6 +61,9 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
 
   useEffect(() => {
     refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [refresh]);
 
   const navTabs = [
@@ -73,14 +77,6 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
   return (
     <div className="max-w-8xl mx-auto space-y-6 text-left animate-in fade-in duration-200">
       
-      {/* HEADER */}
-      <header className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl p-6 shadow-xs flex items-center gap-4">
-        <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 text-red-800 dark:text-red-400 rounded-xl">
-          <Building2 size={24} />
-        </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Manage campus facilities, vehicles, drivers, and inventory availability.</p>
-      </header>
-
       {error && (
         <div role="alert" className="p-4 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 rounded-xl text-xs font-semibold">
           {error}
@@ -89,11 +85,12 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
       )}
 
       {/* UNIFIED CONTAINER */}
-      <div className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl shadow-xs overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-2xl shadow-xs flex flex-col">
         
         {/* TABS */}
-        <div className="p-4 border-b border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] flex items-center overflow-x-auto">
-          <div className="flex items-center gap-1.5 p-1 bg-neutral-200/60 dark:bg-gray-800 rounded-xl">
+        <div className="flex items-center gap-3 rounded-t-2xl border-b border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] p-4">
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <div className="flex w-max items-center gap-1.5 rounded-xl bg-neutral-200/60 dark:bg-gray-800 p-1">
             {navTabs.map(tab => (
               <button
                 key={tab.id}
@@ -108,7 +105,9 @@ export default function ResourceManagementTab({ onOpenRequest, onSelectInventory
                 {tab.label}
               </button>
             ))}
+            </div>
           </div>
+          <InfoNoticeButton label="About Resource Inventory">Manage campus facilities, vehicles, drivers, and inventory availability.</InfoNoticeButton>
         </div>
 
         {/* CONTENT */}

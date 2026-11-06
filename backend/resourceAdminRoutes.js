@@ -8,38 +8,85 @@ module.exports = (app, pool, requireAuth, sendBookingEmail = sendBookingUpdateEm
     io?.to('resource_updates_room').emit('resource-schedule-updated');
     io?.to('gso_admin_room').emit('system-metrics-updated');
   };
+  const activeStatuses = "('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')";
+  async function assertNoUpcomingApproved(client, kind, id) {
+    const resourceClause = kind === 'assets' ? 'gm.asd_id=$1' : kind === 'vehicles' ? 'vr.assigned_vehicle_id=$1' : 'vr.assigned_driver_id=$1';
+    const result = await client.query(`SELECT count(*)::int AS count
+      FROM public.bookings b LEFT JOIN public.gm_requirements gm USING(booking_id)
+      LEFT JOIN public.vehicle_requirements vr USING(booking_id)
+      WHERE ${resourceClause} AND b.status IN ${activeStatuses}
+        AND b.reservation_date + COALESCE(gm.end_time,vr.drop_off_time) > timezone('Asia/Manila',now())
+      `, [id]);
+    const count = Number(result.rows[0]?.count || 0);
+    if (count) {
+      throw new Error(`Cannot set unavailable: ${count} upcoming approved ${count === 1 ? 'request is' : 'requests are'} assigned to this resource. Reassign, reschedule, or cancel ${count === 1 ? 'it' : 'them'} first.`);
+    }
+  }
   app.get('/api/resources/schedule-blocks',requireAuth,handle(async(req,res)=>{
-    const result = await pool.query(`SELECT ab.block_id,ab.asd_id,ab.vehicle_id,ab.whole_day,ab.reason,
+    const result = await pool.query(`SELECT ab.block_id,ab.asd_id,ab.vehicle_id,ab.driver_id,ab.whole_day,ab.reason,
       to_char(ab.start_time,'YYYY-MM-DD"T"HH24:MI:SS') AS start_time,
       to_char(ab.end_time,'YYYY-MM-DD"T"HH24:MI:SS') AS end_time,
-      ad.asset_name,ad.ast_id,f.vehicle_name,f.plate_number
-      FROM public.asset_blackouts ab JOIN public.asset_details ad USING(asd_id)
-      LEFT JOIN public.fleet_vehicles f ON f.vehicle_id=ab.vehicle_id ORDER BY ab.start_time`);
+      ad.asset_name,ad.ast_id,f.vehicle_name,f.plate_number,d.full_name AS driver_name
+      FROM public.asset_blackouts ab LEFT JOIN public.asset_details ad USING(asd_id)
+      LEFT JOIN public.fleet_vehicles f ON f.vehicle_id=ab.vehicle_id
+      LEFT JOIN public.resource_drivers d ON d.driver_id=ab.driver_id ORDER BY ab.start_time`);
     res.json(result.rows);
   }));
   app.post('/api/resources/schedule-blocks',requireAuth,gso,handle(async(req,res)=>{
-    const {assetId,vehicleId,date,wholeDay,start,end,reason}=req.body;
+    const {assetId,vehicleId,driverId,date,wholeDay,start,end,reason}=req.body;
     if(typeof reason !== 'string' || !reason.trim() || typeof wholeDay !== 'boolean') throw new Error('Enter a reason and blocking mode.');
     validateWindow(date,wholeDay ? '00:00' : start,wholeDay ? '23:59' : end);
     const client=await pool.connect();
     try {
       await client.query('BEGIN');await lockSchedule(client);
-      const asset=await client.query('SELECT ast_id FROM public.asset_details WHERE asd_id=$1',[assetId]);
-      if(!asset.rows.length || ![1,2,4].includes(asset.rows[0].ast_id)) throw new Error('Select a facility or vehicle.');
-      if(asset.rows[0].ast_id===4) {
+      const asset=driverId ? {rows:[]} : await client.query('SELECT ast_id,asset_name FROM public.asset_details WHERE asd_id=$1',[assetId]);
+      if (driverId) {
+        if (assetId || vehicleId) throw new Error('Select only one resource to block.');
+        const driver=await client.query('SELECT 1 FROM public.resource_drivers WHERE driver_id=$1',[driverId]);
+        if(!driver.rows.length) throw new Error('Select a registered driver.');
+      } else if(!asset.rows.length || ![1,2,4].includes(asset.rows[0].ast_id)) throw new Error('Select a facility or vehicle.');
+      if(asset.rows[0]?.ast_id===4) {
         const vehicle=await client.query('SELECT 1 FROM public.fleet_vehicles WHERE vehicle_id=$1 AND asd_id=$2',[vehicleId,assetId]);
         if(!vehicle.rows.length) throw new Error('Select an individual registered vehicle.');
       } else if(vehicleId) throw new Error('A facility block cannot target a vehicle.');
       const from = `${date}T${wholeDay?'00:00':start}`;
       const until = wholeDay ? `${new Date(Date.parse(date)+86400000).toISOString().slice(0,10)}T00:00` : `${date}T${end}`;
-      const conflicts=await client.query(`SELECT 1 FROM public.bookings b
+      const conflicts=await client.query(`SELECT count(*)::int AS count FROM public.bookings b
         LEFT JOIN public.gm_requirements gm USING(booking_id) LEFT JOIN public.vehicle_requirements vr USING(booking_id)
-        WHERE b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned') AND (gm.asd_id=$1 OR (vr.asd_id=$1 AND ($4::integer IS NULL OR vr.assigned_vehicle_id=$4 OR vr.assigned_vehicle_id IS NULL)))
+        WHERE b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
+          AND (gm.asd_id=$1 OR ($4::integer IS NOT NULL AND (vr.assigned_vehicle_id=$4 OR vr.assigned_vehicle_id IS NULL)) OR vr.assigned_driver_id=$5)
         AND (b.reservation_date + COALESCE(gm.start_time,vr.pick_up_time)) < $3::timestamp
-        AND (b.reservation_date + CASE WHEN vr.pick_up_time>=vr.drop_off_time THEN '23:59:59'::time ELSE COALESCE(gm.end_time,vr.drop_off_time) END) > $2::timestamp LIMIT 1`,[assetId,from,until,vehicleId||null]);
-      if(conflicts.rows.length) throw new Error('This block overlaps an approved active request. Reassign the vehicle or resolve the request before blocking this period.');
-      await client.query('INSERT INTO public.asset_blackouts(asd_id,vehicle_id,start_time,end_time,reason,blocked_by,whole_day) VALUES($1,$2,$3,$4,$5,$6,$7)',[assetId,vehicleId||null,from,until,reason.trim(),req.user.u_id,wholeDay]);
-      await client.query('COMMIT');broadcast(req);res.status(201).json({message:'Blocked period saved.'});
+        AND (b.reservation_date + CASE WHEN vr.pick_up_time>=vr.drop_off_time THEN '23:59:59'::time ELSE COALESCE(gm.end_time,vr.drop_off_time) END) > $2::timestamp`,[assetId||null,from,until,vehicleId||null,driverId||null]);
+      const conflictCount = Number(conflicts.rows[0]?.count || 0);
+      if(conflictCount) throw new Error(`This block overlaps ${conflictCount} approved active ${conflictCount === 1 ? 'request' : 'requests'}. Coordinate with the ${conflictCount === 1 ? 'requester' : 'requesters'} and reassign, reschedule, or cancel ${conflictCount === 1 ? 'the request' : 'those requests'} before blocking this period.`);
+      await client.query('INSERT INTO public.asset_blackouts(asd_id,vehicle_id,driver_id,start_time,end_time,reason,blocked_by,whole_day) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[assetId||null,vehicleId||null,driverId||null,from,until,reason.trim(),req.user.u_id,wholeDay]);
+      let cancelled = [];
+      if (asset.rows[0] && asset.rows[0].ast_id !== 4) {
+        const pending = await client.query(`SELECT b.booking_id,b.public_id,b.purpose,b.status,u.uni_email,
+          to_char(b.reservation_date,'YYYY-MM-DD') AS date,gm.start_time::text AS start,gm.end_time::text AS end
+          FROM public.bookings b JOIN public.gm_requirements gm USING(booking_id)
+          JOIN public."User" u ON u.u_id=b.u_id
+          WHERE gm.asd_id=$1 AND b.status IN ('Pending','Reserved')
+            AND b.reservation_date + gm.start_time < $3::timestamp
+            AND b.reservation_date + gm.end_time > $2::timestamp
+          FOR UPDATE OF b`,[assetId,from,until]);
+        cancelled = pending.rows;
+        for (const booking of cancelled) {
+          const explanation = `${asset.rows[0].asset_name} is blocked for the requested date and time. Reason: ${reason.trim()}`;
+          await client.query("UPDATE public.bookings SET status='Cancelled',updated_at=timezone('Asia/Manila',now()) WHERE booking_id=$1",[booking.booking_id]);
+          await client.query(`INSERT INTO public.booking_status_updates
+            (booking_id,previous_status,new_status,reason,notification_message,previous_date,new_date,previous_start,new_start,previous_end,new_end,updated_by)
+            VALUES($1,$2,'Cancelled',$3,$4,$5,$5,$6,$6,$7,$7,$8)`,
+            [booking.booking_id,booking.status,explanation,`Your request for this facility was cancelled because it is blocked for the requested time. Reason: ${explanation}`,booking.date,booking.start,booking.end,req.user.u_id]);
+        }
+      }
+      await client.query('COMMIT');broadcast(req);
+      for (const booking of cancelled) {
+        if (!booking.uni_email) continue;
+        try { await sendBookingEmail(booking.uni_email,{bookingType:asset.rows[0].ast_id===1?'Room':'Gymnasium',purpose:booking.purpose,status:'Cancelled',date:booking.date,start:booking.start,end:booking.end,reason:`${asset.rows[0].asset_name} is blocked for the requested date and time. Reason: ${reason.trim()}`,message:`Your request for ${asset.rows[0].asset_name} was cancelled because it is blocked at the requested date and time.`}); }
+        catch(error) { console.error('Block cancellation email failed:',error); }
+      }
+      res.status(201).json({message:`Blocked period saved. ${cancelled.length} pending request(s) cancelled.`});
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
   app.delete('/api/resources/schedule-blocks/:id',requireAuth,gso,handle(async(req,res)=>{
@@ -47,11 +94,15 @@ module.exports = (app, pool, requireAuth, sendBookingEmail = sendBookingUpdateEm
   }));
   app.put('/api/resources/registry/assets/:id/active',requireAuth,gso,handle(async(req,res)=>{
     if(typeof req.body.active!=='boolean') throw new Error('Invalid availability update.');
-    const result=await pool.query(`UPDATE public.asset_details SET is_active=$1
-      WHERE asd_id=$2 AND ast_id IN (1,2) RETURNING asset_name`,[req.body.active,req.params.id]);
-    if(!result.rows.length) throw new Error('Room or facility not found.');
-    broadcast(req);
-    res.json({message:`${result.rows[0].asset_name} marked ${req.body.active?'available':'unavailable'}. Existing approved bookings remain visible and should be reassigned or rescheduled if necessary.`});
+    const client=await pool.connect();
+    try {
+      await client.query('BEGIN');await lockSchedule(client);
+      if (!req.body.active) await assertNoUpcomingApproved(client,'assets',req.params.id);
+      const result=await client.query(`UPDATE public.asset_details SET is_active=$1 WHERE asd_id=$2 AND ast_id IN (1,2) RETURNING asset_name`,[req.body.active,req.params.id]);
+      if(!result.rows.length) throw new Error('Room or facility not found.');
+      await client.query('COMMIT');broadcast(req);
+      res.json({message:`${result.rows[0].asset_name} marked ${req.body.active?'available':'unavailable'}.`});
+    } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
 
   app.get('/api/resources/manage-bookings',requireAuth,gso,handle(async(req,res)=>{
@@ -203,6 +254,7 @@ module.exports = (app, pool, requireAuth, sendBookingEmail = sendBookingUpdateEm
       } else if(['vehicles','drivers'].includes(req.params.kind)) {
         if(typeof number!=='string'||!number.trim()||typeof active!=='boolean') throw new Error('Enter the plate/license number and availability.');
         const vehicle=req.params.kind==='vehicles';
+        if (!active) await assertNoUpcomingApproved(client,req.params.kind,req.params.id);
         await client.query(vehicle ? 'UPDATE public.fleet_vehicles SET vehicle_name=$1,plate_number=$2,is_active=$3 WHERE vehicle_id=$4' : 'UPDATE public.resource_drivers SET full_name=$1,license_number=$2,is_active=$3 WHERE driver_id=$4',[name.trim(),number.trim().toUpperCase(),active,req.params.id]);
       } else throw new Error('Unknown registry.');
       await client.query('COMMIT');broadcast(req);res.json({message:'Details updated.'});

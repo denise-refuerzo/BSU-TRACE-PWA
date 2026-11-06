@@ -1984,9 +1984,10 @@ app.get('/api/resources/blackouts', async (req, res) => {
   try {
     // JOIN added so the frontend gets the asset_name directly
     const query = `
-      SELECT ab.*, ad.asset_name 
+      SELECT ab.*, ad.asset_name, d.full_name AS driver_name
       FROM public.asset_blackouts ab
-      JOIN public.asset_details ad ON ab.asd_id = ad.asd_id
+      LEFT JOIN public.asset_details ad ON ab.asd_id = ad.asd_id
+      LEFT JOIN public.resource_drivers d ON ab.driver_id = d.driver_id
     `;
     const result = await pool.query(query);
     res.json(result.rows);
@@ -1999,19 +2000,7 @@ app.get('/api/resources/blackouts', async (req, res) => {
 // 11.9 ASSETS: CREATE NEW BLACKOUT ENDPOINT
 // ==========================================
 app.post('/api/resources/blackouts', requireAuth, async (req, res) => {
-  const { asd_id, start_time, end_time, reason } = req.body;
-  try {
-    await pool.query(
-      `INSERT INTO public.asset_blackouts (asd_id, start_time, end_time, reason, blocked_by) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      // We added parseInt() here to ensure the database gets a strict number
-      [parseInt(asd_id), start_time, end_time, reason, req.user.u_id] 
-    );
-    res.status(201).json({ message: "Asset successfully blocked." });
-  } catch (err) {
-    console.error("Blackout Insert Error:", err); // Added this so it's easier to spot in the terminal!
-    res.status(500).json({ error: "Failed to apply blackout date." });
-  }
+  res.status(410).json({error:'Use the schedule block form so approved and pending requests are checked before a block is saved.'});
 });
 
 // ==========================================
@@ -2200,11 +2189,14 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
     await client.query('BEGIN');
     await lockSchedule(client);
 
-    const assetRes = await client.query(`SELECT asd_id FROM public.asset_details WHERE ast_id = CASE $2 WHEN 'Vehicle' THEN 4 WHEN 'Room' THEN 1 WHEN 'Gymnasium' THEN 2 END ORDER BY (asset_name = $1) DESC, asd_id LIMIT 1`, [assetName, bookingType]);
+    const assetRes = await client.query(`SELECT asd_id FROM public.asset_details WHERE ast_id = CASE $2 WHEN 'Vehicle' THEN 4 WHEN 'Room' THEN 1 WHEN 'Gymnasium' THEN 2 END AND ($2 = 'Vehicle' OR asset_name = $1) ORDER BY asd_id LIMIT 1`, [assetName, bookingType]);
     if (assetRes.rows.length === 0) throw new Error("Target university asset resource not registered.");
     const asdId = assetRes.rows[0].asd_id;
 
     for (const requestedDate of dates) {
+    const startPassed = await client.query(`SELECT ($1::date + $2::time) <= timezone('Asia/Manila',now()) AS passed`,
+      [requestedDate,isFacility ? startTime : pickUpTime]);
+    if (startPassed.rows[0].passed) throw Object.assign(new Error('The requested start time has passed. Choose a future time.'),{status:409});
     const free = await availability(client, {date:requestedDate, start:isFacility ? startTime : pickUpTime, end:isFacility ? endTime : dropOffTime, type:bookingType, assetName});
     if (!free.available) throw Object.assign(new Error(free.reason), {status:409});
 
@@ -2337,11 +2329,13 @@ app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
 // ==========================================
 app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
-  const { bookingId, type } = req.params;
+  const { bookingId } = req.params;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1', [bookingId]);
+    const booking = await client.query(`SELECT b.booking_id,b.booking_type,gm.asd_id AS room_asset_id
+      FROM public.bookings b LEFT JOIN public.gm_requirements gm USING(booking_id)
+      WHERE b.public_id=$1`, [bookingId]);
     if (!booking.rows.length) throw Object.assign(new Error('Request not found.'), {status:404});
     const internalBookingId = booking.rows[0].booking_id;
     
@@ -2350,7 +2344,10 @@ app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req,
     
     if (existingChecklist.rows.length === 0) {
       // 2. If empty, generate them from the global template
-      const templates = await client.query('SELECT item_name FROM public.checklist_templates WHERE booking_type = $1', [type]);
+      const roomAssetId = booking.rows[0].booking_type === 'Room' ? booking.rows[0].room_asset_id : null;
+      const templates = await client.query(`SELECT item_name FROM public.checklist_templates
+        WHERE booking_type=$1 AND asd_id IS NOT DISTINCT FROM $2::integer
+        ORDER BY template_id`, [booking.rows[0].booking_type, roomAssetId]);
       if (templates.rows.length > 0) {
         for (let t of templates.rows) {
           await client.query(
@@ -2385,12 +2382,14 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     await client.query('BEGIN');
     await lockSchedule(client);
     if (typeof isChecked !== 'boolean') throw new Error('Invalid checklist value.');
-    const booking = await client.query(`SELECT booking_id,booking_type,purpose,status,
-      reservation_date < timezone('Asia/Manila',now())::date AS date_passed
-      FROM public.bookings WHERE public_id=$1 FOR UPDATE`, [bookingId]);
+    const booking = await client.query(`SELECT b.booking_id,b.booking_type,b.purpose,b.status,
+      b.reservation_date + COALESCE(gm.start_time,vr.pick_up_time) <= timezone('Asia/Manila',now()) AS start_passed
+      FROM public.bookings b LEFT JOIN public.gm_requirements gm USING(booking_id)
+      LEFT JOIN public.vehicle_requirements vr USING(booking_id)
+      WHERE b.public_id=$1 FOR UPDATE OF b`, [bookingId]);
     if (!booking.rows.length) throw new Error('Request not found.');
     if (['Cancelled','Completed'].includes(booking.rows[0].status)) throw new Error('This request is already closed. Submit a new request if needed.');
-    if (booking.rows[0].date_passed && ['Reserved','Pending'].includes(booking.rows[0].status)) throw new Error('The requested date has passed. Submit a new request.');
+    if (booking.rows[0].start_passed && ['Reserved','Pending'].includes(booking.rows[0].status)) throw new Error('The requested start time has passed. Submit a new request.');
     const internalBookingId = booking.rows[0].booking_id;
     
     // Update specific item
@@ -2433,15 +2432,26 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
 // 13.4 PROCUREMENT: GET MASTER TEMPLATES ENDPOINT
 // ==========================================
 app.get('/api/procurement/templates/:type', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
+  const client = await pool.connect();
   try {
     const { type } = req.params;
-    const result = await pool.query(
-      'SELECT template_id, item_name, booking_type FROM public.checklist_templates WHERE booking_type = $1 ORDER BY template_id ASC', 
-      [type]
-    );
+    const assetId = type === 'Room' ? Number(req.query.assetId) : null;
+    if (!['Room','Vehicle','Gymnasium'].includes(type) || (type === 'Room' && (!Number.isInteger(assetId) || assetId < 1))) return res.status(400).json({error:'Choose a valid resource and room.'});
+    await client.query('BEGIN');
+    if (type === 'Room') {
+      const room = await client.query('SELECT 1 FROM public.asset_details WHERE asd_id=$1 AND ast_id=1',[assetId]);
+      if (!room.rows.length) throw Object.assign(new Error('Room not found.'),{status:404});
+    }
+    const result = await client.query(`SELECT template_id,item_name,booking_type,asd_id FROM public.checklist_templates
+      WHERE booking_type=$1 AND asd_id IS NOT DISTINCT FROM $2::integer ORDER BY template_id`,[type,assetId]);
+    await client.query('COMMIT');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch master checklist templates." });
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message || 'Failed to fetch master checklist templates.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -2449,11 +2459,19 @@ app.get('/api/procurement/templates/:type', requireAuth, async (req, res) => {
 // 13.5 PROCUREMENT: POST NEW MASTER TEMPLATE ITEM ENDPOINT
 // ==========================================
 app.post('/api/procurement/templates', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
-    const { bookingType, itemName } = req.body;
+    const { bookingType, itemName, assetId } = req.body;
+    if (!['Room','Vehicle','Gymnasium'].includes(bookingType) || typeof itemName !== 'string' || !itemName.trim()) return res.status(400).json({error:'Enter a valid resource and requirement.'});
+    const roomId = bookingType === 'Room' ? Number(assetId) : null;
+    if (bookingType === 'Room') {
+      if (!Number.isInteger(roomId) || roomId < 1) return res.status(400).json({error:'Choose a room.'});
+      const room = await pool.query('SELECT 1 FROM public.asset_details WHERE asd_id=$1 AND ast_id=1',[roomId]);
+      if (!room.rows.length) return res.status(404).json({error:'Room not found.'});
+    }
     await pool.query(
-      'INSERT INTO public.checklist_templates (booking_type, item_name) VALUES ($1, $2)', 
-      [bookingType, itemName]
+      'INSERT INTO public.checklist_templates (booking_type, item_name, asd_id) VALUES ($1, $2, $3)',
+      [bookingType, itemName.trim(), roomId]
     );
     res.status(201).json({ message: "Template item successfully added." });
   } catch (err) {
@@ -2465,6 +2483,7 @@ app.post('/api/procurement/templates', requireAuth, async (req, res) => {
 // 13.6 PROCUREMENT: DELETE MASTER TEMPLATE ITEM ENDPOINT
 // ==========================================
 app.delete('/api/procurement/templates/:id', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
     const { id } = req.params;
     await pool.query(

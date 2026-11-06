@@ -15,9 +15,9 @@ const completion = {
 const expiration = {
   statuses: PENDING_STATUSES,
   nextStatus: 'Cancelled',
-  due: `b.reservation_date < timezone('Asia/Manila',now())::date`,
-  reason: 'The requested date passed before the booking was approved.',
-  message: booking => `Your ${booking.booking_type === 'Vehicle' ? 'vehicle' : booking.booking_type === 'Room' ? 'multimedia room' : 'gymnasium'} request “${booking.purpose}” was automatically cancelled because its requested date passed without approval.`
+  due: `b.reservation_date + COALESCE(gm.start_time,vr.pick_up_time) <= timezone('Asia/Manila',now())`,
+  reason: 'The scheduled start time passed before the request was approved and the required documents were completed.',
+  message: booking => `Your ${booking.booking_type === 'Vehicle' ? 'vehicle' : booking.booking_type === 'Room' ? 'room' : 'gymnasium'} request “${booking.purpose}” was automatically cancelled because its scheduled start time passed without approval and completion of the required documents.`
 };
 
 async function processExpiredBookings(pool, sendEmail, broadcast, rule) {

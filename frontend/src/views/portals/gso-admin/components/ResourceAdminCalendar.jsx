@@ -6,8 +6,14 @@ import {
 import { resourceApi, confirmResourceAction, resourceSuccess, resourceError } from '../resourceActions';
 import { dateKey, blockOnDay } from '../../../../utils/resourceSchedule';
 import { publicReference } from '../../../../utils/publicReference';
+import ResourceCalendarLegend from '../../../shared/components/ResourceCalendarLegend';
 
 const control = 'border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-xs font-medium bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-red-700';
+const requestLabel = value => {
+  if (['Approved','Confirmed','Ongoing','Delayed','Rescheduled','Resource Reassigned'].includes(value)) return 'Approved';
+  if (['Pending','Reserved'].includes(value)) return 'Pending';
+  return value || 'Unknown';
+};
 
 export default function ResourceAdminCalendar({ requests, blocks, assets, fleet, onRefresh, onOpenRequest }) {
   const [month, setMonth] = useState(new Date());
@@ -25,11 +31,11 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
 
   const filteredRequests = requests.filter(r => 
     (resource === 'All' || r.booking_type === resource) && 
-    (status === 'All' || r.status === status)
+    (status === 'All' || requestLabel(r.status) === status)
   );
 
   const filteredBlocks = blocks.filter(b => 
-    (resource === 'All' || b.ast_id === typeMap[resource]) && 
+    (resource === 'All' || b.ast_id === typeMap[resource] || (resource === 'Vehicle' && b.driver_id)) &&
     (status === 'All' || status === 'Blocked')
   );
 
@@ -37,7 +43,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
     ...filteredRequests.filter(r => dateKey(r.reservation_date) === date).map(r => ({
       kind: 'request',
       record: r,
-      label: ['Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned'].includes(r.status) ? 'Approved' : 'Pending'
+      label: requestLabel(r.status)
     })),
     ...filteredBlocks.filter(b => blockOnDay(b, date)).map(b => ({
       kind: 'block',
@@ -63,12 +69,16 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
   const colors = {
     Approved: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
     Pending: 'bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border-amber-200 dark:border-amber-800',
+    Cancelled: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700',
+    Completed: 'bg-sky-50 dark:bg-sky-900/30 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800',
     Blocked: 'bg-rose-50 dark:bg-rose-900/30 text-rose-800 dark:text-rose-400 border-rose-200 dark:border-rose-800'
   };
 
   const eventColors = {
     Approved: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-950 dark:text-emerald-200 border-emerald-600 dark:border-emerald-700',
     Pending: 'bg-amber-100 dark:bg-amber-900/50 text-amber-950 dark:text-amber-200 border-amber-500 dark:border-amber-700',
+    Cancelled: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-400 dark:border-gray-600',
+    Completed: 'bg-sky-100 dark:bg-sky-900/50 text-sky-950 dark:text-sky-200 border-sky-500 dark:border-sky-700',
     Blocked: 'bg-rose-100 dark:bg-rose-900/50 text-rose-950 dark:text-rose-200 border-rose-600 dark:border-rose-700'
   };
 
@@ -89,8 +99,9 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
       const vehicle = kind === 'v' ? fleet.vehicles.find(v => v.vehicle_id === Number(id)) : null;
       const result = await resourceApi('schedule-blocks', 'POST', {
         ...block,
-        assetId: vehicle ? vehicle.asd_id : Number(id),
-        vehicleId: vehicle?.vehicle_id
+        assetId: vehicle ? vehicle.asd_id : kind === 'a' ? Number(id) : undefined,
+        vehicleId: vehicle?.vehicle_id,
+        driverId: kind === 'd' ? Number(id) : undefined
       });
       setBlock(null);
       await onRefresh();
@@ -145,7 +156,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
           <select aria-label="Filter resource" className={control} value={resource} onChange={e => setResource(e.target.value)}>
             <option value="All">All Resources</option>
             <option value="Vehicle">Vehicles</option>
-            <option value="Room">Multimedia Room</option>
+            <option value="Room">Room</option>
             <option value="Gymnasium">Gymnasium</option>
           </select>
 
@@ -153,6 +164,8 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
             <option value="All">All Requests & Blocks</option>
             <option value="Pending">Pending</option>
             <option value="Approved">Approved</option>
+            <option value="Cancelled">Cancelled</option>
+            <option value="Completed">Completed</option>
             <option value="Blocked">Blocked</option>
           </select>
         </div>
@@ -180,18 +193,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
       </div>
 
       {/* Status Legend */}
-      <div className="flex items-center gap-3 text-xs">
-        <span className="font-bold text-gray-500 dark:text-gray-400">Legend:</span>
-        <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 rounded-md text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Approved
-        </span>
-        <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-md text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Pending
-        </span>
-        <span className="inline-flex items-center gap-1.5 font-bold text-rose-800 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 px-2.5 py-1 rounded-md text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Blocked Period
-        </span>
-      </div>
+      <ResourceCalendarLegend />
 
       {/* VIEW A: MONTH GRID */}
       {calendarView === 'grid' && (
@@ -233,6 +235,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
                         className={`rounded-lg border-l-3 px-2 py-1.5 text-[11px] leading-tight shadow-2xs ${eventColors[item.label]}`}
                       >
                         <p className="font-extrabold truncate">{item.record.purpose || item.record.reason || item.record.asset_name}</p>
+                        {item.kind === 'request' && <p className="text-[9px] font-bold uppercase opacity-80">{item.label}</p>}
                         <p className="text-[10px] font-medium opacity-80 mt-0.5">
                           {item.kind === 'request'
                             ? `${item.record.start_time?.slice(0, 5)} - ${item.record.end_time?.slice(0, 5)}`
@@ -296,7 +299,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin size={12} />
-                            {item.record.asset_name || item.record.vehicle_name}
+                            {item.record.driver_name || item.record.vehicle_name || item.record.asset_name}
                           </span>
                           {item.kind === 'request' && (
                             <span className="font-medium">Requested by: {item.record.requestor}</span>
@@ -373,7 +376,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <strong className="text-xs font-bold block">Blocked Period · {item.record.vehicle_name || item.record.asset_name}</strong>
+                      <strong className="text-xs font-bold block">Blocked Period · {item.record.driver_name || item.record.vehicle_name || item.record.asset_name}</strong>
                       <p className="text-xs">{item.record.whole_day ? 'Full Day' : `${item.record.start_time?.replace('T', ' ')} - ${item.record.end_time?.replace('T', ' ')}`}</p>
                       <p className="text-xs font-semibold mt-1">{item.record.reason}</p>
                       <button disabled={busy} className="text-xs text-red-700 dark:text-red-400 font-bold underline mt-2 block" onClick={() => removeBlock(item.record)}>
@@ -401,7 +404,7 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
             <h3 className="text-base font-bold text-gray-900 dark:text-white">Block a Resource</h3>
             <fieldset disabled={busy} className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Select Facility or Vehicle</label>
+                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Select Facility, Vehicle, or Driver</label>
                 <select required value={block.target} onChange={e => setBlock({ ...block, target: e.target.value })} className={`${control} w-full`}>
                   <option value="">Choose an item to block</option>
                   {assets.filter(a => [1, 2].includes(a.ast_id)).map(a => (
@@ -409,6 +412,9 @@ export default function ResourceAdminCalendar({ requests, blocks, assets, fleet,
                   ))}
                   {fleet.vehicles.map(v => (
                     <option key={`v${v.vehicle_id}`} value={`v:${v.vehicle_id}`}>{v.vehicle_name} · {v.plate_number}</option>
+                  ))}
+                  {fleet.drivers.map(d => (
+                    <option key={`d${d.driver_id}`} value={`d:${d.driver_id}`}>Driver: {d.full_name}</option>
                   ))}
                 </select>
               </div>
