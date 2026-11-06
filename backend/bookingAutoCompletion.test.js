@@ -64,7 +64,7 @@ test('completes overdue active bookings once, using the current end time', async
   }
 });
 
-test('cancels past-date unapproved requests once and notifies the requester', async () => {
+test('cancels unapproved requests after their start time, including today', async () => {
   const db = new PGlite();
   try {
     await db.exec(`
@@ -79,19 +79,23 @@ test('cancels past-date unapproved requests once and notifies the requester', as
         (2,1,'Vehicle','Past vehicle','Reserved',timezone('Asia/Manila',now())::date - 1,NULL),
         (3,1,'Gymnasium','Today gym','Pending',timezone('Asia/Manila',now())::date,NULL),
         (4,1,'Vehicle','Approved trip','Approved',timezone('Asia/Manila',now())::date - 1,NULL),
-        (5,1,'Room','Already cancelled','Cancelled',timezone('Asia/Manila',now())::date - 1,NULL);
+        (5,1,'Room','Already cancelled','Cancelled',timezone('Asia/Manila',now())::date - 1,NULL),
+        (6,1,'Room','Started today','Pending',timezone('Asia/Manila',now())::date,NULL);
+      INSERT INTO public.gm_requirements VALUES
+        (1,'09:00','11:00'),(3,'23:59','23:59'),(5,'09:00','11:00'),(6,'00:00','01:00');
+      INSERT INTO public.vehicle_requirements VALUES (2,'09:00','11:00'),(4,'09:00','11:00');
     `);
     const pool = {connect: async () => ({query: (...args) => db.query(...args), release() {}})};
     const emails = [];
     const run = () => cancelExpiredPendingBookings(pool, async (...args) => {emails.push(args);return {success:true};});
-    assert.equal(await run(),2);
+    assert.equal(await run(),3);
     assert.equal(await run(),0);
     const statuses = await db.query('SELECT status FROM public.bookings ORDER BY booking_id');
-    assert.deepEqual(statuses.rows.map(row=>row.status),['Cancelled','Cancelled','Pending','Approved','Cancelled']);
+    assert.deepEqual(statuses.rows.map(row=>row.status),['Cancelled','Cancelled','Pending','Approved','Cancelled','Cancelled']);
     const updates = await db.query('SELECT previous_status,new_status,reason FROM public.booking_status_updates ORDER BY booking_id');
-    assert.deepEqual(updates.rows.map(row=>row.previous_status),['Pending','Reserved']);
-    assert.ok(updates.rows.every(row=>row.new_status==='Cancelled' && /date passed/.test(row.reason)));
-    assert.deepEqual(emails.map(email=>email[1].status),['Cancelled','Cancelled']);
+    assert.deepEqual(updates.rows.map(row=>row.previous_status),['Pending','Reserved','Pending']);
+    assert.ok(updates.rows.every(row=>row.new_status==='Cancelled' && /start time passed/.test(row.reason)));
+    assert.deepEqual(emails.map(email=>email[1].status),['Cancelled','Cancelled','Cancelled']);
   } finally {
     await db.close();
   }

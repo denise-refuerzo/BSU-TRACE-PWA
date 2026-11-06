@@ -46,8 +46,18 @@ module.exports = function registerScheduling(app, pool, requireAuth, sendAssignm
     if(!table || typeof req.body.active !== 'boolean') throw new Error('Invalid availability update.');
     const client=await pool.connect();
     try {await client.query('BEGIN');await lockSchedule(client);
+      if (!req.body.active) {
+        const column=req.params.kind==='vehicles'?'assigned_vehicle_id':'assigned_driver_id';
+        const conflict=await client.query(`SELECT count(*)::int AS count
+          FROM public.bookings b JOIN public.vehicle_requirements vr USING(booking_id)
+          WHERE vr.${column}=$1 AND b.status IN ('Confirmed','Approved','Ongoing','Delayed','Rescheduled','Resource Reassigned')
+            AND b.reservation_date + vr.drop_off_time > timezone('Asia/Manila',now())
+          `,[req.params.id]);
+        const count = Number(conflict.rows[0]?.count || 0);
+        if (count) throw new Error(`Cannot set unavailable: ${count} upcoming approved ${count === 1 ? 'request is' : 'requests are'} assigned to this resource. Reassign, reschedule, or cancel ${count === 1 ? 'it' : 'them'} first.`);
+      }
       await client.query(`UPDATE public.${table[0]} SET is_active=$1 WHERE ${table[1]}=$2`,[req.body.active,req.params.id]);
-      await client.query('COMMIT');broadcast(req);res.json({message:'Availability updated. Existing approved assignments still need to be honored or reassigned.'});
+      await client.query('COMMIT');broadcast(req);res.json({message:'Availability updated.'});
     } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   }));
   app.get('/api/resources/assignments/:id/options',requireAuth,gso,handle(async(req,res)=>{

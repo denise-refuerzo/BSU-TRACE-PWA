@@ -117,7 +117,7 @@ export default function GSOProcurementTab({
   const categoryTabs = [
     { id: 'all', label: 'All Requests', icon: <Layers size={14} /> },
     { id: 'vehicle', label: 'Vehicles', icon: <Car size={14} /> },
-    { id: 'multimedia', label: 'Multimedia Room', icon: <Building size={14} /> },
+    { id: 'multimedia', label: 'Room', icon: <Building size={14} /> },
     { id: 'gym', label: 'Gymnasium', icon: <Landmark size={14} /> },
     { id: 'logistics', label: 'Equipment & Supplies', icon: <Archive size={14} /> },
   ];
@@ -209,7 +209,7 @@ export default function GSOProcurementTab({
             <thead>
               <tr className="bg-gray-50/80 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] font-bold uppercase text-[11px] text-gray-500 dark:text-gray-400 tracking-wider">
                 <th className="p-4">Requested By</th>
-                <th className="p-4">Request Type</th>
+                <th className="p-4">{selectedCategory === 'multimedia' ? 'Facility Name' : 'Request Type'}</th>
                 <th className="p-4">Purpose / Item</th>
                 <th className="p-4">Schedule</th>
                 <th className="p-4">Status</th>
@@ -229,7 +229,7 @@ export default function GSOProcurementTab({
                 
                 const typeLabels = {
                   vehicle: { label: 'Vehicle', color: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' },
-                  multimedia: { label: 'Multimedia Room', color: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800' },
+                  multimedia: { label: 'Room', color: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800' },
                   gym: { label: 'Gymnasium', color: 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800' },
                   logistics: { label: 'Equipment', color: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800' }
                 };
@@ -252,7 +252,7 @@ export default function GSOProcurementTab({
                     {/* TYPE */}
                     <td className="p-4">
                       <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wide ${badge.color}`}>
-                        {badge.label}
+                        {selectedCategory === 'multimedia' ? (row.asset_name || 'Room') : badge.label}
                       </span>
                     </td>
 

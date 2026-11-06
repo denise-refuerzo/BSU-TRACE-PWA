@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {fetchWithAuth} from '../../../../api';
 import {blockOnDay,blockMatchesResource} from '../../../../utils/resourceSchedule';
+import {calendarStatus,calendarStatusColors} from './calendarStatus';
 
 export default function ResourceDayModal({date, facility, bookings, blocks=[], onClose, onRequest, today}) {
   const [start,setStart]=useState(''); const [end,setEnd]=useState('');
@@ -29,13 +30,13 @@ export default function ResourceDayModal({date, facility, bookings, blocks=[], o
 
         <div className="space-y-3">
           {entries.length ? entries.map(b => {
-            const active=!['Pending','Reserved','Cancelled','Completed'].includes(b.status);
+            const status=calendarStatus(b.status);
             return (
               <article key={b.booking_id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-4 shadow-sm">
                 <div className="flex justify-between gap-3">
                   <strong className="text-sm text-neutral-900 dark:text-white">{(b.vr_start||b.gm_start)?.slice(0,5)} – {(b.vr_end||b.gm_end)?.slice(0,5)}</strong>
-                  <span className={`text-xs rounded-full px-3 py-1 font-bold ${active ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300'}`}>
-                    {b.status==='Confirmed' ? 'Approved' : b.status}
+                  <span className={`text-xs rounded-full border px-3 py-1 font-bold ${calendarStatusColors[status] || 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
+                    {status}
                   </span>
                 </div>
                 <p className="text-sm mt-2 text-neutral-700 dark:text-gray-300">{b.purpose}</p>

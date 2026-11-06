@@ -202,7 +202,7 @@ export default function ResourceRegistry({ assets, fleet, onRefresh, viewMode = 
                       className={button}
                       onClick={() => mutate(
                         'Update Availability?',
-                        `Mark ${row.name} as ${row.active ? 'Unavailable' : 'Available'}? Existing approved bookings will remain visible for GSO follow-up.`,
+                        `Mark ${row.name} as ${row.active ? 'Unavailable' : 'Available'}? Upcoming approved requests must be resolved first.`,
                         () => resourceApi(row.kind === 'assets' ? `registry/assets/${row.id}/active` : `fleet/${row.kind}/${row.id}/active`, 'PUT', { active: !row.active })
                       )}
                     >

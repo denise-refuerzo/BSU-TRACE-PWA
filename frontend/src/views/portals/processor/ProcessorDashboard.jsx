@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, Link2, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, Link2, LogOut, Menu, X, Smartphone, ChevronDown } from 'lucide-react';
 import { endSession, fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -12,6 +12,7 @@ import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
 import RegistrationManagementPage from '../../shared/components/RegistrationManagementPage';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
 import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
+import RequestFacilitiesSidebarSection from '../../shared/components/RequestFacilitiesSidebarSection';
 
 // --- SHARED COMPONENTS ---
 import UserProfileTab from "../../shared/components/UserProfileTab";
@@ -51,7 +52,6 @@ export default function ProcessorDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
-  const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
@@ -105,11 +105,6 @@ export default function ProcessorDashboard() {
   const openDocumentsMenu = () => {
     setDocumentsExpanded(current => documentTabs.includes(activeTab) ? !current : true);
     if (!documentTabs.includes(activeTab)) setActiveTab('documents');
-  };
-
-  const openFacilitiesMenu = () => {
-    setFacilitiesExpanded(current => activeTab.startsWith('resource-') ? !current : true);
-    if (!activeTab.startsWith('resource-')) setActiveTab('resource-gym');
   };
 
   const handleLogout = () => {
@@ -346,26 +341,7 @@ export default function ProcessorDashboard() {
               )}
             </div>
 
-            <div>
-              <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
-                <ChevronDown size={15} className={`transition-transform ${facilitiesExpanded ? 'rotate-180' : ''}`} />
-              </button>
-              {facilitiesExpanded && (
-                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
-                  {[
-                    { id: 'resource-gym', label: 'Gymnasium', icon: School },
-                    { id: 'resource-room', label: 'Rooms', icon: MonitorPlay },
-                    { id: 'resource-vehicle', label: 'Vehicles', icon: Truck },
-                    { id: 'resource-requests', label: 'Submitted Requests', icon: ClipboardList }
-                  ].map(item => (
-                    <button key={item.id} onClick={() => handleTabSelect(item.id)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === item.id ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                      <item.icon size={14} /> {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <RequestFacilitiesSidebarSection activeTab={activeTab} onSelect={handleTabSelect} />
 
             {submissionAccess.canRequestRegistration && <button onClick={() => handleTabSelect('registration-management')} className={`w-full flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${activeTab === 'registration-management' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <Link2 size={16} className="shrink-0" /> Registration Management

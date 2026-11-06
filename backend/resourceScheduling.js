@@ -53,6 +53,12 @@ async function availability(client, {date, start, end, type, assetName, exclude 
       FROM public.resource_drivers d 
       WHERE d.is_active
         AND NOT EXISTS (
+          SELECT 1 FROM public.asset_blackouts ab
+          WHERE ab.driver_id = d.driver_id
+            AND ab.start_time < ($1::date + $3::time)
+            AND ab.end_time > ($1::date + $2::time)
+        )
+        AND NOT EXISTS (
           SELECT 1 FROM public.bookings b 
           JOIN public.vehicle_requirements vr USING (booking_id)
           WHERE b.booking_id <> $4
@@ -87,7 +93,7 @@ async function availability(client, {date, start, end, type, assetName, exclude 
   if (!['Room', 'Gymnasium'].includes(type)) throw fail('Invalid resource type.');
 
   const assets = await client.query(
-    `SELECT asd_id,is_active FROM public.asset_details WHERE ast_id = $2 ORDER BY (asset_name = $1) DESC, asd_id LIMIT 1`,
+    `SELECT asd_id,is_active FROM public.asset_details WHERE ast_id = $2 AND asset_name = $1 LIMIT 1`,
     [assetName, type === 'Room' ? 1 : 2]
   );
   if (!assets.rows.length) throw fail('Facility not found.');

@@ -7,6 +7,9 @@ import {blockOnDay,blockMatchesResource} from '../../../utils/resourceSchedule';
 import ResourceDayModal from './request-facilities/ResourceDayModal';
 import ResourceBookingModal from './request-facilities/ResourceBookingModal';
 import SubmittedRequestDetailsModal from './request-facilities/SubmittedRequestDetailsModal';
+import ResourceCalendarLegend from './ResourceCalendarLegend';
+import InfoNoticeButton from './InfoNoticeButton';
+import { calendarStatus, calendarStatusColors } from './request-facilities/calendarStatus';
 
 export default function RequestFacilitiesPage({ userId, officeName = '', facility = null, view = 'calendar', targetBookingId = null, onClearTargetBookingId }) {
   const userName = localStorage.getItem('user') || 'Faculty User';
@@ -326,54 +329,46 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto text-left animate-in fade-in duration-200">
-      
-      <div className="bg-white dark:bg-[#180e10] p-5 sm:p-6 rounded-2xl border border-gray-200 dark:border-[#42292f] shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-        <div>
-          <p className="text-sm text-gray-500 dark:text-gray-300">Check open times, blocked periods, and existing requests before submitting to GSO.</p>
-        </div>
-        {!facility && (
-          <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-gray-100/80 dark:bg-[#1c1113] p-1.5 text-xs font-bold shadow-inner">
+
+      {/* CALENDAR SECTION */}
+      <div className="bg-white dark:bg-[#180e10] border-t-4 border-t-[#D32F2F] dark:border-t-red-600 border-x border-b border-gray-200 dark:border-[#42292f] rounded-2xl shadow-sm p-3 sm:p-5 md:p-8 space-y-4 sm:space-y-6">
+
+        <div className="space-y-4 border-b border-gray-100 dark:border-[#42292f] pb-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <h4 className="flex items-center gap-2 text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+                <Calendar className="shrink-0 text-[#D32F2F] dark:text-red-400" size={20} strokeWidth={2.5} />
+                {activeFacility === 'Van' ? 'Vehicles' : activeFacility === 'Multimedia Room' ? 'Rooms' : activeFacility} Schedule
+              </h4>
+              <p className="mt-1 pl-7 text-base sm:text-lg font-bold text-[#D32F2F] dark:text-red-400">{monthNames[month]} {year}</p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] p-1 shadow-sm">
+                <button aria-label="Previous month" onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="rounded-md p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"><ChevronLeft size={16} /></button>
+                <button aria-label="Next month" onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="rounded-md p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"><ChevronRight size={16} /></button>
+              </div>
+              <button onClick={() => setShowFormModal(true)} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#D32F2F] dark:bg-red-700 px-4 sm:px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-[#b71c1c] dark:hover:bg-red-800 cursor-pointer">
+                <Plus size={16} strokeWidth={2.5} /> New Request
+              </button>
+              <div className="ml-auto"><InfoNoticeButton label="About this calendar">Check open times, blocked periods, and existing requests before submitting to GSO.</InfoNoticeButton></div>
+            </div>
+          </div>
+
+          {!facility && <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-gray-100/80 dark:bg-[#1c1113] p-1.5 text-xs font-bold">
             {[
               { id: 'Van', label: 'Vehicles', icon: Truck },
               { id: 'Multimedia Room', label: 'Rooms', icon: MonitorPlay },
               { id: 'Gymnasium', label: 'Gymnasium', icon: Users }
             ].map(item => (
-              <button key={item.id} onClick={() => setSelectedFacility(item.id)} className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 uppercase tracking-wider transition-all cursor-pointer ${activeFacility === item.id ? 'border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2b1317] text-[#D32F2F] dark:text-red-400 shadow-sm' : 'border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-200/50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>
+              <button key={item.id} onClick={() => setSelectedFacility(item.id)} className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 uppercase tracking-wider transition-colors cursor-pointer ${activeFacility === item.id ? 'border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2b1317] text-[#D32F2F] dark:text-red-400 shadow-sm' : 'border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-200/50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>
                 <item.icon size={14} /> {item.label}
               </button>
             ))}
-          </div>
-        )}
-      </div>
+          </div>}
 
-      {/* CALENDAR SECTION */}
-      <div className="bg-white dark:bg-[#180e10] border-t-4 border-t-[#D32F2F] dark:border-t-red-600 border-x border-b border-gray-200 dark:border-[#42292f] rounded-2xl shadow-sm p-3 sm:p-5 md:p-8 space-y-4 sm:space-y-6">
-        
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 border-b border-gray-100 dark:border-[#42292f] pb-5">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-5">
-            <h4 className="text-base sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white flex flex-wrap items-center gap-2">
-              <Calendar className="text-[#D32F2F] dark:text-red-400" size={20} strokeWidth={2.5} />
-              {activeFacility === 'Van' ? 'Vehicles' : activeFacility} Schedule — <span className="text-[#D32F2F] dark:text-red-400">{monthNames[month]} {year}</span>
-            </h4>
-            
-            <div className="flex items-center gap-3 sm:gap-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-[#1c1113] px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 rounded-sm inline-block"></span> Pending
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 rounded-sm inline-block"></span> Approved
-              </span>
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-1 border border-gray-300 dark:border-gray-700 rounded-lg p-1 bg-white dark:bg-[#1c1113] shadow-sm">
-              <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md transition-colors cursor-pointer"><ChevronLeft size={16} /></button>
-              <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md transition-colors cursor-pointer"><ChevronRight size={16} /></button>
-            </div>
-            <button onClick={() => setShowFormModal(true)} className="flex-1 sm:flex-none justify-center px-4 sm:px-5 py-2.5 bg-[#D32F2F] dark:bg-red-700 hover:bg-[#b71c1c] dark:hover:bg-red-800 text-white font-bold text-xs uppercase tracking-wide rounded-lg flex items-center gap-1.5 shadow-sm hover:shadow-md transition-all transform hover:-translate-y-0.5 cursor-pointer">
-              <Plus size={16} strokeWidth={2.5} /> New Request
-            </button>
+          <div className="rounded-xl border border-gray-200 dark:border-[#42292f] bg-gray-50/80 dark:bg-[#1c1113] px-3 sm:px-4 py-3">
+            <ResourceCalendarLegend />
           </div>
         </div>
 
@@ -414,7 +409,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
             return isDateMatch && isAssetMatch;
           });
           
-          const activeBlock = blackouts.find(blk => {
+          const activeBlock = activeFacility !== 'Van' && blackouts.find(blk => {
             return blockMatchesResource(blk,activeFacility) && blockOnDay(blk,dayString);
           });
 
@@ -465,19 +460,23 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
                 </div>
               )}
               {!activeBlock && matches.length > 0 && (
-                <div className="mt-auto flex justify-center sm:hidden"><span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black ${matches.some(b => ['confirmed', 'approved'].includes(b.status?.toLowerCase())) ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{matches.length}</span></div>
+                <div className="mt-auto flex flex-wrap justify-center gap-0.5 sm:hidden">
+                  {['Approved', 'Pending', 'Cancelled', 'Completed'].map(status => {
+                    const count = matches.filter(booking => calendarStatus(booking.status) === status).length;
+                    return count > 0 && <span key={status} title={`${count} ${status.toLowerCase()}`} className={`rounded-full border px-1.5 py-0.5 text-[8px] font-black ${calendarStatusColors[status]}`}>{count}</span>;
+                  })}
+                </div>
               )}
               {(
                 <div className="hidden sm:block flex-1 overflow-y-auto space-y-1.5 mt-2 max-h-[85px] custom-scrollbar pr-0.5">
                   {matches.map((b, idx) => {
-                    const isConfirmed = b.status?.toLowerCase() === 'confirmed' || b.status?.toLowerCase() === 'approved';
+                    const status = calendarStatus(b.status);
                     return (
                       <div key={idx} className={`p-1.5 rounded-md border text-[10px] text-left leading-tight transition-all shadow-sm ${
-                        isConfirmed 
-                          ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' 
-                          : 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+                        calendarStatusColors[status] || 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
                       }`}>
                         <p className="truncate uppercase font-bold">{b.purpose}</p>
+                        <p className="mt-0.5 text-[8px] font-bold uppercase opacity-80">{status}</p>
                         
                         <div className="flex items-center gap-1 mt-1 font-medium opacity-90">
                           {b.booking_type === 'Vehicle' ? (
@@ -551,7 +550,7 @@ export default function RequestFacilitiesPage({ userId, officeName = '', facilit
         </div>
       </div>
 
-      {selectedDay && <ResourceDayModal key={`${activeFacility}-${selectedDay}`} date={selectedDay} facility={activeFacility} bookings={bookings} blocks={blackouts} today={todayString} onClose={() => setSelectedDay(null)} onRequest={(start, end) => {
+      {selectedDay && <ResourceDayModal key={`${activeFacility}-${selectedDay}`} date={selectedDay} facility={activeFacility} bookings={bookings} blocks={activeFacility === 'Van' ? [] : blackouts} today={todayString} onClose={() => setSelectedDay(null)} onRequest={(start, end) => {
         setForm({...form, reservationDate:selectedDay, intendedDates:[selectedDay], startTime:start, endTime:end, pickUpTime:start, dropOffTime:end});
         setSelectedDay(null);
         setShowFormModal(true);

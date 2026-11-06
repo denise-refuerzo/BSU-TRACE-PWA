@@ -13,6 +13,7 @@ test('another vehicle and driver allow an overlapping request; pending does not 
  for(const {sql,values} of client.queries){assert.ok(sql.includes("b.status = 'Confirmed'"));assert.ok(!sql.includes('Reserved'));assert.deepEqual(values,['2026-10-01','09:00','10:00',0]);}
  assert.match(client.queries[1].sql,/vr.assigned_vehicle_id = f.vehicle_id/);
  assert.match(client.queries[2].sql,/vr.assigned_driver_id = d.driver_id/);
+ assert.match(client.queries[2].sql,/ab.driver_id = d.driver_id/);
  // Strict overlap permits touching endpoints, including morning/afternoon reuse.
  assert.match(client.queries[1].sql,/vr.pick_up_time < \$3::time AND vr.drop_off_time > \$2::time/);
 });
@@ -41,7 +42,7 @@ test('checklist confirmation conflict rolls back checklist and status changes',a
  const fs=require('node:fs'),vm=require('node:vm');
  const source=fs.readFileSync(require.resolve('./server'),'utf8');const start=source.indexOf("app.put('/api/procurement/checklists/:checkId'");const end=source.indexOf('// 13.4 PROCUREMENT:',start);
  let handler;const queries=[];
- const client={async query(sql){queries.push(sql);if(sql.includes('FROM public.bookings WHERE public_id'))return {rows:[{booking_id:1}]};if(sql.includes('RETURNING check_id'))return {rows:[{check_id:1}]};if(sql.includes('SELECT is_checked'))return {rows:[{is_checked:true}]};return {rows:[]};},release(){}};
+ const client={async query(sql){queries.push(sql);if(sql.includes('WHERE b.public_id'))return {rows:[{booking_id:1}]};if(sql.includes('RETURNING check_id'))return {rows:[{check_id:1}]};if(sql.includes('SELECT is_checked'))return {rows:[{is_checked:true}]};return {rows:[]};},release(){}};
  vm.runInNewContext(source.slice(start,end),{app:{put:(path,auth,fn)=>handler=fn},requireAuth(){},pool:{connect:async()=>client},lockSchedule:async()=>{},assertConfirmable:async()=>{throw Object.assign(new Error('Schedule conflict'),{status:409});}});
  const res={status(code){this.code=code;return this;},json(value){this.value=value;}};
  await handler({user:{a_id:4},params:{checkId:'check-public-id'},body:{bookingId:'booking-public-id',isChecked:true}},res);
