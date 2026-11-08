@@ -32,6 +32,7 @@ app.set('trust proxy', 1);
 const server = http.createServer(app); // 3. Wrap Express
 
 const allowedOrigins = [
+  'https://bsu-trace.app',
   'https://bsu-trace.vercel.app',
   /\.vercel\.app$/,
   'http://localhost:5173',
@@ -40,6 +41,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: [
+    'https://bsu-trace.app',
     'https://bsu-trace.vercel.app', // Make sure this matches your exact Vercel domain
     /\.vercel\.app$/,            
     'http://localhost:5173',     
@@ -129,6 +131,7 @@ app.use('/api', (req, res, next) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
 const io = new Server(server, {
   cors: {
     origin: [
+      'https://bsu-trace.app',
       'https://bsu-trace.vercel.app',
       /\.vercel\.app$/,
       'http://localhost:5173',
