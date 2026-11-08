@@ -3,7 +3,7 @@ import { resourceApi, resourceError, resourceSuccess } from '../resourceActions'
 import { fetchWithAuth } from '../../../../api';
 import ResourceRegistry from './ResourceRegistry';
 import ResourceAdminCalendar from './ResourceAdminCalendar';
-import InfoNoticeButton from '../../../shared/components/InfoNoticeButton';
+import InfoNoticeButton from '../../../shared/components/ui/InfoNoticeButton';
 import { 
   Calendar, Landmark, Car, Users, Package, Boxes, ArrowRightLeft, Plus, X
 } from 'lucide-react';

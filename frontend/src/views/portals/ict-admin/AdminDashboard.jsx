@@ -22,9 +22,9 @@ import OfficeEditModal from './modals/OfficeEditModal';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 
 // -- Shared Component --
-import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
-import ThemeToggle from '../../shared/components/ThemeToggle'; 
-import UserProfileTab from '../../shared/components/UserProfileTab';
+import PWAInstallBanner from '../../shared/components/ui/PWAInstallBanner';
+import ThemeToggle from '../../shared/components/ui/ThemeToggle'; 
+import UserProfileTab from '../../shared/components/account/UserProfileTab';
 
 const minimalSwal = Swal.mixin({
   customClass: {

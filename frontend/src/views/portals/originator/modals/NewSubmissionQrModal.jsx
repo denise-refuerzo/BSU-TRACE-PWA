@@ -1,6 +1,6 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import TrackingId from '../../../shared/components/TrackingId';
+import TrackingId from '../../../shared/components/documents/TrackingId';
 
 export default function NewSubmissionQrModal({ generatedQr, setShowQrModal }) {
   return (

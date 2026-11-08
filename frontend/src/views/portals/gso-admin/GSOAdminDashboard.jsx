@@ -24,34 +24,31 @@ import ManageBookingsTab from './components/ManageBookingsTab';
 const OperationalAnalyticsTab = lazy(() => import('./components/OperationalAnalyticsTab'));
 
 // Shared Components
-import UserProfileTab from '../../shared/components/UserProfileTab';
-import FloatingChat from '../../shared/components/FloatingChat';
-import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import UserProfileTab from '../../shared/components/account/UserProfileTab';
+import FloatingChat from '../../shared/components/messaging/FloatingChat';
+import PWAInstallBanner from '../../shared/components/ui/PWAInstallBanner';
 import { formatOfficeLabel } from '../../../utils/officeLabel';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
-import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
-import AnalyticsReportModal from '../../shared/components/AnalyticsReportModal';
+import SubmissionOverviewTab from '../../shared/components/documents/SubmissionOverviewTab';
+import AnalyticsReportModal from '../../shared/components/analytics/AnalyticsReportModal';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
-import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
-import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
-import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
-import RegistrationManagementPage from '../../shared/components/RegistrationManagementPage';
+import CollaborativeSubmissionsTab from '../../shared/components/documents/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/documents/SubmissionActivityHistoryTab';
+import OfficeDocumentsTab from '../../shared/components/documents/OfficeDocumentsTab';
+import RegistrationManagementPage from '../../shared/components/account/RegistrationManagementPage';
 
 // NEW: Theme Toggle
-import ThemeToggle from '../../shared/components/ThemeToggle';
+import ThemeToggle from '../../shared/components/ui/ThemeToggle';
 
 // Modals
 import QRScannerModal from './modals/QRScannerModal';
-import AddAssetModal from './modals/AddAssetModal';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
 import MasterChecklistModal from './modals/MasterChecklistModal';
 import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
-import EditAssetModal from './modals/EditAssetModal';
 import ExportLogsModal from './modals/ExportLogsModal';
-import FacilityBlackoutModal from './modals/FacilityBlackoutModal';
 import InventoryActionModal from './modals/InventoryActionModal';
 import BookingRequirementsModal from './modals/BookingRequirementsModal';
-import NotificationDropdown from '../../shared/components/NotificationDropdown';
+import NotificationDropdown from '../../shared/components/messaging/NotificationDropdown';
 import SubmittedRequestDetailsModal from '../../shared/components/request-facilities/SubmittedRequestDetailsModal';
 
 const minimalSwal = Swal.mixin({
@@ -158,21 +155,9 @@ export default function GSOAdminDashboard() {
   const [simulatedQrInput, setSimulatedQrPayload] = useState('');
   const [showPassModal, setShowPassModal] = useState(false);
 
-  const todayObj = new Date();
-  const todayString = todayObj.toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-
-  const [showAddAssetModal, setShowAddAssetModal] = useState(false);
-  const [assetForm, setAssetForm] = useState({ assetName: '', assetTypeId: '1', quantity: 1, isConfirmed: false });
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [inventoryModalMode, setInventoryModalMode] = useState('LEND');
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
-  const [showBlackoutModal, setShowBlackoutModal] = useState(false);
-  const [showEditAssetModal, setShowEditAssetModal] = useState(false);
-  const [selectedEditAsset, setSelectedEditAsset] = useState(null);
-  const [assetSchedule, setAssetSchedule] = useState([]);
-  const [activeCalendarTab, setActiveCalendarTab] = useState('Gymnasium');
-  const [blackoutForm, setBlackoutForm] = useState({ asd_id: '', start_time: '', end_time: '', reason: '' });
-  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
 
   const [showChecklistMakerModal, setShowChecklistMakerModal] = useState(false);
   const [activeChecklistTab, setActiveChecklistTab] = useState('Vehicle');
@@ -182,7 +167,7 @@ export default function GSOAdminDashboard() {
     ? selectedChecklistRoomId : String(checklistRooms[0]?.asd_id || '');
 
   const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printTargetTab, setPrintTargetTab] = useState('Vehicle'); 
+  const [printTargetTab, setPrintTargetTab] = useState('Vehicles');
   const [printStartDate, setPrintStartDate] = useState('');
   const [printEndDate, setPrintEndDate] = useState('');
 
@@ -198,7 +183,7 @@ export default function GSOAdminDashboard() {
   const [auditEndDate, setAuditEndDate] = useState('');
   const [showAnalyticsReport, setShowAnalyticsReport] = useState(false);
   const [inventoryForm, setInventoryForm] = useState({
-    requestorName: '', department: '', purpose: '', duration: '', quantityNeeded: '', returnDate: '', returnTime: '', isDamaged: false, damageNotes: ''
+    requestorName: '', department: '', purpose: '', duration: '', quantityNeeded: '', isDamaged: false, damageNotes: ''
   });
 
   const [showActiveChecklistModal, setShowActiveChecklistModal] = useState(false);
@@ -408,18 +393,28 @@ export default function GSOAdminDashboard() {
 
   const handleGeneratePDF = () => {
     let dataToPrint = [];
-    if (printTargetTab === 'Logistics History') {
+    const isEquipmentReport = printTargetTab === 'Supplies & Equipment';
+    const reportDate = (value) => {
+      if (!value) return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(date).map(({ type, value: part }) => [type, part]));
+      return `${parts.year}-${parts.month}-${parts.day}`;
+    };
+    if (isEquipmentReport) {
       dataToPrint = logisticsList.filter(log => {
-        const logDate = new Date(log.borrowed_at).toISOString().split('T')[0];
+        const logDate = reportDate(log.borrowed_at);
         const afterStart = printStartDate ? logDate >= printStartDate : true;
         const beforeEnd = printEndDate ? logDate <= printEndDate : true;
         return afterStart && beforeEnd;
       });
     } else {
-      const typeMap = { 'Vehicle': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
+      const typeMap = { 'Vehicles': 'Vehicle', 'Multimedia Room': 'Room', 'Gymnasium': 'Gymnasium' };
       dataToPrint = reservationsList.filter(res => {
         const isCorrectType = res.booking_type === typeMap[printTargetTab];
-        const resDate = new Date(res.reservation_date).toISOString().split('T')[0];
+        const resDate = reportDate(res.reservation_date);
         const afterStart = printStartDate ? resDate >= printStartDate : true;
         const beforeEnd = printEndDate ? resDate <= printEndDate : true;
         return isCorrectType && afterStart && beforeEnd;
@@ -434,7 +429,7 @@ export default function GSOAdminDashboard() {
     let tableHeaders = '';
     let tableRows = '';
 
-    if (printTargetTab === 'Logistics History') {
+    if (isEquipmentReport) {
       tableHeaders = `
         <tr>
           <th>Asset</th>
@@ -571,21 +566,20 @@ export default function GSOAdminDashboard() {
     
     try {
       const isLend = inventoryModalMode === 'LEND';
-      const endpoint = isLend ? '/api/procurement/logistics/borrow' : '/api/procurement/logistics/return';
+      const endpoint = isLend ? '/api/resources/inventory/lend' : '/api/resources/inventory/return';
       
       const payload = isLend ? {
-        asdId: selectedInventoryItem.asd_id,
+        asd_id: selectedInventoryItem.asd_id,
         requestorName: inventoryForm.requestorName,
         department: inventoryForm.department,
         purpose: inventoryForm.purpose,
-        durationHours: inventoryForm.duration,
+        duration: inventoryForm.duration,
         quantityNeeded: Number(inventoryForm.quantityNeeded)
       } : {
-        asdId: selectedInventoryItem.asd_id,
+        asd_id: selectedInventoryItem.asd_id,
+        logId: selectedInventoryItem.log_id || undefined,
         requestorName: inventoryForm.requestorName,
-        returnedQuantity: Number(inventoryForm.quantityNeeded),
-        returnDate: inventoryForm.returnDate,
-        returnTime: inventoryForm.returnTime,
+        quantityReturned: Number(inventoryForm.quantityNeeded),
         isDamaged: inventoryForm.isDamaged,
         damageNotes: inventoryForm.damageNotes
       };
@@ -599,8 +593,7 @@ export default function GSOAdminDashboard() {
       
       if (!res.ok) throw new Error(result.error || 'Action failed.');
       setShowInventoryModal(false);
-      fetchInventoryMetrics();
-      fetchProcurementData();
+      await Promise.all([fetchInventoryMetrics(), fetchProcurementData()]);
       await resourceSuccess(isLend ? 'Item lent successfully.' : 'Item returned successfully.');
     } catch (err) {
       await resourceError(err);
@@ -768,8 +761,6 @@ export default function GSOAdminDashboard() {
               handleOpenDetails={handleOpenDetails} setActiveTab={setActiveTab}
               handleNavigateToProcurement={handleNavigateToProcurement}
               handleOpenIncomingModal={handleOpenIncomingModal}
-              processedBottleneckData={processedBottleneckData}
-              bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
               demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
               chartReadyDemandData={chartReadyDemandData}
             />
@@ -810,6 +801,7 @@ export default function GSOAdminDashboard() {
                 onSelectInventoryItem={(item) => {
                   setSelectedInventoryItem(item);
                   setInventoryModalMode('LEND');
+                  setInventoryForm({ requestorName: '', department: '', purpose: '', duration: '', quantityNeeded: '', isDamaged: false, damageNotes: '' });
                   setShowInventoryModal(true);
                 }}
               />
@@ -822,9 +814,16 @@ export default function GSOAdminDashboard() {
               procFilter={procFilter} setProcFilter={setProcFilter}
               procPage={procPage} setProcPage={setProcPage}
               setShowPrintModal={setShowPrintModal}
+              setPrintTargetTab={setPrintTargetTab}
               setShowChecklistMakerModal={setShowChecklistMakerModal}
               handleViewChecklist={handleViewChecklist}
               handleAssignVehicle={setAssignmentRequest}
+              onReturnLog={(log) => {
+                setSelectedInventoryItem(log);
+                setInventoryModalMode('RETURN');
+                setInventoryForm({ requestorName: log.requestor_name, department: '', purpose: '', duration: '', quantityNeeded: String(log.qty_borrowed), isDamaged: false, damageNotes: '' });
+                setShowInventoryModal(true);
+              }}
               targetSection={procurementTargetSection}
               setTargetSection={setProcurementTargetSection}
             />
@@ -844,7 +843,6 @@ export default function GSOAdminDashboard() {
                 bottleneckSearch={bottleneckSearch} setBottleneckSearch={setBottleneckSearch}
                 bottleneckSort={bottleneckSort} setBottleneckSort={setBottleneckSort}
                 processedBottleneckData={processedBottleneckData}
-                equipmentInventory={equipmentInventory}
                 demandTimeFilter={demandTimeFilter} setDemandTimeFilter={setDemandTimeFilter}
                 chartReadyDemandData={chartReadyDemandData}
                 systemHealth={systemHealth} routePerf={routePerf}
@@ -920,10 +918,6 @@ export default function GSOAdminDashboard() {
         }}
       />
       
-      <AddAssetModal 
-        showAddAssetModal={showAddAssetModal} setShowAddAssetModal={setShowAddAssetModal}
-        handleAddAssetSubmit={() => {}} assetForm={assetForm} setAssetForm={setAssetForm}
-      />
       <ChangePasswordModal 
         isOpen={showPassModal} onClose={() => setShowPassModal(false)}
         currentPassword={currentPassword} setCurrentPassword={setCurrentPassword}
@@ -942,10 +936,6 @@ export default function GSOAdminDashboard() {
         handleAddMasterChecklistItem={handleAddMasterChecklistItem}
         newChecklistName={newChecklistName} setNewChecklistName={setNewChecklistName}
       />
-      <EditAssetModal
-        showEditAssetModal={showEditAssetModal} setShowEditAssetModal={setShowEditAssetModal}
-        selectedEditAsset={selectedEditAsset} setSelectedEditAsset={setSelectedEditAsset} handleUpdateAsset={() => {}} assetSchedule={assetSchedule}
-      />
       <ExportLogsModal
         showPrintModal={showPrintModal} setShowPrintModal={setShowPrintModal}
         printTargetTab={printTargetTab} setPrintTargetTab={setPrintTargetTab} 
@@ -953,13 +943,9 @@ export default function GSOAdminDashboard() {
         printEndDate={printEndDate} setPrintEndDate={setPrintEndDate} 
         handleGeneratePDF={handleGeneratePDF}
       />
-      <FacilityBlackoutModal
-        showBlackoutModal={showBlackoutModal} setShowBlackoutModal={setShowBlackoutModal}
-        handleApplyBlackout={() => {}} blackoutForm={blackoutForm} setBlackoutForm={setBlackoutForm} assetsList={assetsList} todayString={todayString}
-      />
       <InventoryActionModal
         showInventoryModal={showInventoryModal} setShowInventoryModal={setShowInventoryModal}
-        selectedInventoryItem={selectedInventoryItem} inventoryModalMode={inventoryModalMode} setInventoryModalMode={setInventoryModalMode} handleInventorySubmit={() => {}} inventoryForm={inventoryForm} setInventoryForm={setInventoryForm} todayString={todayString} isActionProcessing={isActionProcessing}
+        selectedInventoryItem={selectedInventoryItem} inventoryModalMode={inventoryModalMode} setInventoryModalMode={setInventoryModalMode} handleInventorySubmit={handleInventorySubmit} inventoryForm={inventoryForm} setInventoryForm={setInventoryForm} isActionProcessing={isActionProcessing}
       />
       <BookingRequirementsModal
         showActiveChecklistModal={showActiveChecklistModal} setShowActiveChecklistModal={setShowActiveChecklistModal}

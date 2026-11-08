@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Car, Filter, Inbox, Search, Settings2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { resourceApi, resourceError, resourceSuccess } from '../resourceActions';
-import InfoNoticeButton from '../../../shared/components/InfoNoticeButton';
+import InfoNoticeButton from '../../../shared/components/ui/InfoNoticeButton';
 
 const badgeClasses = {
   Approved: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',

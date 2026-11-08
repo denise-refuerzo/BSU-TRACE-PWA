@@ -9,25 +9,25 @@ import { useProcessorData } from "./hooks/useProcessorData";
 
 // --- EXTRACTED COMPONENTS ---
 import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
-import RegistrationManagementPage from '../../shared/components/RegistrationManagementPage';
+import RegistrationManagementPage from '../../shared/components/account/RegistrationManagementPage';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
-import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
-import RequestFacilitiesSidebarSection from '../../shared/components/RequestFacilitiesSidebarSection';
+import RequestFacilitiesPage from '../../shared/components/request-facilities/RequestFacilitiesPage';
+import RequestFacilitiesSidebarSection from '../../shared/components/request-facilities/RequestFacilitiesSidebarSection';
 
 // --- SHARED COMPONENTS ---
-import UserProfileTab from "../../shared/components/UserProfileTab";
+import UserProfileTab from "../../shared/components/account/UserProfileTab";
 import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
-import FloatingChat from '../../shared/components/FloatingChat';
-import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import FloatingChat from '../../shared/components/messaging/FloatingChat';
+import PWAInstallBanner from '../../shared/components/ui/PWAInstallBanner';
 import { formatOfficeLabel } from '../../../utils/officeLabel';
-import NotificationDropdown from '../../shared/components/NotificationDropdown';
+import NotificationDropdown from '../../shared/components/messaging/NotificationDropdown';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
-import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import SubmissionOverviewTab from '../../shared/components/documents/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
-import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
-import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
-import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
-import ThemeToggle from '../../shared/components/ThemeToggle';
+import CollaborativeSubmissionsTab from '../../shared/components/documents/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/documents/SubmissionActivityHistoryTab';
+import OfficeDocumentsTab from '../../shared/components/documents/OfficeDocumentsTab';
+import ThemeToggle from '../../shared/components/ui/ThemeToggle';
 import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 
 const ScannerModal = lazy(() => import('./modals/ScannerModal'));

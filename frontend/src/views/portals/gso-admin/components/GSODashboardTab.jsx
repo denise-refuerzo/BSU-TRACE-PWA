@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { User, Building, Car, Landmark, Archive, FileText, Inbox, Clock, AlertTriangle, CheckCircle, BarChart2, Activity } from 'lucide-react';
-import { Bar, Line } from 'react-chartjs-2';
-import { baseChartOptions, buildForecastChartData, forecastChartOptions } from '../analyticsCharts';
+import { User, Building, Car, Landmark, Archive, FileText, Inbox, Clock, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
+import { Line } from 'react-chartjs-2';
+import { buildForecastChartData, forecastChartOptions } from '../analyticsCharts';
 import CompletedDocumentsModal from '../../../shared/modals/CompletedDocumentsModal';
 
 export default function GSODashboardTab({
@@ -22,27 +22,11 @@ export default function GSODashboardTab({
   setActiveTab,
   handleNavigateToProcurement,
   handleOpenIncomingModal,
-  processedBottleneckData,
-  bottleneckSort,
-  setBottleneckSort,
   demandTimeFilter,
   setDemandTimeFilter,
   chartReadyDemandData
 }) {
   const [isCompletedModalOpen, setIsCompletedModalOpen] = useState(false);
-
-  // Chart configs
-  const bottleneckChartData = {
-    labels: (processedBottleneckData || []).map(row => row.office_name),
-    datasets: [{
-      label: 'Delay (hours)',
-      data: (processedBottleneckData || []).map(row => Number(row.dwell_time_hours || 0)),
-      backgroundColor: '#991b1b',
-      borderRadius: 6
-    }]
-  };
-
-  const bottleneckChartOptions = { ...baseChartOptions, indexAxis: 'y', plugins: { ...baseChartOptions.plugins, legend: { display: false } }, scales: { x: { beginAtZero: true, grid: { color: '#f3f4f6' }, ticks: { font: { size: 9 } } }, y: { grid: { display: false }, ticks: { font: { size: 9, weight: 600 } } } } };
 
   const forecastChartData = buildForecastChartData(chartReadyDemandData || [], true);
   const projectionInfo = (chartReadyDemandData || []).find(row => row.model_note);
@@ -101,8 +85,7 @@ export default function GSODashboardTab({
         </div>
 
         {/* ANALYTICS & FACILITIES COLLAPSED INTO GRID */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { label: 'Van Books', val: reservationsList.filter(r => r.booking_type === 'Vehicle').length, icon: <Car size={20} />, bg: 'bg-blue-50 dark:bg-blue-900/20', color: 'text-blue-600 dark:text-blue-400', target: 'vehicle' },
               { label: 'Gym Books', val: reservationsList.filter(r => r.booking_type === 'Gymnasium').length, icon: <Landmark size={20} />, bg: 'bg-orange-50 dark:bg-orange-900/20', color: 'text-orange-600 dark:text-orange-400', target: 'gym' },
@@ -117,22 +100,6 @@ export default function GSODashboardTab({
                 </div>
               </div>
             ))}
-          </div>
-
-          <div className="bg-white dark:bg-[#180e10] border border-gray-200 dark:border-[#42292f] rounded-xl p-4 shadow-sm flex flex-col min-h-56">
-            <div className="mb-2 flex justify-between items-center">
-              <h3 className="text-[10px] font-bold text-gray-900 dark:text-white uppercase flex items-center gap-1.5 tracking-wide">
-                <BarChart2 className="text-purple-600 dark:text-purple-400" size={14} /> Avg. Processing Delay
-              </h3>
-              <select value={bottleneckSort} onChange={event => setBottleneckSort?.(event.target.value)} className="rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] p-1 text-[9px] font-bold uppercase outline-none dark:text-gray-300">
-                <option value="desc">High</option>
-                <option value="asc">Low</option>
-              </select>
-            </div>
-            <div className="flex-1 min-h-[140px]">
-              {!!processedBottleneckData?.length && <Bar data={bottleneckChartData} options={bottleneckChartOptions} />}
-            </div>
-          </div>
         </div>
         
       {/* Predictive Analytics / Forecast Widget */}

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { fetchWithAuth } from '../../../../api';
-import AnalyticsReportModal from '../../../shared/components/AnalyticsReportModal';
+import AnalyticsReportModal from '../../../shared/components/analytics/AnalyticsReportModal';
 
 const GSOOperationalAnalyticsTab = lazy(() => import('../../gso-admin/components/OperationalAnalyticsTab'));
 
@@ -100,7 +100,6 @@ export default function OperationalAnalyticsTab() {
           bottleneckSort={bottleneckSort}
           setBottleneckSort={setBottleneckSort}
           processedBottleneckData={processedBottleneckData}
-          equipmentInventory={[]}
           demandTimeFilter={3}
           setDemandTimeFilter={() => {}}
           chartReadyDemandData={[]}
