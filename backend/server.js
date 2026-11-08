@@ -1799,20 +1799,27 @@ app.get('/api/resources/inventory', async (req, res) => {
 app.post('/api/resources/inventory/lend', requireAuth, async (req, res) => {
   const { asd_id, requestorName, department, purpose, quantityNeeded, duration } = req.body;
   try {
+    const quantity = Number(quantityNeeded);
+    const hours = Number(duration);
+    if (!Number.isInteger(quantity) || quantity < 1 || !Number.isFinite(hours) || hours <= 0 ||
+        !String(requestorName || '').trim() || !String(department || '').trim() || !String(purpose || '').trim()) {
+      return res.status(400).json({ error: 'Enter a requestor, department, purpose, positive duration, and whole-number quantity.' });
+    }
     // Basic validation to prevent borrowing more than exists
     const stockCheck = await pool.query(`
       SELECT (quantity - COALESCE((SELECT SUM(qty_borrowed) FROM public.equipment_ledgers WHERE asd_id = $1 AND status = 'Borrowed'), 0)) as current_stock 
       FROM public.asset_details WHERE asd_id = $1
     `, [asd_id]);
     
-    if (stockCheck.rows[0].current_stock < quantityNeeded) {
+    if (!stockCheck.rows.length) return res.status(404).json({ error: 'Inventory item not found.' });
+    if (Number(stockCheck.rows[0].current_stock) < quantity) {
       return res.status(400).json({ error: "Not enough current stock available for this request." });
     }
 
     await pool.query(`
       INSERT INTO public.equipment_ledgers (asd_id, requestor_name, department, purpose, qty_borrowed, expected_return, status, processed_by)
       VALUES ($1, $2, $3, $4, $5, TIMEZONE('Asia/Manila', NOW()) + interval '1 hour' * $6, 'Borrowed', $7)
-    `, [asd_id, requestorName, department, purpose, quantityNeeded, parseInt(duration) || 24, req.user.u_id]);
+    `, [asd_id, requestorName.trim(), department.trim(), purpose.trim(), quantity, hours, req.user.u_id]);
     broadcastResourceUpdate(req);
     res.json({ message: "Equipment successfully logged as borrowed." });
   } catch (err) {
@@ -1825,16 +1832,24 @@ app.post('/api/resources/inventory/lend', requireAuth, async (req, res) => {
 // 11.2 INVENTORY: PROCESS RETURN ENDPOINT
 // ==========================================
 app.post('/api/resources/inventory/return', requireAuth, async (req, res) => {
-  const { asd_id, requestorName, quantityReturned, isDamaged, damageNotes } = req.body;
+  const { asd_id, logId, requestorName, quantityReturned, isDamaged, damageNotes } = req.body;
   try {
+    const quantity = Number(quantityReturned);
+    if (!Number.isInteger(quantity) || quantity < 1 || !String(requestorName || '').trim()) {
+      return res.status(400).json({ error: 'Enter the requestor and a whole-number return quantity.' });
+    }
     const activeLog = await pool.query(`
-      SELECT log_id FROM public.equipment_ledgers 
+      SELECT log_id, qty_borrowed FROM public.equipment_ledgers
       WHERE asd_id = $1 AND LOWER(requestor_name) = LOWER($2) AND status = 'Borrowed'
+        AND ($3::text IS NULL OR public_id::text = $3::text)
       ORDER BY borrowed_at ASC LIMIT 1
-    `, [asd_id, requestorName]);
+    `, [asd_id, requestorName, logId || null]);
 
     if (activeLog.rows.length === 0) {
       return res.status(404).json({ error: "No active borrowing record found for this requestor and item." });
+    }
+    if (quantity !== Number(activeLog.rows[0].qty_borrowed)) {
+      return res.status(400).json({ error: `This borrowing record has ${activeLog.rows[0].qty_borrowed} units. Return that full quantity to close it.` });
     }
 
     // Determine values to inject based on the boolean flag
@@ -2305,6 +2320,7 @@ app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
     const query = `
       SELECT 
         el.public_id AS log_id,
+        el.asd_id,
         ad.asset_name, 
         el.requestor_name, 
         el.qty_borrowed, 

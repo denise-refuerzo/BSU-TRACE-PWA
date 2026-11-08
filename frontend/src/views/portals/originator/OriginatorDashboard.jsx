@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LayoutDashboard, FileText, User, LogOut, Menu, X, ChevronDown, History } from 'lucide-react';
 import { endSession } from '../../../api';
-import ThemeToggle from '../../shared/components/ThemeToggle';
+import ThemeToggle from '../../shared/components/ui/ThemeToggle';
 
 // Custom Hook
 import useOriginatorData from './hooks/useOriginatorData';
@@ -9,20 +9,20 @@ import useOriginatorData from './hooks/useOriginatorData';
 // Tab Components
 import OriginatorOverviewTab from './components/OriginatorOverviewTab';
 import OriginatorDocumentsTab from './components/OriginatorDocumentsTab';
-import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
-import RequestFacilitiesSidebarSection from '../../shared/components/RequestFacilitiesSidebarSection';
+import RequestFacilitiesPage from '../../shared/components/request-facilities/RequestFacilitiesPage';
+import RequestFacilitiesSidebarSection from '../../shared/components/request-facilities/RequestFacilitiesSidebarSection';
 
 // Shared Components
-import UserProfileTab from '../../shared/components/UserProfileTab';
-import FloatingChat from '../../shared/components/FloatingChat';
+import UserProfileTab from '../../shared/components/account/UserProfileTab';
+import FloatingChat from '../../shared/components/messaging/FloatingChat';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
-import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import PWAInstallBanner from '../../shared/components/ui/PWAInstallBanner';
 import { formatOfficeLabel } from '../../../utils/officeLabel';
-import NotificationDropdown from '../../shared/components/NotificationDropdown';
-import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import NotificationDropdown from '../../shared/components/messaging/NotificationDropdown';
+import SubmissionOverviewTab from '../../shared/components/documents/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
-import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
-import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
+import CollaborativeSubmissionsTab from '../../shared/components/documents/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/documents/SubmissionActivityHistoryTab';
 
 // Modals
 import DocumentSubmissionModal from './modals/DocumentSubmissionModal';

@@ -6,7 +6,7 @@ import {
 import { resourceApi, confirmResourceAction, resourceSuccess, resourceError } from '../resourceActions';
 import { dateKey, blockOnDay } from '../../../../utils/resourceSchedule';
 import { publicReference } from '../../../../utils/publicReference';
-import ResourceCalendarLegend from '../../../shared/components/ResourceCalendarLegend';
+import ResourceCalendarLegend from '../../../shared/components/request-facilities/ResourceCalendarLegend';
 
 const control = 'border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-xs font-medium bg-white dark:bg-[#1c1113] text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-red-700';
 const requestLabel = value => {

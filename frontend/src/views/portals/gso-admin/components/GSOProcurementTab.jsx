@@ -16,9 +16,11 @@ export default function GSOProcurementTab({
   procPage,
   setProcPage,
   setShowPrintModal,
+  setPrintTargetTab,
   setShowChecklistMakerModal,
   handleViewChecklist,
   handleAssignVehicle,
+  onReturnLog,
   targetSection,
   setTargetSection
 }) {
@@ -130,7 +132,11 @@ export default function GSOProcurementTab({
         <p className="text-sm text-gray-500 dark:text-gray-400">Review, organize, and assign driver and room requests.</p>
         <div className="flex flex-wrap items-center gap-3">
           <button 
-            onClick={() => setShowPrintModal(true)} 
+            onClick={() => {
+              const reportTypes = { vehicle: 'Vehicles', multimedia: 'Multimedia Room', gym: 'Gymnasium', logistics: 'Supplies & Equipment' };
+              if (reportTypes[selectedCategory]) setPrintTargetTab(reportTypes[selectedCategory]);
+              setShowPrintModal(true);
+            }}
             className="px-4 py-2.5 bg-white dark:bg-[#1c1113] hover:bg-gray-50 dark:hover:bg-[#2b1317] text-gray-700 dark:text-gray-300 font-bold text-xs uppercase tracking-wide rounded-xl shadow-xs transition-all border border-gray-300 dark:border-gray-700 flex items-center gap-2 cursor-pointer"
           >
             <Download size={15} strokeWidth={2.5} /> Export Report
@@ -271,8 +277,11 @@ export default function GSOProcurementTab({
                     <td className="p-4 text-gray-600 dark:text-gray-400">
                       <div className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-gray-200 text-xs">
                         <Calendar size={13} className="text-gray-400" />
-                        {dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {isLog ? 'Lent: ' : ''}{dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </div>
+                      {isLog && row.returned_at && (
+                        <div className="mt-1 text-[11px]">Returned: {new Date(row.returned_at).toLocaleString('en-US')}</div>
+                      )}
                       {!isLog && row.start_time && (
                         <div className="text-[10px] text-gray-500 dark:text-gray-400 font-mono mt-0.5 bg-gray-100 dark:bg-[#2b1317] px-1.5 py-0.5 rounded inline-block">
                           {row.start_time?.substring(0,5)} - {row.end_time?.substring(0,5)}
@@ -340,6 +349,14 @@ export default function GSOProcurementTab({
                             )
                           )}
                         </div>
+                      ) : row.status === 'Borrowed' ? (
+                        <button
+                          type="button"
+                          onClick={() => onReturnLog(row)}
+                          className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-800 hover:bg-red-900 text-white text-[11px] font-bold cursor-pointer"
+                        >
+                          Return
+                        </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500 font-medium italic">Auto-recorded</span>
                       )}
