@@ -1045,36 +1045,43 @@ app.get('/api/profile/:userId', requireAuth, async (req, res) => {
 // 2.4 UPDATE USER PROFILE ENDPOINT
 // ==========================================
 app.put('/api/profile/:userId', requireAuth, async (req, res) => {
-  const { fullName, email, twoFaEnabled, twoFaCode } = req.body;
+  const fullName = String(req.body.fullName || '').trim();
+  const email = normalizeUniversityEmail(req.body.email);
   
   try {
-    // 1. Validate that required personal information fields are not empty
-    if (!fullName || !fullName.trim() || !email || !email.trim()) {
+    if (!fullName || !email) {
       return res.status(400).json({ error: 'Full Name and University Email are required fields.' });
     }
 
-    // 2. Enforce 2FA security validation rules for all user types
-    if (twoFaEnabled && (!twoFaCode || twoFaCode.toString().length < 4)) {
-      return res.status(400).json({ error: 'A valid numeric PIN (at least 4 digits) is required to enable Two-Factor Authentication.' });
-    }
-    const current = await pool.query('SELECT two_fa_enabled FROM public."User" WHERE u_id=$1',[req.user.u_id]);
+    const current = await pool.query('SELECT uni_email FROM public."User" WHERE u_id=$1', [req.user.u_id]);
     if (!current.rows[0]) return res.status(404).json({error:'User not found.'});
-    if (twoFaEnabled && !current.rows[0].two_fa_enabled)
-      return res.status(409).json({error:'Verify the emailed 2FA code before enabling 2FA.'});
+    const savedEmail = current.rows[0].uni_email;
+    const emailChanged = normalizeUniversityEmail(savedEmail) !== email;
+    if (emailChanged && !isUniversityEmail(email)) {
+      return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    }
+    if (emailChanged) {
+      const duplicate = await pool.query(
+        'SELECT 1 FROM public."User" WHERE LOWER(BTRIM(uni_email))=$1 AND u_id<>$2 LIMIT 1',
+        [email, req.user.u_id]
+      );
+      if (duplicate.rowCount) return res.status(409).json({ error: 'That university email is already in use.' });
+    }
 
-    // 3. Execute the update query across the shared "User" table
     await pool.query(
       `UPDATE public."User" 
-       SET full_name = $1, uni_email = $2, two_fa_enabled = $3, two_fa_code = $4
-       WHERE u_id = $5`,
-      [fullName.trim(), email.trim(), twoFaEnabled, twoFaCode || null, req.user.u_id]
+       SET full_name = $1, uni_email = $2
+       WHERE u_id = $3`,
+      [fullName, emailChanged ? email : savedEmail, req.user.u_id]
     );
     
     broadcastIctConfiguration(req);
     res.json({ message: 'Profile variables synchronized successfully!' });
   } catch (err) {
     console.error("Profile Synchronization Error:", err);
-    res.status(500).json({ error: 'Failed to synchronize layout values' });
+    if (err.code === '23505') return res.status(409).json({ error: 'That university email is already in use.' });
+    if (err.code === '23514') return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    res.status(500).json({ error: 'Failed to update your profile. Please try again.' });
   }
 });
 
@@ -1406,22 +1413,40 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
       let title = action;
       let message = `"${row.doc_title}" was updated at ${row.office_name || 'an office'}.`;
       if (action.startsWith('Ad-Hoc Incoming:')) {
-        title = 'Document routed to your office';
-        message = `"${row.doc_title}" has been routed to you by ${action.slice('Ad-Hoc Incoming:'.length).trim()}.`;
+        const source = action.slice('Ad-Hoc Incoming:'.length).trim() || 'another office';
+        if (category === 'personal') {
+          title = 'Document sent for ad hoc verification';
+          message = `"${row.doc_title}" was routed from ${source} to ${row.office_name || 'another office'} for ad hoc verification.`;
+        } else {
+          title = 'Document routed to your office';
+          message = `"${row.doc_title}" was routed to your office by ${source} for ad hoc verification.`;
+        }
       } else if (action.startsWith('Ad-Hoc Returned:')) {
-        title = 'Document returned for processing';
-        message = `"${row.doc_title}" has finished processing at ${action.slice('Ad-Hoc Returned:'.length).trim()} and is routed back to you for processing.`;
+        const source = action.slice('Ad-Hoc Returned:'.length).trim() || 'the verifying office';
+        if (category === 'personal') {
+          title = 'Ad hoc verification completed';
+          message = `"${row.doc_title}" finished verification at ${source} and returned to ${row.office_name || 'the requesting office'} for processing.`;
+        } else {
+          title = 'Document returned to your office';
+          message = `"${row.doc_title}" finished verification at ${source} and returned to your office for processing.`;
+        }
       } else if (action.startsWith('Halted:')) {
         title = 'Processing halted';
         const source = action.slice('Halted:'.length).trim();
-        message = `"${row.doc_title}" needs correction. It was sent back by ${source.startsWith('Document ') ? row.office_name || 'another office' : source || 'another office'} and processing at your office has been halted.`;
+        if (category === 'personal') {
+          message = `"${row.doc_title}" needs correction. Processing at ${row.office_name || 'the requesting office'} has been paused.`;
+        } else {
+          message = `"${row.doc_title}" needs correction. It was sent back by ${source.startsWith('Document ') ? 'another office' : source || 'another office'} and processing at your office has been halted.`;
+        }
       } else if (action.startsWith('Sent Back for Revision:')) {
         title = 'Needs correction';
         message = `"${row.doc_title}" was returned for correction by ${row.office_name || 'an office'}.`;
       }
       return {id:`doc-${row.id}`,ini_id:row.ini_id,title,message,time:row.time,category,categories:[category]};
     };
-    const alerts = personal.rows.map(row => documentNotice(row,'personal'));
+    const alerts = personal.rows
+      .filter(row => row.action_type !== 'Ad-Hoc Detour Routed')
+      .map(row => documentNotice(row,'personal'));
     if (office) alerts.push(...office.rows.map(row => documentNotice(row,'work')));
     alerts.push(...requestUpdates.rows.map(row => ({
       id:`booking-update-${row.update_id}`,booking_id:row.booking_id,category:'personal',

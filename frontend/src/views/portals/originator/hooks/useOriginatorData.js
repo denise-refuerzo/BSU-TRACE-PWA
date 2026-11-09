@@ -274,21 +274,26 @@ export default function useOriginatorData() {
     setStatusMsg('');
     
     if (!profile.fullName.trim() || !profile.email.trim()) {
-      return alert("Validation Error: Personal Information fields cannot be left empty.");
+      return minimalSwal.fire({ icon: 'warning', title: 'Validation Error', text: 'Personal information fields cannot be left empty.' });
     }
     
     try {
       const res = await fetchWithAuth(`/api/profile/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile)
+        body: JSON.stringify({ fullName: profile.fullName, email: profile.email })
       });
-      if (res.ok) {
-        setStatusMsg("  Profile modifications saved instantly!");
-        localStorage.setItem('user', profile.fullName);
-        setInitialProfile(profile);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save profile changes.');
       }
-    } catch (err) { alert("Failed sync configuration parameters."); }
+      setStatusMsg('Profile changes saved successfully!');
+      localStorage.setItem('user', profile.fullName);
+      setInitialProfile(profile);
+      minimalSwal.fire({ icon: 'success', title: 'Profile Updated', text: 'Your profile changes were saved successfully.' });
+    } catch (err) {
+      minimalSwal.fire({ icon: 'error', title: 'Update Failed', text: err.message || 'Failed to save profile changes.' });
+    }
   };
 
   const updatePasswordRequest = async (e) => {
