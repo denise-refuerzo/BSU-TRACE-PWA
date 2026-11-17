@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { fetchWithAuth } from '../../../../api';
-import AnalyticsReportModal from '../../../shared/components/AnalyticsReportModal';
+import AnalyticsReportModal from '../../../shared/components/analytics/AnalyticsReportModal';
 
 const GSOOperationalAnalyticsTab = lazy(() => import('../../gso-admin/components/OperationalAnalyticsTab'));
 
@@ -32,8 +32,8 @@ export default function OperationalAnalyticsTab() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadAnalytics = async () => {
-      setIsLoading(true);
+    const loadAnalytics = async (silent = false) => {
+      if (!silent) setIsLoading(true);
       setLoadError('');
       try {
         const responses = await Promise.all([
@@ -63,12 +63,13 @@ export default function OperationalAnalyticsTab() {
           console.error('Error connecting to analytics services:', error);
         }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled && !silent) setIsLoading(false);
       }
     };
 
     loadAnalytics();
-    return () => { cancelled = true; };
+    const refreshId = window.setInterval(() => loadAnalytics(true), 60_000);
+    return () => { cancelled = true; window.clearInterval(refreshId); };
   }, [refreshKey]);
 
   const processedBottleneckData = useMemo(() => [...bottleneckData]
@@ -99,7 +100,6 @@ export default function OperationalAnalyticsTab() {
           bottleneckSort={bottleneckSort}
           setBottleneckSort={setBottleneckSort}
           processedBottleneckData={processedBottleneckData}
-          equipmentInventory={[]}
           demandTimeFilter={3}
           setDemandTimeFilter={() => {}}
           chartReadyDemandData={[]}

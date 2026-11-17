@@ -83,17 +83,17 @@ export default function IncomingDocumentsModal({ isOpen, onClose, documents = []
                 
                 <div className="min-w-0 space-y-1">
                     {/* 1. Document Title */}
-                    <p className="text-xs font-bold text-neutral-900 dark:text-white truncate leading-snug">{doc.title}</p>
+                    <p title={doc.title} className="text-xs font-bold text-neutral-900 dark:text-white truncate leading-snug">{doc.title}</p>
                     
                     {/* 2. Requestor Name */}
                     <div className="flex items-center gap-1.5 text-[11px] text-neutral-600 dark:text-gray-400 font-medium">
                     <User size={12} className="text-neutral-400 shrink-0" />
-                    <span className="truncate">{doc.requestor_name || 'Anonymous'}</span>
+                    <span title={doc.requestor_name || 'Anonymous'} className="truncate">{doc.requestor_name || 'Anonymous'}</span>
                     </div>
 
                     {/* 3. Process Type Badge */}
                     <div>
-                    <span className="inline-block text-[9px] font-bold tracking-tight px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800 max-w-[280px] truncate">
+                    <span title={doc.process_name || 'Standard Document'} className="inline-block max-w-full text-[9px] font-bold tracking-tight px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800 truncate">
                         {doc.process_name || 'Standard Document'}
                     </span>
                     </div>

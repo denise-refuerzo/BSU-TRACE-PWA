@@ -16,9 +16,11 @@ export default function GSOProcurementTab({
   procPage,
   setProcPage,
   setShowPrintModal,
+  setPrintTargetTab,
   setShowChecklistMakerModal,
   handleViewChecklist,
   handleAssignVehicle,
+  onReturnLog,
   targetSection,
   setTargetSection
 }) {
@@ -117,7 +119,7 @@ export default function GSOProcurementTab({
   const categoryTabs = [
     { id: 'all', label: 'All Requests', icon: <Layers size={14} /> },
     { id: 'vehicle', label: 'Vehicles', icon: <Car size={14} /> },
-    { id: 'multimedia', label: 'Multimedia Room', icon: <Building size={14} /> },
+    { id: 'multimedia', label: 'Room', icon: <Building size={14} /> },
     { id: 'gym', label: 'Gymnasium', icon: <Landmark size={14} /> },
     { id: 'logistics', label: 'Equipment & Supplies', icon: <Archive size={14} /> },
   ];
@@ -130,7 +132,11 @@ export default function GSOProcurementTab({
         <p className="text-sm text-gray-500 dark:text-gray-400">Review, organize, and assign driver and room requests.</p>
         <div className="flex flex-wrap items-center gap-3">
           <button 
-            onClick={() => setShowPrintModal(true)} 
+            onClick={() => {
+              const reportTypes = { vehicle: 'Vehicles', multimedia: 'Multimedia Room', gym: 'Gymnasium', logistics: 'Supplies & Equipment' };
+              if (reportTypes[selectedCategory]) setPrintTargetTab(reportTypes[selectedCategory]);
+              setShowPrintModal(true);
+            }}
             className="px-4 py-2.5 bg-white dark:bg-[#1c1113] hover:bg-gray-50 dark:hover:bg-[#2b1317] text-gray-700 dark:text-gray-300 font-bold text-xs uppercase tracking-wide rounded-xl shadow-xs transition-all border border-gray-300 dark:border-gray-700 flex items-center gap-2 cursor-pointer"
           >
             <Download size={15} strokeWidth={2.5} /> Export Report
@@ -209,7 +215,7 @@ export default function GSOProcurementTab({
             <thead>
               <tr className="bg-gray-50/80 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] font-bold uppercase text-[11px] text-gray-500 dark:text-gray-400 tracking-wider">
                 <th className="p-4">Requested By</th>
-                <th className="p-4">Request Type</th>
+                <th className="p-4">{selectedCategory === 'multimedia' ? 'Facility Name' : 'Request Type'}</th>
                 <th className="p-4">Purpose / Item</th>
                 <th className="p-4">Schedule</th>
                 <th className="p-4">Status</th>
@@ -229,7 +235,7 @@ export default function GSOProcurementTab({
                 
                 const typeLabels = {
                   vehicle: { label: 'Vehicle', color: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' },
-                  multimedia: { label: 'Multimedia Room', color: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800' },
+                  multimedia: { label: 'Room', color: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800' },
                   gym: { label: 'Gymnasium', color: 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800' },
                   logistics: { label: 'Equipment', color: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800' }
                 };
@@ -252,7 +258,7 @@ export default function GSOProcurementTab({
                     {/* TYPE */}
                     <td className="p-4">
                       <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wide ${badge.color}`}>
-                        {badge.label}
+                        {selectedCategory === 'multimedia' ? (row.asset_name || 'Room') : badge.label}
                       </span>
                     </td>
 
@@ -271,8 +277,11 @@ export default function GSOProcurementTab({
                     <td className="p-4 text-gray-600 dark:text-gray-400">
                       <div className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-gray-200 text-xs">
                         <Calendar size={13} className="text-gray-400" />
-                        {dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {isLog ? 'Lent: ' : ''}{dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </div>
+                      {isLog && row.returned_at && (
+                        <div className="mt-1 text-[11px]">Returned: {new Date(row.returned_at).toLocaleString('en-US')}</div>
+                      )}
                       {!isLog && row.start_time && (
                         <div className="text-[10px] text-gray-500 dark:text-gray-400 font-mono mt-0.5 bg-gray-100 dark:bg-[#2b1317] px-1.5 py-0.5 rounded inline-block">
                           {row.start_time?.substring(0,5)} - {row.end_time?.substring(0,5)}
@@ -340,6 +349,14 @@ export default function GSOProcurementTab({
                             )
                           )}
                         </div>
+                      ) : row.status === 'Borrowed' ? (
+                        <button
+                          type="button"
+                          onClick={() => onReturnLog(row)}
+                          className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-800 hover:bg-red-900 text-white text-[11px] font-bold cursor-pointer"
+                        >
+                          Return
+                        </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500 font-medium italic">Auto-recorded</span>
                       )}

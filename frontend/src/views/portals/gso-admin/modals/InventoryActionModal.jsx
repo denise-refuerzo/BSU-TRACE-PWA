@@ -10,7 +10,6 @@ export default function InventoryActionModal({
   handleInventorySubmit,
   inventoryForm,
   setInventoryForm,
-  todayString,
   isActionProcessing
 }) {
   if (!showInventoryModal || !selectedInventoryItem) return null;
@@ -21,12 +20,15 @@ export default function InventoryActionModal({
         
         <div className="flex border-b border-neutral-200 dark:border-[#42292f]">
           <button 
+            type="button"
+            disabled={Boolean(selectedInventoryItem.log_id)}
             onClick={() => setInventoryModalMode('LEND')}
-            className={`w-1/2 py-4 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer ${inventoryModalMode === 'LEND' ? 'text-red-800 dark:text-red-400 border-b-2 border-red-800 dark:border-red-500 bg-white dark:bg-[#180e10]' : 'text-neutral-400 bg-neutral-50 dark:bg-[#1c1113] hover:bg-neutral-100 dark:hover:bg-gray-800'}`}
+            className={`w-1/2 py-4 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer disabled:cursor-not-allowed ${inventoryModalMode === 'LEND' ? 'text-red-800 dark:text-red-400 border-b-2 border-red-800 dark:border-red-500 bg-white dark:bg-[#180e10]' : 'text-neutral-400 bg-neutral-50 dark:bg-[#1c1113] hover:bg-neutral-100 dark:hover:bg-gray-800'}`}
           >
             Lending Form
           </button>
           <button 
+            type="button"
             onClick={() => setInventoryModalMode('RETURN')}
             className={`w-1/2 py-4 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer ${inventoryModalMode === 'RETURN' ? 'text-red-800 dark:text-red-400 border-b-2 border-red-800 dark:border-red-500 bg-white dark:bg-[#180e10]' : 'text-neutral-400 bg-neutral-50 dark:bg-[#1c1113] hover:bg-neutral-100 dark:hover:bg-gray-800'}`}
           >
@@ -56,20 +58,9 @@ export default function InventoryActionModal({
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Purpose</label>
                 <input type="text" required value={inventoryForm.purpose} onChange={e => setInventoryForm({...inventoryForm, purpose: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Date</label>
-                  <input 
-                    type="date" 
-                    required 
-                    min={todayString} 
-                    className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Duration (Hours)</label>
-                  <input type="number" required value={inventoryForm.duration} onChange={e => setInventoryForm({...inventoryForm, duration: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
-                </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Duration (Hours)</label>
+                <input type="number" required min="1" value={inventoryForm.duration} onChange={e => setInventoryForm({...inventoryForm, duration: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Quantity Needed</label>
@@ -80,21 +71,12 @@ export default function InventoryActionModal({
             <div className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-200">
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Requestor (Matching Name)</label>
-                <input type="text" required value={inventoryForm.requestorName} onChange={e => setInventoryForm({...inventoryForm, requestorName: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
+                <input type="text" required readOnly={Boolean(selectedInventoryItem.log_id)} value={inventoryForm.requestorName} onChange={e => setInventoryForm({...inventoryForm, requestorName: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Return Date</label>
-                  <input type="date" required value={inventoryForm.returnDate} onChange={e => setInventoryForm({...inventoryForm, returnDate: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Return Time</label>
-                  <input type="time" required value={inventoryForm.returnTime} onChange={e => setInventoryForm({...inventoryForm, returnTime: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
-                </div>
-              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">The return is recorded at the time you submit it. Enter the same requestor name and the full quantity from one active lending record.</p>
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Quantity Returned</label>
-                <input type="number" required min="1" value={inventoryForm.quantityNeeded} onChange={e => setInventoryForm({...inventoryForm, quantityNeeded: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
+                <input type="number" required min="1" readOnly={Boolean(selectedInventoryItem.log_id)} value={inventoryForm.quantityNeeded} onChange={e => setInventoryForm({...inventoryForm, quantityNeeded: e.target.value})} className="w-full px-4 py-2 text-xs border border-neutral-300 dark:border-gray-700 bg-white dark:bg-[#1c1113] text-neutral-900 dark:text-white rounded-lg outline-none focus:ring-1 focus:ring-red-700" />
               </div>
               <div className="pt-2 border-t border-neutral-100 dark:border-[#42292f]">
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">Item Condition Upon Return</label>

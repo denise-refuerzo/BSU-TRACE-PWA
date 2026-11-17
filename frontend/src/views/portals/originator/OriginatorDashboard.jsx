@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { LayoutDashboard, FileText, School, User, LogOut, Menu, X, ChevronDown, Truck, MonitorPlay, ClipboardList, History } from 'lucide-react';
+import { LayoutDashboard, FileText, User, LogOut, Menu, X, ChevronDown, History } from 'lucide-react';
 import { endSession } from '../../../api';
-import ThemeToggle from '../../shared/components/ThemeToggle';
+import ThemeToggle from '../../shared/components/ui/ThemeToggle';
 
 // Custom Hook
 import useOriginatorData from './hooks/useOriginatorData';
@@ -9,29 +9,32 @@ import useOriginatorData from './hooks/useOriginatorData';
 // Tab Components
 import OriginatorOverviewTab from './components/OriginatorOverviewTab';
 import OriginatorDocumentsTab from './components/OriginatorDocumentsTab';
-import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
+import RequestFacilitiesPage from '../../shared/components/request-facilities/RequestFacilitiesPage';
+import RequestFacilitiesSidebarSection from '../../shared/components/request-facilities/RequestFacilitiesSidebarSection';
 
 // Shared Components
-import UserProfileTab from '../../shared/components/UserProfileTab';
-import FloatingChat from '../../shared/components/FloatingChat';
+import UserProfileTab from '../../shared/components/account/UserProfileTab';
+import FloatingChat from '../../shared/components/messaging/FloatingChat';
 import ChangePasswordModal from '../../shared/modals/ChangePasswordModal';
-import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import PWAInstallBanner from '../../shared/components/ui/PWAInstallBanner';
 import { formatOfficeLabel } from '../../../utils/officeLabel';
-import NotificationDropdown from '../../shared/components/NotificationDropdown';
-import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import NotificationDropdown from '../../shared/components/messaging/NotificationDropdown';
+import SubmissionOverviewTab from '../../shared/components/documents/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
-import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
-import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
+import CollaborativeSubmissionsTab from '../../shared/components/documents/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/documents/SubmissionActivityHistoryTab';
 
 // Modals
 import DocumentSubmissionModal from './modals/DocumentSubmissionModal';
 import NewSubmissionQrModal from './modals/NewSubmissionQrModal';
+import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 
 export default function OriginatorDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [targetChatDoc, setTargetChatDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
-  const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
+  const [notificationTrackingDocId, setNotificationTrackingDocId] = useState(null);
+  const [targetBookingId, setTargetBookingId] = useState(null);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [previousTab, setPreviousTab] = useState('dashboard');
@@ -47,7 +50,7 @@ export default function OriginatorDashboard() {
     showPassModal, setShowPassModal,
     generatedQr,
     form, setForm, passForm, setPassForm,
-    selectedRoutePreview, estimatedDate,
+    selectedRoutePreview, estimatedDate, estimatedWorkingHours,
     recentDocStops, documents, processTypes,
     workflowsLoading, workflowError, retryWorkflows,
     pendingCount, mostRecentDoc,
@@ -63,11 +66,6 @@ export default function OriginatorDashboard() {
     setIsSidebarOpen(false);
   };
 
-  const openFacilitiesMenu = () => {
-    setFacilitiesExpanded(current => activeTab.startsWith('resource-') ? !current : true);
-    if (!activeTab.startsWith('resource-')) setActiveTab('resource-gym');
-  };
-
   const openDocumentsMenu = () => {
     const documentTabs = ['documents', 'shared-submissions', 'archived-submissions', 'office-submissions', 'department-submissions'];
     setDocumentsExpanded(current => documentTabs.includes(activeTab) ? !current : true);
@@ -80,9 +78,13 @@ export default function OriginatorDashboard() {
   };
 
   const handleNotificationClick = (notif) => {
-    if (!notif.ini_id) return;
-    setActiveNotificationDocId(notif.ini_id);
-    setActiveTab('documents');
+    if (notif.booking_id) {
+      setTargetBookingId(notif.booking_id);
+      setActiveTab('resource-requests');
+    } else if (notif.ini_id) {
+      setNotificationTrackingDocId(notif.ini_id);
+      setActiveTab('documents');
+    }
   };
 
   const handleOpenChatWithDoc = (doc) => {
@@ -145,26 +147,7 @@ export default function OriginatorDashboard() {
               </div>}
             </div>
 
-            <div>
-              <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
-                <ChevronDown size={15} className={`transition-transform ${facilitiesExpanded ? 'rotate-180' : ''}`} />
-              </button>
-              {facilitiesExpanded && (
-                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
-                  {[
-                    { id: 'resource-gym', label: 'Gymnasium', icon: School },
-                    { id: 'resource-room', label: 'Rooms', icon: MonitorPlay },
-                    { id: 'resource-vehicle', label: 'Vehicles', icon: Truck },
-                    { id: 'resource-requests', label: 'Submitted Requests', icon: ClipboardList }
-                  ].map(item => (
-                    <button key={item.id} onClick={() => handleTabSelect(item.id)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === item.id ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                      <item.icon size={14} /> {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <RequestFacilitiesSidebarSection activeTab={activeTab} onSelect={handleTabSelect} />
 
             <button onClick={() => handleTabSelect('submission-history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer ${activeTab === 'submission-history' ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}><History size={18}/> History</button>
           </nav>
@@ -274,9 +257,11 @@ export default function OriginatorDashboard() {
           {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Gymnasium" />}
           {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Multimedia Room" />}
           {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} facility="Van" />}
-          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} view="requests" />}
+          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={profile.departmentName} view="requests" targetBookingId={targetBookingId} onClearTargetBookingId={() => setTargetBookingId(null)} />}
         </div>
       </div>
+
+      {notificationTrackingDocId && <DocumentTrackingModal selectedDoc={{ini_id:notificationTrackingDocId}} readOnly onClose={() => setNotificationTrackingDocId(null)} />}
 
       <FloatingChat
         isOpen={isChatOpen}
@@ -311,8 +296,8 @@ export default function OriginatorDashboard() {
           handleProcessChange={handleProcessChange}
           processTypes={processTypes}
           estimatedDate={estimatedDate}
+          estimatedWorkingHours={estimatedWorkingHours}
           selectedRoutePreview={selectedRoutePreview}
-          placeholderSelections={form.placeholderSelections || {}}
           workflowsLoading={workflowsLoading}
           workflowError={workflowError}
           retryWorkflows={retryWorkflows}

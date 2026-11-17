@@ -1,6 +1,6 @@
 import pandas as pd
 
-from database import get_db_connection
+from database import read_combined_query
 
 
 def _records(frame, integer_columns=()):
@@ -26,12 +26,14 @@ def calculate_peak_document_traffic(start_date=None, end_date=None):
             TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month,
             COUNT(*) AS request_count
         FROM public.initial_document
-        WHERE {' AND '.join(filters)}
+        WHERE {' AND '.join(filters)} AND {{document_filter}}
         GROUP BY DATE_TRUNC('month', created_at)
         ORDER BY DATE_TRUNC('month', created_at);
     """
-    with get_db_connection() as conn:
-        frame = pd.read_sql_query(query, conn, params=tuple(params))
+    frame = read_combined_query(query, params=tuple(params),
+                                predicates={'document_filter': "title LIKE 'Synthetic %'"})
+    if not frame.empty:
+        frame = frame.groupby('month', as_index=False)['request_count'].sum().sort_values('month')
     return _records(frame, ('request_count',))
 
 
@@ -44,7 +46,8 @@ def calculate_frequently_requested_documents(start_date=None, end_date=None):
     if end_date:
         filters.append("idoc.created_at::date <= %s")
         params.append(end_date)
-    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ''
+    filters.append('{document_filter}')
+    where_clause = f"WHERE {' AND '.join(filters)}"
     query = f"""
         SELECT
             pt.process_name AS name,
@@ -55,8 +58,11 @@ def calculate_frequently_requested_documents(start_date=None, end_date=None):
         GROUP BY pt.process_name
         ORDER BY request_count DESC, pt.process_name;
     """
-    with get_db_connection() as conn:
-        frame = pd.read_sql_query(query, conn, params=tuple(params))
+    frame = read_combined_query(query, params=tuple(params),
+                                predicates={'document_filter': "idoc.title LIKE 'Synthetic %'"})
+    if not frame.empty:
+        frame = (frame.groupby('name', as_index=False)['request_count'].sum()
+                 .sort_values(['request_count', 'name'], ascending=[False, True]))
     return _records(frame, ('request_count',))
 
 
@@ -64,19 +70,24 @@ def calculate_most_utilized_assets():
     query = """
         WITH asset_usage AS (
             SELECT asd_id, SUM(qty_borrowed)::bigint AS usage_count
-            FROM public.equipment_ledgers
+            FROM public.equipment_ledgers el
+            WHERE {ledger_filter}
             GROUP BY asd_id
 
             UNION ALL
 
             SELECT asd_id, COUNT(*)::bigint AS usage_count
-            FROM public.gm_requirements
+            FROM public.gm_requirements gm
+            JOIN public.bookings b ON gm.booking_id = b.booking_id
+            WHERE {booking_filter}
             GROUP BY asd_id
 
             UNION ALL
 
             SELECT asd_id, COUNT(*)::bigint AS usage_count
-            FROM public.vehicle_requirements
+            FROM public.vehicle_requirements vr
+            JOIN public.bookings b ON vr.booking_id = b.booking_id
+            WHERE {booking_filter}
             GROUP BY asd_id
         )
         SELECT
@@ -87,8 +98,13 @@ def calculate_most_utilized_assets():
         GROUP BY asset.asset_name
         ORDER BY usage_count DESC, asset.asset_name;
     """
-    with get_db_connection() as conn:
-        frame = pd.read_sql_query(query, conn)
+    frame = read_combined_query(query, predicates={
+        'ledger_filter': "el.requestor_name = 'Synthetic Requestor'",
+        'booking_filter': "b.purpose LIKE 'Synthetic %'",
+    })
+    if not frame.empty:
+        frame = (frame.groupby('name', as_index=False)['usage_count'].sum()
+                 .sort_values(['usage_count', 'name'], ascending=[False, True]))
     return _records(frame, ('usage_count',))
 
 

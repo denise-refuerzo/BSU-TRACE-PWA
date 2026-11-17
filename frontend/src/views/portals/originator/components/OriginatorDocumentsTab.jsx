@@ -364,7 +364,6 @@ export default function OriginatorDocumentsTab({
             <thead>
               <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
                 <th className="p-4">Document Name</th>
-                <th className="p-4">Reference ID (QR)</th>
                 <th className="p-4">Category</th>
                 <th className="p-4">Est. Completion</th>
                 <th className="p-4">Current Location</th>
@@ -377,32 +376,27 @@ export default function OriginatorDocumentsTab({
                     onClick={() => handleSelectDocument(doc)}
                     className={`transition-colors cursor-pointer ${selectedDoc?.ini_id === doc.ini_id ? 'bg-red-50/40 dark:bg-red-900/10' : 'hover:bg-gray-50/80 dark:hover:bg-[#2b1317]/50'}`}>
                   <td className="p-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <div className={`p-2 rounded-lg ${selectedDoc?.ini_id === doc.ini_id ? 'bg-white dark:bg-[#180e10] shadow-sm border border-red-100 dark:border-red-900' : 'bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800'}`}>
                         <FileText size={16} className={selectedDoc?.ini_id === doc.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-500 dark:text-gray-400'} />
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900 dark:text-gray-200">{doc.title}</p>
+                      <div className="min-w-0">
+                        <p title={doc.title} className="max-w-[16rem] truncate font-bold text-gray-900 dark:text-gray-200">{doc.title}</p>
                         <span className="text-[10px] text-gray-500 dark:text-gray-500 font-medium">Modified recently</span>
                       </div>
                     </div>
                   </td>
                   <td className="p-4">
-                    <span className="font-mono font-bold text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-[#1c1113] border border-gray-200 dark:border-gray-700 px-2 py-1 rounded">
-                      {doc.qr_code}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <span className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 font-medium">
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                      {doc.process_name}
+                      <span title={doc.process_name} className="block max-w-[12rem] truncate">{doc.process_name}</span>
                     </span>
                   </td>
                   <td className="p-4 text-xs text-gray-600 dark:text-gray-400 font-medium">
                     {doc.edc ? new Date(doc.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
                   </td>
                   <td className="p-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                    <span title={doc.current_office || doc.status || ''} className={`inline-flex max-w-[12rem] items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
                       doc.status?.toLowerCase() === 'completed' 
                         ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
                         : doc.status?.toLowerCase() === 'cancelled' 
@@ -411,9 +405,9 @@ export default function OriginatorDocumentsTab({
                           ? 'bg-red-50 dark:bg-red-900/30 text-[#D32F2F] dark:text-red-400 border border-red-200 dark:border-red-800' 
                           : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
                     }`}>
-                      {doc.status?.toLowerCase() === 'completed' ? 'Completed' : 
+                      <span className="truncate">{doc.status?.toLowerCase() === 'completed' ? 'Completed' :
                        doc.status?.toLowerCase() === 'cancelled' ? 'Cancelled' : 
-                       doc.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (doc.current_office || 'Origin Unit')}
+                       doc.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (doc.current_office || 'Origin Unit')}</span>
                     </span>
                   </td>
                   <td className="p-4 text-center">
@@ -428,7 +422,7 @@ export default function OriginatorDocumentsTab({
               ))}
               {currentDocs.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="p-12 text-center bg-gray-50 dark:bg-[#180e10]">
+                  <td colSpan="5" className="p-12 text-center bg-gray-50 dark:bg-[#180e10]">
                     <div className="flex flex-col items-center justify-center">
                       <Search className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-3" />
                       <p className="text-sm font-bold text-gray-600 dark:text-gray-400">No documents found</p>

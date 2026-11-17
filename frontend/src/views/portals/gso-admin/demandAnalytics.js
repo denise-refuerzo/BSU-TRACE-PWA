@@ -76,6 +76,17 @@ export function summarizeDemandForecast(rows = []) {
 
   return {
     days: forecastRows.length,
+    peakWarnings: forecastRows.flatMap(row => ['vehicle_demand', 'facility_demand']
+      .filter(category => row[`${category}_peak_warning_available`] && row[`${category}_peak`])
+      .map(category => ({
+        date: row.date,
+        category: category === 'vehicle_demand' ? 'Van' : 'Facility',
+        probability: Number(row[`${category}_peak_probability`]),
+        countThreshold: Number(row[`${category}_peak_threshold`])
+      }))).sort((a, b) => a.date.localeCompare(b.date) || a.category.localeCompare(b.category)),
+    peakWarningAvailable: forecastRows.some(row => row.vehicle_demand_peak_warning_available || row.facility_demand_peak_warning_available),
+    historyGapWarning: Boolean(metadata.history_gap_warning),
+    daysSinceLastRequest: Number(metadata.days_since_last_request || 0),
     vehicleTotal,
     facilityTotal,
     vehicleDailyAverage: vehicleTotal / forecastRows.length,
@@ -85,11 +96,11 @@ export function summarizeDemandForecast(rows = []) {
     busiestWeekday: busiestDay ? dayNames[busiestDay.day] : 'Unavailable',
     busiestWeekdayAverage: busiestDay?.average || 0,
     dominantDemand: facilityTotal >= vehicleTotal ? 'facilities' : 'vans',
-    forecastBasis: vehicleSeasonal && facilitySeasonal
+    forecastBasis: metadata.projection_method || (vehicleSeasonal && facilitySeasonal
       ? 'Validated weekly pattern'
       : vehicleSeasonal || facilitySeasonal
         ? 'Mixed seasonal and baseline estimate'
-        : 'Conservative weekday baseline'
+        : 'Conservative weekday baseline')
   };
 }
 
@@ -112,4 +123,22 @@ export function prepareDemandChart(rows = [], months = 3) {
       };
     })
   };
+}
+
+// Sum only forecast days; never mix history with the 30-day horizon.
+export function weeklyDemandForecast(rows = []) {
+  const days = rows.filter(row => row?.type === 'forecast' && row?.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const weeks = [];
+  for (let index = 0; index < days.length; index += 7) {
+    const group = days.slice(index, index + 7);
+    const vehicle = group.reduce((sum, row) => sum + Number(row.vehicle_demand || 0), 0);
+    const facility = group.reduce((sum, row) => sum + Number(row.facility_demand || 0), 0);
+    weeks.push({
+      date: `${group[0].date} – ${group.at(-1).date}${group.length < 7 ? ` (${group.length} days, partial)` : ''}`,
+      days: group.length, type: 'forecast', vehicle_demand: vehicle, facility_demand: facility,
+      van_fore: vehicle, fac_fore: facility, van_hist: null, fac_hist: null
+    });
+  }
+  return weeks;
 }

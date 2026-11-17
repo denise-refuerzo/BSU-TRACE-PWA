@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { PWAProvider } from './views/shared/context/PWAContext';
+import { PWAProvider } from './views/shared/PWAContext';
 import { endSession, fetchWithAuth } from './api';
 
 // Import Views

@@ -26,7 +26,7 @@ export default function ExportLogsModal({
         </div>
 
         <div className="p-5 flex flex-col space-y-4">
-          <label className="block text-[10px] font-black uppercase text-neutral-400 dark:text-gray-500 tracking-wider">Select Target Database</label>
+          <label className="block text-[10px] font-black uppercase text-neutral-400 dark:text-gray-500 tracking-wider">Select Request Type</label>
           
           <div className="bg-neutral-100 dark:bg-[#1c1113] p-1 rounded-xl flex font-bold text-[10px] flex-wrap border border-neutral-200 dark:border-gray-800">
             {['Vehicles', 'Multimedia Room', 'Gymnasium', 'Supplies & Equipment'].map((tab) => (

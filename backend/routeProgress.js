@@ -4,7 +4,8 @@ function routeProgress(sequence = [], steps = []) {
   const credits = new Map();
   const history = [];
   let position = 0;
-  const completed = step => Boolean(step.time_out) && [3, 5].includes(Number(step.s_id));
+  const completed = step => (Boolean(step.time_out) && [3, 5].includes(Number(step.s_id))) ||
+    (step.is_adhoc !== true && step.is_returned_from_adhoc === true && Number(step.s_id) === 4);
   const skip = () => {
     const source = credits.get(position);
     history.push({...source, pd_id: `adhoc-route-${position}-${source.pd_id}`,

@@ -7,8 +7,10 @@ const bcrypt = require('bcrypt');
 const pool = require('./db');
 const {lockSchedule, availability, assertConfirmable} = require('./resourceScheduling');
 const { resolveBookingSignatories } = require('./accountAccessRoutes');
+const { syncOfficeRouteGroup } = require('./officeRouteGroups');
 const { resolveChatDocument: resolveChatDocumentAccess, resolveChatRoom: resolveChatRoomAccess } = require('./chatAccess');
-const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail } = require('./mailer');
+const { sendResetCodeEmail, sendTrackingAlertEmail, sendSystemEmail, sendBookingUpdateEmail } = require('./mailer');
+const {completeExpiredBookings, cancelExpiredPendingBookings} = require('./bookingAutoCompletion');
 const crypto = require('crypto');
 const axios = require('axios');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
@@ -30,6 +32,7 @@ app.set('trust proxy', 1);
 const server = http.createServer(app); // 3. Wrap Express
 
 const allowedOrigins = [
+  'https://bsu-trace.app',
   'https://bsu-trace.vercel.app',
   /\.vercel\.app$/,
   'http://localhost:5173',
@@ -38,6 +41,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: [
+    'https://bsu-trace.app',
     'https://bsu-trace.vercel.app', // Make sure this matches your exact Vercel domain
     /\.vercel\.app$/,            
     'http://localhost:5173',     
@@ -127,6 +131,7 @@ app.use('/api', (req, res, next) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
 const io = new Server(server, {
   cors: {
     origin: [
+      'https://bsu-trace.app',
       'https://bsu-trace.vercel.app',
       /\.vercel\.app$/,
       'http://localhost:5173',
@@ -1040,36 +1045,43 @@ app.get('/api/profile/:userId', requireAuth, async (req, res) => {
 // 2.4 UPDATE USER PROFILE ENDPOINT
 // ==========================================
 app.put('/api/profile/:userId', requireAuth, async (req, res) => {
-  const { fullName, email, twoFaEnabled, twoFaCode } = req.body;
+  const fullName = String(req.body.fullName || '').trim();
+  const email = normalizeUniversityEmail(req.body.email);
   
   try {
-    // 1. Validate that required personal information fields are not empty
-    if (!fullName || !fullName.trim() || !email || !email.trim()) {
+    if (!fullName || !email) {
       return res.status(400).json({ error: 'Full Name and University Email are required fields.' });
     }
 
-    // 2. Enforce 2FA security validation rules for all user types
-    if (twoFaEnabled && (!twoFaCode || twoFaCode.toString().length < 4)) {
-      return res.status(400).json({ error: 'A valid numeric PIN (at least 4 digits) is required to enable Two-Factor Authentication.' });
-    }
-    const current = await pool.query('SELECT two_fa_enabled FROM public."User" WHERE u_id=$1',[req.user.u_id]);
+    const current = await pool.query('SELECT uni_email FROM public."User" WHERE u_id=$1', [req.user.u_id]);
     if (!current.rows[0]) return res.status(404).json({error:'User not found.'});
-    if (twoFaEnabled && !current.rows[0].two_fa_enabled)
-      return res.status(409).json({error:'Verify the emailed 2FA code before enabling 2FA.'});
+    const savedEmail = current.rows[0].uni_email;
+    const emailChanged = normalizeUniversityEmail(savedEmail) !== email;
+    if (emailChanged && !isUniversityEmail(email)) {
+      return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    }
+    if (emailChanged) {
+      const duplicate = await pool.query(
+        'SELECT 1 FROM public."User" WHERE LOWER(BTRIM(uni_email))=$1 AND u_id<>$2 LIMIT 1',
+        [email, req.user.u_id]
+      );
+      if (duplicate.rowCount) return res.status(409).json({ error: 'That university email is already in use.' });
+    }
 
-    // 3. Execute the update query across the shared "User" table
     await pool.query(
       `UPDATE public."User" 
-       SET full_name = $1, uni_email = $2, two_fa_enabled = $3, two_fa_code = $4
-       WHERE u_id = $5`,
-      [fullName.trim(), email.trim(), twoFaEnabled, twoFaCode || null, req.user.u_id]
+       SET full_name = $1, uni_email = $2
+       WHERE u_id = $3`,
+      [fullName, emailChanged ? email : savedEmail, req.user.u_id]
     );
     
     broadcastIctConfiguration(req);
     res.json({ message: 'Profile variables synchronized successfully!' });
   } catch (err) {
     console.error("Profile Synchronization Error:", err);
-    res.status(500).json({ error: 'Failed to synchronize layout values' });
+    if (err.code === '23505') return res.status(409).json({ error: 'That university email is already in use.' });
+    if (err.code === '23514') return res.status(400).json({ error: 'Use an official university email ending in @g.batstate-u.edu.ph.' });
+    res.status(500).json({ error: 'Failed to update your profile. Please try again.' });
   }
 });
 
@@ -1173,14 +1185,6 @@ app.post('/api/departments', requireAuth, async (req, res) => {
 // ==========================================
 // 3.2 CREATE OFFICE ENDPOINT
 // ==========================================
-const syncOfficeRouteGroup = async (db, officeId, category) => {
-  await db.query('DELETE FROM public.office_route_group_members WHERE office_id=$1', [officeId]);
-  if (!category) return;
-  await db.query('INSERT INTO public.office_route_groups (group_name) VALUES ($1) ON CONFLICT DO NOTHING', [category]);
-  const group = await db.query('SELECT group_id FROM public.office_route_groups WHERE LOWER(BTRIM(group_name))=LOWER($1) LIMIT 1', [category]);
-  if (group.rows[0]) await db.query('INSERT INTO public.office_route_group_members (group_id, office_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [group.rows[0].group_id, officeId]);
-};
-
 app.post('/api/offices', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 5) return res.status(403).json({error: 'ICT administrator access required.'});
   const { officeName } = req.body;
@@ -1261,8 +1265,9 @@ app.put('/api/offices/:id', requireAuth, async (req, res) => {
     let r;
     try {
       await client.query('BEGIN');
+      const previous = await client.query('SELECT office_category FROM public.offices WHERE o_id=$1 FOR UPDATE', [req.params.id]);
       r = await client.query('UPDATE public.offices SET office_name=$1, office_category=$2 WHERE o_id=$3 RETURNING o_id', [name, category, req.params.id]);
-      if (r.rowCount) await syncOfficeRouteGroup(client, r.rows[0].o_id, category);
+      if (r.rowCount) await syncOfficeRouteGroup(client, r.rows[0].o_id, category, previous.rows[0]?.office_category);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -1296,8 +1301,19 @@ require('./officeDocumentReadRoutes')(app, pool, requireAuth);
 // 9. REAL-TIME POSTGRESQL NOTIFICATION LISTENER
 // ==========================================
 const initDatabaseListener = async () => {
+  let client;
+  let reconnectScheduled = false;
+  const reconnect = (error) => {
+    if (reconnectScheduled) return;
+    reconnectScheduled = true;
+    console.error('Document email listener disconnected. Reconnecting in 5 seconds:', error);
+    if (client) client.release(true);
+    setTimeout(initDatabaseListener, 5000);
+  };
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
+    client.on('error', reconnect);
+    client.on('end', () => reconnect(new Error('Database connection closed.')));
     await client.query('LISTEN document_status_email_channel');
     console.log('Successfully listening to database channel: document_status_email_channel');
 
@@ -1353,15 +1369,8 @@ const initDatabaseListener = async () => {
       }
     });
 
-    client.on('error', (err) => {
-      console.error('Database listener client crashed. Reconnecting...', err);
-      client.release();
-      setTimeout(initDatabaseListener, 5000);
-    });
-
   } catch (error) {
-    console.error('Failed to initialize database notification listener. Retrying in 5s...', error);
-    setTimeout(initDatabaseListener, 5000);
+    reconnect(error);
   }
 };
 
@@ -1374,49 +1383,96 @@ app.get('/api/notifications/:userId/:roleId/:officeId', requireAuth, async (req,
   const officeId = req.user.o_id || 0;
 
   try {
-    let alertRows = [];
-    
-    if (roleId === 1) {
-      // 1. ORIGINATOR: Alerts every time any action occurs on their document
-      const query = `
-        SELECT 
-          h.public_id as id,
-          idoc.public_id AS ini_id,
-          idoc.title,
-          h.action_type as title_alert,
-          ('Action performed at ' || COALESCE(off.office_name, 'Origin Station')) as message,
-          CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp - INTERVAL '8 hours' ELSE h.action_timestamp END as time
-        FROM public.office_action_history h
-        JOIN public.initial_document idoc ON h.ini_id = idoc.ini_id
-        LEFT JOIN public.offices off ON h.o_id = off.o_id
-        WHERE idoc.u_id = $1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=$1)
-        ORDER BY h.history_id DESC LIMIT 10;
-      `;
-      const result = await pool.query(query, [userId]);
-      alertRows = result.rows.map(row => ({
-        id: row.id,
-        ini_id: row.ini_id, /* Passed cleanly down to client tracking layer */
-        title: row.title_alert,
-        message: `"${row.title}": ${row.message}`,
-        time: row.time
-      }));
-
-    } else if ([2,3,4].includes(roleId)) {
-      const result=await pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,h.action_type AS title,
-        u.full_name || ' · ' || o.office_name AS message,
-        CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
-        FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
-        JOIN public."User" u ON h.u_id=u.u_id JOIN public.offices o ON h.o_id=o.o_id
-        WHERE i.submission_office_id=$1 OR EXISTS (SELECT 1 FROM public.processed_document pd
-          WHERE pd.ini_id=i.ini_id AND pd.current_office_id=$1 AND pd.time_out IS NULL)
-        ORDER BY h.history_id DESC LIMIT 20`,[officeId]);
-      alertRows=result.rows;
+    const jobs = [pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,
+      h.action_type AS action_type,o.office_name,
+      CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
+      FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
+      LEFT JOIN public.offices o ON h.o_id=o.o_id
+      WHERE i.u_id=$1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=i.ini_id AND dc.user_id=$1)
+      ORDER BY h.history_id DESC LIMIT 30`,[userId])];
+    jobs.push([2,3,4].includes(roleId) && officeId ? pool.query(`SELECT h.public_id AS id,i.public_id AS ini_id,i.title AS doc_title,
+      h.action_type AS action_type,o.office_name,
+      CASE WHEN h.legacy_manila_wall_time THEN h.action_timestamp-INTERVAL '8 hours' ELSE h.action_timestamp END AS time
+      FROM public.office_action_history h JOIN public.initial_document i USING(ini_id)
+      LEFT JOIN public."User" actor ON h.u_id=actor.u_id
+      LEFT JOIN public.offices o ON actor.o_id=o.o_id
+      WHERE h.o_id=$1 AND (i.submission_office_id=$1 OR EXISTS
+        (SELECT 1 FROM public.processed_document pd WHERE pd.ini_id=i.ini_id AND pd.current_office_id=$1))
+      ORDER BY h.history_id DESC LIMIT 30`,[officeId]) : Promise.resolve({rows:[]}));
+    jobs.push(pool.query(`SELECT su.update_id,b.public_id AS booking_id,b.booking_type,b.purpose,
+      su.new_status,su.notification_message,to_char(su.created_at,'YYYY-MM-DD"T"HH24:MI:SS') AS time
+      FROM public.booking_status_updates su JOIN public.bookings b USING(booking_id)
+      WHERE b.u_id=$1 ORDER BY su.update_id DESC LIMIT 30`,[userId]));
+    jobs.push(roleId === 4 ? pool.query(`SELECT b.public_id AS booking_id,b.booking_type,b.purpose,
+      to_char(b.created_at,'YYYY-MM-DD"T"HH24:MI:SS') AS time,u.full_name
+      FROM public.bookings b JOIN public."User" u ON b.u_id=u.u_id
+      ORDER BY b.booking_id DESC LIMIT 30`) : Promise.resolve({rows:[]}));
+    const [personal, office, requestUpdates, incomingRequests] = await Promise.all(jobs);
+    const documentNotice = (row, category) => {
+      const action = row.action_type || 'Document updated';
+      let title = action;
+      let message = `"${row.doc_title}" was updated at ${row.office_name || 'an office'}.`;
+      if (action.startsWith('Ad-Hoc Incoming:')) {
+        const source = action.slice('Ad-Hoc Incoming:'.length).trim() || 'another office';
+        if (category === 'personal') {
+          title = 'Document sent for ad hoc verification';
+          message = `"${row.doc_title}" was routed from ${source} to ${row.office_name || 'another office'} for ad hoc verification.`;
+        } else {
+          title = 'Document routed to your office';
+          message = `"${row.doc_title}" was routed to your office by ${source} for ad hoc verification.`;
+        }
+      } else if (action.startsWith('Ad-Hoc Returned:')) {
+        const source = action.slice('Ad-Hoc Returned:'.length).trim() || 'the verifying office';
+        if (category === 'personal') {
+          title = 'Ad hoc verification completed';
+          message = `"${row.doc_title}" finished verification at ${source} and returned to ${row.office_name || 'the requesting office'} for processing.`;
+        } else {
+          title = 'Document returned to your office';
+          message = `"${row.doc_title}" finished verification at ${source} and returned to your office for processing.`;
+        }
+      } else if (action.startsWith('Halted:')) {
+        title = 'Processing halted';
+        const source = action.slice('Halted:'.length).trim();
+        if (category === 'personal') {
+          message = `"${row.doc_title}" needs correction. Processing at ${row.office_name || 'the requesting office'} has been paused.`;
+        } else {
+          message = `"${row.doc_title}" needs correction. It was sent back by ${source.startsWith('Document ') ? 'another office' : source || 'another office'} and processing at your office has been halted.`;
+        }
+      } else if (action.startsWith('Sent Back for Revision:')) {
+        title = 'Needs correction';
+        message = `"${row.doc_title}" was returned for correction by ${row.office_name || 'an office'}.`;
+      }
+      return {id:`doc-${row.id}`,ini_id:row.ini_id,title,message,time:row.time,category,categories:[category]};
+    };
+    const alerts = personal.rows
+      .filter(row => row.action_type !== 'Ad-Hoc Detour Routed')
+      .map(row => documentNotice(row,'personal'));
+    if (office) alerts.push(...office.rows.map(row => documentNotice(row,'work')));
+    alerts.push(...requestUpdates.rows.map(row => ({
+      id:`booking-update-${row.update_id}`,booking_id:row.booking_id,category:'personal',
+      title:`${row.booking_type} request ${row.new_status?.toLowerCase() || 'updated'}`,
+      message:row.notification_message || `Your ${row.booking_type?.toLowerCase()} request has been updated.`,time:row.time
+    })));
+    if (incomingRequests) alerts.push(...incomingRequests.rows.map(row => ({
+      id:`booking-new-${row.booking_id}`,booking_id:row.booking_id,category:'requests',
+      title:`New ${row.booking_type?.toLowerCase()} request`,
+      message:`${row.full_name} submitted a request: ${row.purpose || 'No purpose provided'}.`,time:row.time
+    })));
+    const epoch = value => {
+      const time = String(value || '');
+      return Date.parse(/(Z|[+-]\d{2}:?\d{2})$/i.test(time) ? time : `${time}+08:00`) || 0;
+    };
+    const unique = new Map();
+    for (const alert of alerts) {
+      const previous = unique.get(alert.id);
+      if (previous) previous.categories = [...new Set([...(previous.categories || [previous.category]), ...(alert.categories || [alert.category])])];
+      else unique.set(alert.id,alert);
     }
-
-    res.json(alertRows);
+    const feed = [...unique.values()].sort((a,b) => epoch(b.time)-epoch(a.time));
+    res.json(feed.slice(0,80));
   } catch (err) {
     console.error("Notification pull error:", err);
-    res.json([]);
+    res.status(500).json({error:'Unable to load notifications.'});
   }
 });
 
@@ -1583,7 +1639,7 @@ app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
     if (!room) return res.status(404).json({error:'Conversation not found.'});
     const messagesQuery = `
       SELECT m.public_id AS message_id, cr.public_id AS room_id, u.public_id AS sender_id,
-        m.message_text, m.sent_at, u.full_name as sender_name,
+        m.message_text, m.sent_at, u.full_name as sender_name, sender_office.office_name AS sender_office_name,
         CASE WHEN m.sender_id=idoc.u_id THEN 'Submitter'
           WHEN EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=cr.ini_id AND dc.user_id=m.sender_id) THEN 'Collaborator'
           WHEN u.o_id=cr.o_id THEN 'Processing Office'
@@ -1592,6 +1648,7 @@ app.get('/api/chat/rooms/:roomId/messages', requireAuth, async (req, res) => {
       JOIN public.chat_rooms cr ON m.room_id=cr.room_id
       JOIN public.initial_document idoc ON idoc.ini_id=cr.ini_id
       JOIN public."User" u ON m.sender_id = u.u_id
+      LEFT JOIN public.offices sender_office ON sender_office.o_id=u.o_id
       JOIN public.account a ON u.a_id = a.a_id
       WHERE m.room_id = $1
       ORDER BY m.sent_at ASC;
@@ -1627,12 +1684,13 @@ app.post('/api/chat/messages', requireAuth, chatLimiter, async (req, res) => {
 
     // Query extra metadata required by the frontend feed
     const metaRes = await pool.query(
-      `SELECT u.full_name as sender_name,
+      `SELECT u.full_name as sender_name,sender_office.office_name AS sender_office_name,
         CASE WHEN u.u_id=idoc.u_id THEN 'Submitter'
           WHEN EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=u.u_id) THEN 'Collaborator'
           WHEN u.o_id=$3 THEN 'Processing Office'
           ELSE a.account_type END AS role_name
        FROM public."User" u
+       LEFT JOIN public.offices sender_office ON sender_office.o_id=u.o_id
        JOIN public.account a ON u.a_id = a.a_id
        JOIN public.initial_document idoc ON idoc.ini_id=$2
        WHERE u.u_id = $1`,
@@ -1646,6 +1704,7 @@ app.post('/api/chat/messages', requireAuth, chatLimiter, async (req, res) => {
       message_text: savedMessage.message_text,
       sent_at: savedMessage.sent_at,
       sender_name: metaRes.rows[0]?.sender_name || 'User',
+      sender_office_name: metaRes.rows[0]?.sender_office_name || null,
       role_name: metaRes.rows[0]?.role_name || 'Staff'
     };
 
@@ -1712,10 +1771,13 @@ app.get('/api/chat/active-documents-directory', requireAuth, async (req, res) =>
           ) AS "hasAnyChat"
         FROM public.initial_document idoc
         JOIN LATERAL (
-          SELECT pd.current_office_id,pd.s_id FROM public.processed_document pd
-          WHERE pd.ini_id=idoc.ini_id AND pd.time_out IS NULL
+          SELECT pd.current_office_id,pd.s_id,pd.time_out FROM public.processed_document pd
+          WHERE pd.ini_id=idoc.ini_id AND pd.is_returned_from_adhoc IS NOT TRUE
+            AND ((pd.time_out IS NULL AND pd.s_id<>5) OR
+              (pd.pd_id=(SELECT MAX(pd_id) FROM public.processed_document WHERE ini_id=idoc.ini_id)
+                AND pd.time_out > NOW() - INTERVAL '24 hours' AND pd.s_id IN (4,5)))
           ORDER BY pd.pd_id DESC LIMIT 1
-        ) active ON active.s_id<>5
+        ) active ON TRUE
         WHERE idoc.lifecycle_state <> 'cancelled' AND
           (idoc.u_id=$1 OR EXISTS (SELECT 1 FROM public.document_collaborators dc WHERE dc.ini_id=idoc.ini_id AND dc.user_id=$1)
           OR ($2::integer IS NOT NULL AND active.current_office_id=$2))
@@ -1765,20 +1827,27 @@ app.get('/api/resources/inventory', async (req, res) => {
 app.post('/api/resources/inventory/lend', requireAuth, async (req, res) => {
   const { asd_id, requestorName, department, purpose, quantityNeeded, duration } = req.body;
   try {
+    const quantity = Number(quantityNeeded);
+    const hours = Number(duration);
+    if (!Number.isInteger(quantity) || quantity < 1 || !Number.isFinite(hours) || hours <= 0 ||
+        !String(requestorName || '').trim() || !String(department || '').trim() || !String(purpose || '').trim()) {
+      return res.status(400).json({ error: 'Enter a requestor, department, purpose, positive duration, and whole-number quantity.' });
+    }
     // Basic validation to prevent borrowing more than exists
     const stockCheck = await pool.query(`
       SELECT (quantity - COALESCE((SELECT SUM(qty_borrowed) FROM public.equipment_ledgers WHERE asd_id = $1 AND status = 'Borrowed'), 0)) as current_stock 
       FROM public.asset_details WHERE asd_id = $1
     `, [asd_id]);
     
-    if (stockCheck.rows[0].current_stock < quantityNeeded) {
+    if (!stockCheck.rows.length) return res.status(404).json({ error: 'Inventory item not found.' });
+    if (Number(stockCheck.rows[0].current_stock) < quantity) {
       return res.status(400).json({ error: "Not enough current stock available for this request." });
     }
 
     await pool.query(`
       INSERT INTO public.equipment_ledgers (asd_id, requestor_name, department, purpose, qty_borrowed, expected_return, status, processed_by)
       VALUES ($1, $2, $3, $4, $5, TIMEZONE('Asia/Manila', NOW()) + interval '1 hour' * $6, 'Borrowed', $7)
-    `, [asd_id, requestorName, department, purpose, quantityNeeded, parseInt(duration) || 24, req.user.u_id]);
+    `, [asd_id, requestorName.trim(), department.trim(), purpose.trim(), quantity, hours, req.user.u_id]);
     broadcastResourceUpdate(req);
     res.json({ message: "Equipment successfully logged as borrowed." });
   } catch (err) {
@@ -1791,16 +1860,24 @@ app.post('/api/resources/inventory/lend', requireAuth, async (req, res) => {
 // 11.2 INVENTORY: PROCESS RETURN ENDPOINT
 // ==========================================
 app.post('/api/resources/inventory/return', requireAuth, async (req, res) => {
-  const { asd_id, requestorName, quantityReturned, isDamaged, damageNotes } = req.body;
+  const { asd_id, logId, requestorName, quantityReturned, isDamaged, damageNotes } = req.body;
   try {
+    const quantity = Number(quantityReturned);
+    if (!Number.isInteger(quantity) || quantity < 1 || !String(requestorName || '').trim()) {
+      return res.status(400).json({ error: 'Enter the requestor and a whole-number return quantity.' });
+    }
     const activeLog = await pool.query(`
-      SELECT log_id FROM public.equipment_ledgers 
+      SELECT log_id, qty_borrowed FROM public.equipment_ledgers
       WHERE asd_id = $1 AND LOWER(requestor_name) = LOWER($2) AND status = 'Borrowed'
+        AND ($3::text IS NULL OR public_id::text = $3::text)
       ORDER BY borrowed_at ASC LIMIT 1
-    `, [asd_id, requestorName]);
+    `, [asd_id, requestorName, logId || null]);
 
     if (activeLog.rows.length === 0) {
       return res.status(404).json({ error: "No active borrowing record found for this requestor and item." });
+    }
+    if (quantity !== Number(activeLog.rows[0].qty_borrowed)) {
+      return res.status(400).json({ error: `This borrowing record has ${activeLog.rows[0].qty_borrowed} units. Return that full quantity to close it.` });
     }
 
     // Determine values to inject based on the boolean flag
@@ -1950,9 +2027,10 @@ app.get('/api/resources/blackouts', async (req, res) => {
   try {
     // JOIN added so the frontend gets the asset_name directly
     const query = `
-      SELECT ab.*, ad.asset_name 
+      SELECT ab.*, ad.asset_name, d.full_name AS driver_name
       FROM public.asset_blackouts ab
-      JOIN public.asset_details ad ON ab.asd_id = ad.asd_id
+      LEFT JOIN public.asset_details ad ON ab.asd_id = ad.asd_id
+      LEFT JOIN public.resource_drivers d ON ab.driver_id = d.driver_id
     `;
     const result = await pool.query(query);
     res.json(result.rows);
@@ -1965,25 +2043,26 @@ app.get('/api/resources/blackouts', async (req, res) => {
 // 11.9 ASSETS: CREATE NEW BLACKOUT ENDPOINT
 // ==========================================
 app.post('/api/resources/blackouts', requireAuth, async (req, res) => {
-  const { asd_id, start_time, end_time, reason } = req.body;
-  try {
-    await pool.query(
-      `INSERT INTO public.asset_blackouts (asd_id, start_time, end_time, reason, blocked_by) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      // We added parseInt() here to ensure the database gets a strict number
-      [parseInt(asd_id), start_time, end_time, reason, req.user.u_id] 
-    );
-    res.status(201).json({ message: "Asset successfully blocked." });
-  } catch (err) {
-    console.error("Blackout Insert Error:", err); // Added this so it's easier to spot in the terminal!
-    res.status(500).json({ error: "Failed to apply blackout date." });
-  }
+  res.status(410).json({error:'Use the schedule block form so approved and pending requests are checked before a block is saved.'});
 });
 
 // ==========================================
 // 12. BOOKINGS: FETCH CALENDAR EVENTS ENDPOINT
 // ==========================================
 require('./resourceSchedulingRoutes')(app, pool, requireAuth);
+app.get('/api/decision-support/offices', requireAuth, async (req, res) => {
+  try {
+    const raw = String(req.query.ids || '').split(',').filter(Boolean);
+    if (!raw.length || raw.length > 50 || raw.some(id => !/^[1-9]\d*$/.test(id) || Number(id) > 2147483647)) {
+      return res.status(400).json({error: 'Provide up to 50 valid office IDs.'});
+    }
+    const {getOfficeSignals} = require('./decisionSupport');
+    res.json(await getOfficeSignals(pool, [...new Set(raw.map(Number))]));
+  } catch (error) {
+    console.error('Office decision support failed:', error);
+    res.status(500).json({error: 'Unable to load office processing signals.'});
+  }
+});
 require('./resourceAdminRoutes')(app, pool, requireAuth);
 
 app.get('/api/resources/my-requests', requireAuth, async (req, res) => {
@@ -2153,11 +2232,14 @@ app.post('/api/resources/book', requireAuth, async (req, res) => {
     await client.query('BEGIN');
     await lockSchedule(client);
 
-    const assetRes = await client.query(`SELECT asd_id FROM public.asset_details WHERE ast_id = CASE $2 WHEN 'Vehicle' THEN 4 WHEN 'Room' THEN 1 WHEN 'Gymnasium' THEN 2 END ORDER BY (asset_name = $1) DESC, asd_id LIMIT 1`, [assetName, bookingType]);
+    const assetRes = await client.query(`SELECT asd_id FROM public.asset_details WHERE ast_id = CASE $2 WHEN 'Vehicle' THEN 4 WHEN 'Room' THEN 1 WHEN 'Gymnasium' THEN 2 END AND ($2 = 'Vehicle' OR asset_name = $1) ORDER BY asd_id LIMIT 1`, [assetName, bookingType]);
     if (assetRes.rows.length === 0) throw new Error("Target university asset resource not registered.");
     const asdId = assetRes.rows[0].asd_id;
 
     for (const requestedDate of dates) {
+    const startPassed = await client.query(`SELECT ($1::date + $2::time) <= timezone('Asia/Manila',now()) AS passed`,
+      [requestedDate,isFacility ? startTime : pickUpTime]);
+    if (startPassed.rows[0].passed) throw Object.assign(new Error('The requested start time has passed. Choose a future time.'),{status:409});
     const free = await availability(client, {date:requestedDate, start:isFacility ? startTime : pickUpTime, end:isFacility ? endTime : dropOffTime, type:bookingType, assetName});
     if (!free.available) throw Object.assign(new Error(free.reason), {status:409});
 
@@ -2266,6 +2348,7 @@ app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
     const query = `
       SELECT 
         el.public_id AS log_id,
+        el.asd_id,
         ad.asset_name, 
         el.requestor_name, 
         el.qty_borrowed, 
@@ -2290,11 +2373,13 @@ app.get('/api/procurement/logistics', requireAuth, async (req, res) => {
 // ==========================================
 app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req, res) => {
   if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
-  const { bookingId, type } = req.params;
+  const { bookingId } = req.params;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1', [bookingId]);
+    const booking = await client.query(`SELECT b.booking_id,b.booking_type,gm.asd_id AS room_asset_id
+      FROM public.bookings b LEFT JOIN public.gm_requirements gm USING(booking_id)
+      WHERE b.public_id=$1`, [bookingId]);
     if (!booking.rows.length) throw Object.assign(new Error('Request not found.'), {status:404});
     const internalBookingId = booking.rows[0].booking_id;
     
@@ -2303,7 +2388,10 @@ app.get('/api/procurement/checklists/:bookingId/:type', requireAuth, async (req,
     
     if (existingChecklist.rows.length === 0) {
       // 2. If empty, generate them from the global template
-      const templates = await client.query('SELECT item_name FROM public.checklist_templates WHERE booking_type = $1', [type]);
+      const roomAssetId = booking.rows[0].booking_type === 'Room' ? booking.rows[0].room_asset_id : null;
+      const templates = await client.query(`SELECT item_name FROM public.checklist_templates
+        WHERE booking_type=$1 AND asd_id IS NOT DISTINCT FROM $2::integer
+        ORDER BY template_id`, [booking.rows[0].booking_type, roomAssetId]);
       if (templates.rows.length > 0) {
         for (let t of templates.rows) {
           await client.query(
@@ -2338,8 +2426,14 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
     await client.query('BEGIN');
     await lockSchedule(client);
     if (typeof isChecked !== 'boolean') throw new Error('Invalid checklist value.');
-    const booking = await client.query('SELECT booking_id FROM public.bookings WHERE public_id=$1 FOR UPDATE', [bookingId]);
+    const booking = await client.query(`SELECT b.booking_id,b.booking_type,b.purpose,b.status,
+      b.reservation_date + COALESCE(gm.start_time,vr.pick_up_time) <= timezone('Asia/Manila',now()) AS start_passed
+      FROM public.bookings b LEFT JOIN public.gm_requirements gm USING(booking_id)
+      LEFT JOIN public.vehicle_requirements vr USING(booking_id)
+      WHERE b.public_id=$1 FOR UPDATE OF b`, [bookingId]);
     if (!booking.rows.length) throw new Error('Request not found.');
+    if (['Cancelled','Completed'].includes(booking.rows[0].status)) throw new Error('This request is already closed. Submit a new request if needed.');
+    if (booking.rows[0].start_passed && ['Reserved','Pending'].includes(booking.rows[0].status)) throw new Error('The requested start time has passed. Submit a new request.');
     const internalBookingId = booking.rows[0].booking_id;
     
     // Update specific item
@@ -2355,8 +2449,16 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
   if (allChecked && allItems.rows.length > 0) {
     await assertConfirmable(client, internalBookingId);
     await client.query("UPDATE public.bookings SET status = 'Approved', updated_at = timezone('Asia/Manila', now()) WHERE booking_id = $1", [internalBookingId]);
+    if (!['Approved','Confirmed'].includes(booking.rows[0].status)) await client.query(`INSERT INTO public.booking_status_updates
+      (booking_id,previous_status,new_status,notification_message,updated_by)
+      VALUES ($1,$2,'Approved',$3,$4)`,[internalBookingId,booking.rows[0].status,
+      `Your ${booking.rows[0].booking_type.toLowerCase()} request "${booking.rows[0].purpose}" has been approved. Open the request for details.`,req.user.u_id]);
   } else {
     await client.query("UPDATE public.bookings SET status = 'Pending' WHERE booking_id = $1", [internalBookingId]);
+    if (['Approved','Confirmed'].includes(booking.rows[0].status)) await client.query(`INSERT INTO public.booking_status_updates
+      (booking_id,previous_status,new_status,notification_message,updated_by)
+      VALUES ($1,$2,'Pending',$3,$4)`,[internalBookingId,booking.rows[0].status,
+      `Your ${booking.rows[0].booking_type.toLowerCase()} request "${booking.rows[0].purpose}" needs another review. Open the request for details.`,req.user.u_id]);
   }
 
     await client.query('COMMIT');
@@ -2374,15 +2476,26 @@ app.put('/api/procurement/checklists/:checkId', requireAuth, async (req, res) =>
 // 13.4 PROCUREMENT: GET MASTER TEMPLATES ENDPOINT
 // ==========================================
 app.get('/api/procurement/templates/:type', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
+  const client = await pool.connect();
   try {
     const { type } = req.params;
-    const result = await pool.query(
-      'SELECT template_id, item_name, booking_type FROM public.checklist_templates WHERE booking_type = $1 ORDER BY template_id ASC', 
-      [type]
-    );
+    const assetId = type === 'Room' ? Number(req.query.assetId) : null;
+    if (!['Room','Vehicle','Gymnasium'].includes(type) || (type === 'Room' && (!Number.isInteger(assetId) || assetId < 1))) return res.status(400).json({error:'Choose a valid resource and room.'});
+    await client.query('BEGIN');
+    if (type === 'Room') {
+      const room = await client.query('SELECT 1 FROM public.asset_details WHERE asd_id=$1 AND ast_id=1',[assetId]);
+      if (!room.rows.length) throw Object.assign(new Error('Room not found.'),{status:404});
+    }
+    const result = await client.query(`SELECT template_id,item_name,booking_type,asd_id FROM public.checklist_templates
+      WHERE booking_type=$1 AND asd_id IS NOT DISTINCT FROM $2::integer ORDER BY template_id`,[type,assetId]);
+    await client.query('COMMIT');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch master checklist templates." });
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message || 'Failed to fetch master checklist templates.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -2390,11 +2503,19 @@ app.get('/api/procurement/templates/:type', requireAuth, async (req, res) => {
 // 13.5 PROCUREMENT: POST NEW MASTER TEMPLATE ITEM ENDPOINT
 // ==========================================
 app.post('/api/procurement/templates', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
-    const { bookingType, itemName } = req.body;
+    const { bookingType, itemName, assetId } = req.body;
+    if (!['Room','Vehicle','Gymnasium'].includes(bookingType) || typeof itemName !== 'string' || !itemName.trim()) return res.status(400).json({error:'Enter a valid resource and requirement.'});
+    const roomId = bookingType === 'Room' ? Number(assetId) : null;
+    if (bookingType === 'Room') {
+      if (!Number.isInteger(roomId) || roomId < 1) return res.status(400).json({error:'Choose a room.'});
+      const room = await pool.query('SELECT 1 FROM public.asset_details WHERE asd_id=$1 AND ast_id=1',[roomId]);
+      if (!room.rows.length) return res.status(404).json({error:'Room not found.'});
+    }
     await pool.query(
-      'INSERT INTO public.checklist_templates (booking_type, item_name) VALUES ($1, $2)', 
-      [bookingType, itemName]
+      'INSERT INTO public.checklist_templates (booking_type, item_name, asd_id) VALUES ($1, $2, $3)',
+      [bookingType, itemName.trim(), roomId]
     );
     res.status(201).json({ message: "Template item successfully added." });
   } catch (err) {
@@ -2406,6 +2527,7 @@ app.post('/api/procurement/templates', requireAuth, async (req, res) => {
 // 13.6 PROCUREMENT: DELETE MASTER TEMPLATE ITEM ENDPOINT
 // ==========================================
 app.delete('/api/procurement/templates/:id', requireAuth, async (req, res) => {
+  if (Number(req.user.a_id) !== 4) return res.status(403).json({error:'GSO administrator access required.'});
   try {
     const { id } = req.params;
     await pool.query(
@@ -2464,7 +2586,7 @@ app.get('/api/admin/infrastructure-summary', async (req, res) => {
 app.get('/api/admin/dashboard-metrics', async (req, res) => {
   try {
     const activeTracksRes = await pool.query(
-      'SELECT COUNT(DISTINCT ini_id)::int as total FROM public.processed_document WHERE time_out IS NULL'
+      'SELECT COUNT(DISTINCT ini_id)::int as total FROM public.processed_document WHERE time_out IS NULL AND is_returned_from_adhoc IS NOT TRUE'
     );
 
     const systemUsersRes = await pool.query(
@@ -2503,6 +2625,7 @@ app.get('/api/admin/dashboard-metrics', async (req, res) => {
       JOIN public.offices off ON pdoc.current_office_id = off.o_id
       WHERE pdoc.time_in IS NOT NULL 
         AND pdoc.time_out IS NULL
+        AND pdoc.is_returned_from_adhoc IS NOT TRUE
         AND pdoc.time_in < TIMEZONE('Asia/Manila', NOW()) - INTERVAL '48 hours'
       ORDER BY pdoc.time_in ASC;
     `;
@@ -2611,4 +2734,24 @@ const PORT = process.env.PORT || 5000;
 // Change app.listen to server.listen so WebSockets run on the same port
 server.listen(PORT, () => {
   console.log(`Server & WebSocket running on port ${PORT}`);
+  void initDatabaseListener();
+  let completionRunning = false;
+  const completeBookings = async () => {
+    if (completionRunning) return;
+    completionRunning = true;
+    try {
+      const broadcastBookingChange = () => {
+        io.to('resource_updates_room').emit('resource-schedule-updated');
+        io.to('gso_admin_room').emit('system-metrics-updated');
+      };
+      await cancelExpiredPendingBookings(pool, sendBookingUpdateEmail, broadcastBookingChange);
+      await completeExpiredBookings(pool, sendBookingUpdateEmail, broadcastBookingChange);
+    } catch (error) {
+      console.error('Automatic booking completion failed:', error);
+    } finally {
+      completionRunning = false;
+    }
+  };
+  void completeBookings();
+  setInterval(completeBookings, 60 * 1000);
 });

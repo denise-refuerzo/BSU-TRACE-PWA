@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { API_BASE_URL } from '../../api';
-import ThemeToggle from '../shared/components/ThemeToggle'; // Adjust path if your ThemeToggle file is located elsewhere
+import ThemeToggle from '../shared/components/ui/ThemeToggle'; // Adjust path if your ThemeToggle file is located elsewhere
 
 export default function Login() {
   // --- NEW: WIPE STALE SESSION DATA ON LOAD ---

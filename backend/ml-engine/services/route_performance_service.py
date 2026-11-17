@@ -1,5 +1,5 @@
 import pandas as pd
-from database import get_db_connection
+from database import read_combined_query, read_live_query
 
 def calculate_document_routing_efficiency(start_date=None, end_date=None):
     """Summarize true end-to-end turnaround for each document process.
@@ -35,6 +35,7 @@ def calculate_document_routing_efficiency(start_date=None, end_date=None):
             JOIN public.initial_document idoc ON pd.ini_id = idoc.ini_id
             JOIN public.process_type pt ON idoc.p_id = pt.p_id
             WHERE pd.time_in IS NOT NULL AND pd.time_out IS NOT NULL
+              AND {{document_filter}}
               AND NOT EXISTS (
                   SELECT 1
                   FROM public.processed_document open_stop
@@ -54,8 +55,8 @@ def calculate_document_routing_efficiency(start_date=None, end_date=None):
         GROUP BY route_name
         ORDER BY avg_completion_hours DESC;
     """
-    with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn, params=tuple(params))
+    df = read_combined_query(query, params=tuple(params),
+                             predicates={'document_filter': "idoc.title LIKE 'Synthetic %'"})
     if df.empty:
         return []
     numeric_columns = [
@@ -64,10 +65,13 @@ def calculate_document_routing_efficiency(start_date=None, end_date=None):
     ]
     for column in numeric_columns:
         df[column] = pd.to_numeric(df[column], errors='coerce').fillna(0)
-    df['total_documents'] = df['total_documents'].astype(int)
-    for column in ['avg_stops', 'avg_completion_hours', 'avg_active_processing_hours']:
-        df[column] = df[column].round(2)
-    return df.to_dict(orient='records')
+    rows = []
+    for route_name, group in df.groupby('route_name'):
+        total = int(group.total_documents.sum())
+        rows.append({'route_name': route_name, 'total_documents': total,
+                     **{column: round(float((group[column] * group.total_documents).sum() / total), 2)
+                        for column in ['avg_stops', 'avg_completion_hours', 'avg_active_processing_hours']}})
+    return sorted(rows, key=lambda row: row['avg_completion_hours'], reverse=True)
 
 
 def calculate_vehicle_scheduling_performance(start_date=None, end_date=None):
@@ -89,20 +93,23 @@ def calculate_vehicle_scheduling_performance(start_date=None, end_date=None):
         JOIN public.asset_details a ON v.asd_id = a.asd_id
         JOIN public.bookings b ON v.booking_id = b.booking_id
         {where_clause}
+        {'AND' if where_clause else 'WHERE'} {{booking_filter}}
         GROUP BY a.asset_name;
     """
-    with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn, params=tuple(params))
+    df = read_combined_query(query, params=tuple(params),
+                             predicates={'booking_filter': "b.purpose LIKE 'Synthetic %'"})
     if df.empty:
         return []
-    df['avg_turnaround_hours'] = (df['avg_trip_seconds'] / 3600).round(2)
+    df['total_trips'] = pd.to_numeric(df['total_trips'], errors='coerce').fillna(0)
+    df['avg_trip_seconds'] = pd.to_numeric(df['avg_trip_seconds'], errors='coerce').fillna(0)
     return [
         {
-            "asset_name": str(row["asset_name"]), 
-            "total_trips": int(row["total_trips"]), 
-            "avg_turnaround_hours": float(row["avg_turnaround_hours"])
+            "asset_name": str(name),
+            "total_trips": int(group.total_trips.sum()),
+            "avg_turnaround_hours": round(float((group.avg_trip_seconds * group.total_trips).sum()
+                                                / group.total_trips.sum() / 3600), 2)
         } 
-        for row in df[['asset_name', 'total_trips', 'avg_turnaround_hours']].to_dict(orient='records')
+        for name, group in df.groupby('asset_name') if group.total_trips.sum() > 0
     ]
 
 
@@ -117,21 +124,30 @@ def recommend_optimized_routing(route_ids: list[int]):
         return {"error": "No stops provided"}
 
     dwell_query = """
-        SELECT current_office_id, 
-               AVG(COALESCE(duration_minutes, EXTRACT(EPOCH FROM (time_out - time_in))/60.0)) as avg_dwell
-        FROM public.processed_document
-        WHERE time_in IS NOT NULL AND time_out IS NOT NULL
-        GROUP BY current_office_id;
+        SELECT off.office_name, COUNT(*) AS samples,
+               AVG(COALESCE(pd.duration_minutes, EXTRACT(EPOCH FROM (pd.time_out - pd.time_in))/60.0)) AS avg_dwell
+        FROM public.processed_document pd
+        JOIN public.initial_document doc ON pd.ini_id = doc.ini_id
+        JOIN public.offices off ON pd.current_office_id = off.o_id
+        WHERE pd.time_in IS NOT NULL AND pd.time_out IS NOT NULL
+          AND {document_filter}
+        GROUP BY off.office_name;
     """
-    with get_db_connection() as conn:
-        df = pd.read_sql_query(dwell_query, conn)
-
-    dwell_map = dict(zip(df['current_office_id'].astype(int), df['avg_dwell'].astype(float)))
-    system_median = df['avg_dwell'].median() if not df.empty else 120.0
+    df = read_combined_query(dwell_query, predicates={
+        'document_filter': "doc.title LIKE 'Synthetic %'",
+    })
+    offices = read_live_query('SELECT o_id, office_name FROM public.offices')
+    names = dict(zip(offices.o_id.astype(int), offices.office_name))
+    dwell_map = {}
+    for name, group in df.groupby('office_name'):
+        samples = pd.to_numeric(group.samples).sum()
+        if samples:
+            dwell_map[name] = float((pd.to_numeric(group.avg_dwell) * pd.to_numeric(group.samples)).sum() / samples)
+    system_median = float(pd.Series(dwell_map.values()).median()) if dwell_map else 120.0
 
     bottleneck_warnings = []
     for stop in route_ids:
-        dwell = dwell_map.get(stop, system_median)
+        dwell = dwell_map.get(names.get(stop), system_median)
         if dwell > (system_median * 1.5):
             bottleneck_warnings.append({
                 "office_id": stop,
@@ -155,17 +171,17 @@ def recommend_vehicle_allocation(reservation_date: str, requested_passengers: in
         SELECT 
             a.asd_id,
             a.asset_name,
-            COUNT(v.v_id) as assigned_today
+            COUNT(b.booking_id) as assigned_today
         FROM public.asset_details a
         JOIN public.asset_type at ON a.ast_id = at.ast_id
         LEFT JOIN public.vehicle_requirements v ON a.asd_id = v.asd_id
         LEFT JOIN public.bookings b ON v.booking_id = b.booking_id AND b.reservation_date = %s
+          AND b.status NOT IN ('Cancelled', 'Completed')
         WHERE at.asset_type = 'Vehicle'
         GROUP BY a.asd_id, a.asset_name
         ORDER BY assigned_today ASC;
     """
-    with get_db_connection() as conn:
-        candidates = pd.read_sql_query(query, conn, params=(reservation_date,))
+    candidates = read_live_query(query, params=(reservation_date,))
 
     if candidates.empty:
         return {"recommendation": None, "advisory": "No fleet vehicles available."}

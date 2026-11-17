@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import CustomRouteReview from './CustomRouteReview';
 import WorkflowEditorModal from '../modals/WorkflowEditorModal';
+import OfficeRouteGroupsManager from './OfficeRouteGroupsManager';
 
 const PAGE_SIZE = 8;
 
@@ -90,7 +91,7 @@ function Pagination({ currentPage, totalItems, onPageChange }) {
 function WorkflowRoute({ workflow }) {
   const stops = Array.from({ length: 7 }, (_, index) => {
     const step = index + 1;
-    return workflow[`stop_${step}_kind`] === 'group' ? `${workflow[`stop_${step}_group_name`]} category` : workflow[`stop_${step}_name`];
+    return workflow[`stop_${step}_kind`] === 'group' ? `${workflow[`stop_${step}_label`] || 'Choose office'} (${workflow[`stop_${step}_group_name`]})` : workflow[`stop_${step}_name`];
   }).filter(Boolean);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -244,8 +245,8 @@ export default function SystemManagementTab({ matrixProps, section = 'offices' }
                   <tbody className="divide-y divide-neutral-100 dark:divide-gray-800">
                     {displayedRows.map(row => (
                       <tr key={row.p_id} onClick={() => matrixProps.openWorkflowEditor(row)} className="cursor-pointer hover:bg-rose-50/40 dark:hover:bg-[#2b1317]/50 transition-colors">
-                        <td className="px-5 py-4 font-bold text-neutral-900 dark:text-white">{row.process_name}</td>
-                        <td className="px-5 py-4 text-neutral-600 dark:text-gray-400">{row.category_name}</td>
+                        <td className="px-5 py-4 font-bold text-neutral-900 dark:text-white"><span title={row.process_name} className="block max-w-[15rem] truncate">{row.process_name}</span></td>
+                        <td className="px-5 py-4 text-neutral-600 dark:text-gray-400"><span title={row.category_name} className="block max-w-[12rem] truncate">{row.category_name}</span></td>
                         <td className="px-5 py-4"><WorkflowRoute workflow={row} /></td>
                         <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${row.is_active === false ? 'bg-neutral-200 dark:bg-gray-800 text-neutral-700 dark:text-gray-300' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'}`}>{row.is_active === false ? 'Hidden' : 'Available'}</span></td>
                         <td className="px-5 py-4 text-right">
@@ -270,8 +271,9 @@ export default function SystemManagementTab({ matrixProps, section = 'offices' }
         )}
       </div>
 
+      {section === 'offices' && <OfficeRouteGroupsManager groups={matrixProps.adminRouteGroups} offices={matrixProps.offices} onSave={matrixProps.saveOfficeRouteGroup} onDelete={matrixProps.deleteOfficeRouteGroup} />}
       <RecordModal key={dialog ? `${dialog.kind}-${dialog.record?.id || dialog.record?.category_id || 'new'}` : 'closed'} dialog={dialog} onClose={() => setDialog(null)} onSave={saveDialog} officeCategories={officeCategories} />
-      <WorkflowEditorModal open={matrixProps.workflowEditorOpen} onClose={matrixProps.closeWorkflowEditor} onSubmit={matrixProps.handleProcessFormSubmit} formMeta={matrixProps.formMeta} setFormMeta={matrixProps.setFormMeta} newProcessName={matrixProps.newProcessName} setNewProcessName={matrixProps.setNewProcessName} categoryId={matrixProps.categoryId} setCategoryId={matrixProps.setCategoryId} categories={matrixProps.categories} selectedStops={matrixProps.selectedStops} offices={matrixProps.offices} routeGroups={matrixProps.routeGroups} handleStopKindChange={matrixProps.handleStopKindChange} handleStopSelectorChange={matrixProps.handleStopSelectorChange} handleAddStopSlot={matrixProps.handleAddStopSlot} handleRemoveTrailingStopSlot={matrixProps.handleRemoveTrailingStopSlot} />
+      <WorkflowEditorModal open={matrixProps.workflowEditorOpen} onClose={matrixProps.closeWorkflowEditor} onSubmit={matrixProps.handleProcessFormSubmit} formMeta={matrixProps.formMeta} setFormMeta={matrixProps.setFormMeta} newProcessName={matrixProps.newProcessName} setNewProcessName={matrixProps.setNewProcessName} categoryId={matrixProps.categoryId} setCategoryId={matrixProps.setCategoryId} categories={matrixProps.categories} selectedStops={matrixProps.selectedStops} offices={matrixProps.offices} routeGroups={matrixProps.routeGroups} handleStopKindChange={matrixProps.handleStopKindChange} handleStopSelectorChange={matrixProps.handleStopSelectorChange} handleStopLabelChange={matrixProps.handleStopLabelChange} handleAddStopSlot={matrixProps.handleAddStopSlot} handleRemoveTrailingStopSlot={matrixProps.handleRemoveTrailingStopSlot} />
     </div>
   );
 }

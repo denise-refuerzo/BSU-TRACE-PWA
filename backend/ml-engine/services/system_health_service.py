@@ -1,14 +1,14 @@
-import pandas as pd
-from database import get_db_connection
+from database import analytics_sources, get_db_connection, read_combined_query
 
 def get_database_status():
     """
     Pings the PostgreSQL database to ensure active connections are healthy.
     """
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
+        for source, _, _ in analytics_sources():
+            with get_db_connection(source) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
         return "HEALTHY"
     except Exception:
         return "DISCONNECTED"
@@ -22,12 +22,16 @@ def run_data_quality_audit():
         SELECT 
             COUNT(*) AS total_documents,
             COUNT(CASE WHEN time_in IS NULL THEN 1 END) AS missing_time_in_records,
-            COUNT(CASE WHEN time_out IS NULL THEN 1 END) AS missing_time_out_records
-        FROM public.processed_document;
+            COUNT(CASE WHEN time_out IS NULL THEN 1 END) AS missing_time_out_records,
+            COUNT(CASE WHEN time_in IS NULL OR time_out IS NULL THEN 1 END) AS invalid_records
+        FROM public.processed_document pd
+        JOIN public.initial_document doc ON pd.ini_id = doc.ini_id
+        WHERE {document_filter};
     """
     
-    with get_db_connection() as conn:
-        df = pd.read_sql_query(query, conn)
+    df = read_combined_query(query, predicates={
+        'document_filter': "doc.title LIKE 'Synthetic %'",
+    })
         
     if df.empty:
         return {
@@ -36,14 +40,14 @@ def run_data_quality_audit():
             "audit_details": {}
         }
         
-    total_documents = int(df['total_documents'].iloc[0])
-    missing_time_in = int(df['missing_time_in_records'].iloc[0])
-    missing_time_out = int(df['missing_time_out_records'].iloc[0])
+    total_documents = int(df['total_documents'].sum())
+    missing_time_in = int(df['missing_time_in_records'].sum())
+    missing_time_out = int(df['missing_time_out_records'].sum())
+    invalid_docs = int(df['invalid_records'].sum())
     
     if total_documents == 0:
         integrity_score = 100.0
     else:
-        invalid_docs = missing_time_in + missing_time_out
         integrity_score = ((total_documents - invalid_docs) / total_documents) * 100.0
         
     return {

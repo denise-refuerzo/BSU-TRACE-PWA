@@ -3,7 +3,7 @@ import { Inbox, Scan, Clock, CheckCircle, Scale, FileText, AlertCircle } from 'l
 import CompletedDocumentsModal from '../../../shared/modals/CompletedDocumentsModal'; 
 
 export default function ProcessorOverviewTab({
-  signedCount, sentBackCount,
+  signedCount, sentBackCount, haltedCount,
   profileName,
   processorOfficeName,
   expectedIncomingCount,
@@ -31,7 +31,8 @@ export default function ProcessorOverviewTab({
     { id: 'Pending', label: 'Pending Docs', count: pendingCount, color: 'border-t-amber-500', text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: <Clock size={16} /> },
     { id: 'In Verification', label: 'In Verification', count: inVerificationCount, color: 'border-t-purple-500', text: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20', icon: <Scale size={16} /> },
     { id: 'Signed', label: 'Ready for Release', count: signedCount, color: 'border-t-blue-600 dark:border-blue-500', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', icon: <CheckCircle size={16} /> },
-    { id: 'Action Required', label: 'Sent Back', count: sentBackCount, color: 'border-t-red-800 dark:border-t-red-600', text: 'text-red-800 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', icon: <AlertCircle size={16} /> }
+    { id: 'Action Required', label: 'Sent Back', count: sentBackCount, color: 'border-t-red-800 dark:border-t-red-600', text: 'text-red-800 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', icon: <AlertCircle size={16} /> },
+    { id: 'Halted', label: 'Halted', count: haltedCount, color: 'border-t-rose-900 dark:border-t-rose-500', text: 'text-rose-900 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-900/20', icon: <AlertCircle size={16} /> }
   ];
 
   // Group documents by their resolved status
@@ -58,8 +59,8 @@ export default function ProcessorOverviewTab({
             </svg>
           </div>
           <div className="flex flex-col items-start min-w-0">
-            <h3 className="text-lg font-black text-gray-900 dark:text-white leading-tight truncate w-full">{profileName || 'Office Processor'}</h3>
-            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2.5 truncate w-full">Processor / {processorOfficeName || 'HRMO'}</p>
+            <h3 title={profileName || 'Office Processor'} className="text-lg font-black text-gray-900 dark:text-white leading-tight truncate w-full">{profileName || 'Office Processor'}</h3>
+            <p title={`Processor / ${processorOfficeName || 'HRMO'}`} className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2.5 truncate w-full">Processor / {processorOfficeName || 'HRMO'}</p>
             <button 
               onClick={() => setActiveTab('profile')} 
               className="px-3 py-1.5 bg-gray-900 dark:bg-gray-800 text-white rounded-md text-[11px] font-bold hover:bg-black dark:hover:bg-gray-700 transition-colors shrink-0 whitespace-nowrap"
@@ -109,7 +110,7 @@ export default function ProcessorOverviewTab({
           return (
             <div 
               key={col.id} 
-              className={`w-[85vw] sm:w-80 md:w-auto md:flex-1 shrink-0 flex flex-col bg-gray-50/80 dark:bg-[#1f1214] rounded-xl border border-gray-200 dark:border-[#42292f] overflow-hidden transition-opacity snap-start ${isFiltered ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}
+              className={`w-[85vw] sm:w-80 md:w-auto md:min-w-0 md:flex-1 shrink-0 flex flex-col bg-gray-50/80 dark:bg-[#1f1214] rounded-xl border border-gray-200 dark:border-[#42292f] overflow-hidden transition-opacity snap-start ${isFiltered ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}
             >
               <div 
                 onClick={() => { setFilterStatus(prev => prev === col.id ? 'All' : col.id); setDashboardPage(1); }}
@@ -129,22 +130,22 @@ export default function ProcessorOverviewTab({
                     <div 
                       key={doc.ini_id || idx}
                       onClick={() => handleRowDocumentClick(doc)}
-                      className="bg-white dark:bg-[#180e10] p-3 rounded-lg border border-gray-200 dark:border-[#42292f] shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all cursor-pointer group flex flex-col gap-2"
+                      className="min-w-0 bg-white dark:bg-[#180e10] p-3 rounded-lg border border-gray-200 dark:border-[#42292f] shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all cursor-pointer group flex flex-col gap-2"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <h5 className="text-xs font-bold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug">
+                        <h5 title={doc.title} className="min-w-0 flex-1 text-xs font-bold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 break-words leading-snug">
                           {doc.title}
                         </h5>
                         <FileText size={14} className="text-gray-400 shrink-0 mt-0.5" />
                       </div>
                       
-                      <span className="w-max px-2 py-0.5 bg-gray-100 dark:bg-[#2b1317] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#42292f] font-bold text-[9px] uppercase tracking-wider rounded">
+                      <span title={doc.process_name || 'GENERAL FORM'} tabIndex={0} className="block min-w-0 max-w-full self-start truncate focus:whitespace-normal focus:break-all focus:overflow-visible focus-visible:outline-2 focus-visible:outline-red-700 px-2 py-0.5 bg-gray-100 dark:bg-[#2b1317] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#42292f] font-bold text-[9px] uppercase tracking-wider rounded">
                         {doc.process_name || 'GENERAL FORM'}
                       </span>
                       
-                      <div className="pt-2 border-t border-gray-100 dark:border-gray-800 mt-1 flex items-center justify-between">
+                      <div className="min-w-0 pt-2 border-t border-gray-100 dark:border-gray-800 mt-1 flex items-center justify-between gap-2">
                         <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">Next:</span>
-                        <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 truncate max-w-[100px]">
+                        <span title={doc.next_office || 'None (Final)'} className="min-w-0 text-[10px] font-bold text-gray-700 dark:text-gray-300 truncate text-right">
                           {doc.next_office || 'None (Final)'}
                         </span>
                       </div>

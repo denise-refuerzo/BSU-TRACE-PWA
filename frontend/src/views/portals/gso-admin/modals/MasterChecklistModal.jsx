@@ -6,6 +6,9 @@ export default function MasterChecklistModal({
   setShowChecklistMakerModal,
   activeChecklistTab,
   setActiveChecklistTab,
+  checklistRooms,
+  checklistRoomId,
+  setSelectedChecklistRoomId,
   masterChecklistItems,
   handleDeleteMasterChecklistItem,
   handleAddMasterChecklistItem,
@@ -28,7 +31,7 @@ export default function MasterChecklistModal({
         <div className="p-5 flex flex-col h-[50vh]">
           {/* Reservation Target Tabs */}
           <div className="bg-neutral-100 dark:bg-[#1c1113] p-1 rounded-xl flex font-bold text-[10px] mb-4 flex-shrink-0 border border-neutral-200 dark:border-gray-800">
-            {['Vehicle', 'Multimedia Room', 'Gymnasium'].map((tab) => (
+            {['Vehicle', 'Room', 'Gymnasium'].map((tab) => (
               <button 
                 key={tab}
                 onClick={() => setActiveChecklistTab(tab)}
@@ -40,6 +43,16 @@ export default function MasterChecklistModal({
               </button>
             ))}
           </div>
+
+          {activeChecklistTab === 'Room' && checklistRooms.length > 1 && (
+            <label className="mb-4 block text-xs font-bold text-neutral-700 dark:text-gray-300">
+              Choose room checklist
+              <select value={checklistRoomId} onChange={event => setSelectedChecklistRoomId(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-[#1c1113] dark:text-white">
+                {checklistRooms.map(room => <option key={room.asd_id} value={room.asd_id}>{room.asset_name}</option>)}
+              </select>
+            </label>
+          )}
+          {activeChecklistTab === 'Room' && checklistRooms.length === 1 && <p className="mb-4 text-xs text-neutral-600 dark:text-gray-300">Checklist for {checklistRooms[0].asset_name}</p>}
 
           {/* Global List Editor */}
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 border border-neutral-200 dark:border-gray-700 bg-neutral-50 dark:bg-[#1c1113] rounded-xl p-4">

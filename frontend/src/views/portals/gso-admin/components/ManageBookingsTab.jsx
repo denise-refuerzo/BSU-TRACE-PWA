@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Car, Filter, Inbox, Search, Settings2, X } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { resourceApi, resourceError, resourceSuccess } from '../resourceActions';
+import InfoNoticeButton from '../../../shared/components/ui/InfoNoticeButton';
 
 const badgeClasses = {
   Approved: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
@@ -27,7 +29,8 @@ function ManageModal({ booking, onClose, onSaved }) {
       });
       await onSaved();
       onClose();
-      await resourceSuccess(result.notification || result.message);
+      if (result.emailSent === false) await Swal.fire({icon:'warning',title:'Booking updated; email not sent',text:result.message,confirmButtonColor:'#991b1b'});
+      else await resourceSuccess(result.notification || result.message);
     } catch (error) {
       await resourceError(error);
     } finally {
@@ -70,26 +73,29 @@ function ManageModal({ booking, onClose, onSaved }) {
 
 export default function ManageBookingsTab({ onAssignVehicle }) {
   const [bookings,setBookings]=useState([]); const [loading,setLoading]=useState(true); const [error,setError]=useState('');
-  const [search,setSearch]=useState(''); const [filter,setFilter]=useState('All'); const [selected,setSelected]=useState(null);
+  const [search,setSearch]=useState(''); const [filter,setFilter]=useState('All'); const [type,setType]=useState('All'); const [selected,setSelected]=useState(null);
   const refresh=async()=>{setLoading(true);try{setBookings(await resourceApi('manage-bookings'));setError('');}catch(e){setError(e.message);}finally{setLoading(false);}};
   useEffect(()=>{let active=true;resourceApi('manage-bookings').then(data=>{if(active){setBookings(data);setError('');}}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[]);
-  const rows=useMemo(()=>bookings.filter(b=>(filter==='All'||b.status===filter)&&`${b.requestor} ${b.purpose} ${b.asset_name||''}`.toLowerCase().includes(search.toLowerCase())),[bookings,filter,search]);
+  const rows=useMemo(()=>bookings.filter(b=>(filter==='All'||b.status===filter)&&(type==='All'||b.booking_type===type)&&`${b.requestor} ${b.purpose} ${b.asset_name||''} ${b.booking_type}`.toLowerCase().includes(search.toLowerCase())),[bookings,filter,type,search]);
   
   return (
-    <div className="mx-auto max-w-8xl space-y-6 text-left">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] p-6 shadow-xs md:flex-row md:items-center">
-        <p className="text-sm text-gray-500 dark:text-gray-400">Operate approved facility and vehicle bookings until completion.</p>
-        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">{bookings.length} active booking{bookings.length===1?'':'s'}</div>
-      </header>
-      <section className="overflow-hidden rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-xs">
-        <div className="flex flex-col gap-3 border-b border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] p-4 sm:flex-row sm:justify-end">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-3 text-gray-400"/>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search booking…" className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] text-gray-900 dark:text-white py-2.5 pl-9 pr-3 text-xs sm:w-64 outline-none"/>
-          </div>
-          <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
-            <Filter size={14} className="text-gray-400"/>
-            <select value={filter} onChange={e=>setFilter(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option>All</option><option>Approved</option><option>Ongoing</option><option>Delayed</option><option>Rescheduled</option><option>Resource Reassigned</option></select>
+    <div className="mx-auto max-w-8xl text-left">
+      <section className="rounded-2xl border border-gray-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-2xl border-b border-gray-100 dark:border-[#42292f] bg-gray-50/60 dark:bg-[#1c1113] p-4">
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-400">{bookings.length} active booking{bookings.length===1?'':'s'}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-3 text-gray-400"/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search booking…" className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] text-gray-900 dark:text-white py-2.5 pl-9 pr-3 text-xs sm:w-64 outline-none"/>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
+              <select aria-label="Booking type" value={type} onChange={e=>setType(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option value="All">All resources</option><option value="Vehicle">Vehicles</option><option value="Room">Room</option><option value="Gymnasium">Gymnasium</option></select>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#180e10] px-3">
+              <Filter size={14} className="text-gray-400"/>
+              <select value={filter} onChange={e=>setFilter(e.target.value)} className="bg-transparent py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 outline-none"><option>All</option><option>Approved</option><option>Ongoing</option><option>Delayed</option><option>Rescheduled</option><option>Resource Reassigned</option></select>
+            </div>
+            <InfoNoticeButton label="About Manage Bookings">Operate approved facility and vehicle bookings until completion.</InfoNoticeButton>
           </div>
         </div>
         {error&&<div className="m-4 rounded-xl bg-red-50 dark:bg-red-900/20 p-4 text-xs font-semibold text-red-800 dark:text-red-300">{error} <button onClick={refresh} className="underline">Retry</button></div>}

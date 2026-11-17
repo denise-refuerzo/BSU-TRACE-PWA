@@ -5,6 +5,7 @@ import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 
 import { fetchWithAuth } from "../../../../api";
 import { formatPhilippineDate } from '../../../../utils/philippineTime';
+import {getWorkflowStops, getSelectedRouteKey} from '../../../../utils/workflowRoute';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
@@ -63,6 +64,7 @@ export default function useOriginatorData() {
   const [selectedRoutePreview, setSelectedRoutePreview] = useState([]);
   const [estimatedDate, setEstimatedDate] = useState('');
   const [estimatedDatePayload, setEstimatedDatePayload] = useState('');
+  const [routeEstimate, setRouteEstimate] = useState({key: '', date: ''});
   
   const [statusMsg, setStatusMsg] = useState('');
   const [recentDocStops, setRecentDocStops] = useState([]);
@@ -123,33 +125,35 @@ export default function useOriginatorData() {
     fetchEDC();
   }, []);
 
+  const selectedWorkflow = processTypes.find(p => String(p.p_id) === String(form.processTypeId));
+  const selectedWorkflowStops = getWorkflowStops(selectedWorkflow, form.placeholderSelections);
+  const needsRouteEstimate = Boolean(form.customRoute || selectedWorkflowStops.some(stop => stop.groupId));
+  const estimateRouteKey = form.customRoute
+    ? getSelectedRouteKey(form.customRoute.stops.map(officeId => ({officeId})))
+    : getSelectedRouteKey(selectedWorkflowStops);
   useEffect(() => {
     let cancelled = false;
-    const customRoute = form.customRoute;
-    const stops = customRoute?.stops || [];
-    if (!customRoute || stops.length < 2 || stops.some(stop => !stop)) {
-      if (customRoute) {
-        setEstimatedDate('');
-        setEstimatedDatePayload('');
-      }
-      return () => { cancelled = true; };
-    }
-    fetchWithAuth(`/api/analytics/edc?route=${stops.join(',')}`)
+    if (!needsRouteEstimate || !estimateRouteKey) return undefined;
+    fetchWithAuth(`/api/analytics/edc?route=${estimateRouteKey}`)
       .then(async res => res.ok ? res.json() : [])
       .then(data => {
         if (cancelled) return;
         const deliveryDate = data[0]?.estimated_delivery_date || '';
-        setEstimatedDatePayload(deliveryDate);
-        setEstimatedDate(deliveryDate ? formatPhilippineDate(deliveryDate) : '');
+        setRouteEstimate({key: estimateRouteKey, date: deliveryDate, hours: data[0]?.estimated_hours_to_complete ?? null});
       })
       .catch(() => {
         if (!cancelled) {
-          setEstimatedDate('');
-          setEstimatedDatePayload('');
+          setRouteEstimate({key: estimateRouteKey, date: ''});
         }
       });
     return () => { cancelled = true; };
-  }, [form.customRoute?.stops?.join(',')]);
+  }, [needsRouteEstimate, estimateRouteKey]);
+  const resolvedEstimatePayload = needsRouteEstimate
+    ? (estimateRouteKey && routeEstimate.key === estimateRouteKey ? routeEstimate.date : '')
+    : estimatedDatePayload;
+  const displayedEstimate = needsRouteEstimate
+    ? (resolvedEstimatePayload ? formatPhilippineDate(resolvedEstimatePayload) : estimateRouteKey ? 'Estimate pending...' : 'Choose offices to calculate')
+    : estimatedDate;
 
   // REAL-TIME: WebSockets implementation for originator data and chat badges
   useEffect(() => {
@@ -164,7 +168,8 @@ export default function useOriginatorData() {
 
     socketRef.current.on('connect', () => {
       socketRef.current.emit('join-user-room', userId);
-      if (connectedOnce) checkChatBadgeStatus();
+      socketRef.current.emit('join-resource-room');
+      if (connectedOnce) { checkChatBadgeStatus(); fetchLiveNotificationFeeds(); }
       connectedOnce = true;
     });
 
@@ -187,6 +192,7 @@ export default function useOriginatorData() {
       fetchDashboardLedger();
       fetchLiveNotificationFeeds();
     });
+    socketRef.current.on('resource-schedule-updated', fetchLiveNotificationFeeds);
     socketRef.current.on('chat-badge-updated', checkChatBadgeStatus);
 
     return () => {
@@ -206,14 +212,7 @@ export default function useOriginatorData() {
       const res = await fetchWithAuth(`/api/notifications/${userId}/1/0`);
       const data = await res.json();
       if (res.ok) {
-        const alertCollection = data.map(n => ({
-          id: n.id,
-          ini_id: n.ini_id,
-          title: n.title,
-          message: n.message,
-          time: n.time
-        }));
-        setNotifications(alertCollection);
+        setNotifications(Array.isArray(data) ? data : []);
       }
     } catch (err) { console.error("Error retrieving notifications:", err); }
   };
@@ -249,9 +248,6 @@ export default function useOriginatorData() {
       const data = await res.json();
       if (res.ok) {
         setDocuments(data);
-        if (data.length > 0) {
-          setNotifications([{ id: 1, title: "Pipeline Active", message: `Tracking is now active for your submission: "${data[0].title}".`, time: "Just now", unread: true }]);
-        }
       }
     } catch (err) { console.error(err); }
   };
@@ -278,21 +274,26 @@ export default function useOriginatorData() {
     setStatusMsg('');
     
     if (!profile.fullName.trim() || !profile.email.trim()) {
-      return alert("Validation Error: Personal Information fields cannot be left empty.");
+      return minimalSwal.fire({ icon: 'warning', title: 'Validation Error', text: 'Personal information fields cannot be left empty.' });
     }
     
     try {
       const res = await fetchWithAuth(`/api/profile/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile)
+        body: JSON.stringify({ fullName: profile.fullName, email: profile.email })
       });
-      if (res.ok) {
-        setStatusMsg("  Profile modifications saved instantly!");
-        localStorage.setItem('user', profile.fullName);
-        setInitialProfile(profile);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save profile changes.');
       }
-    } catch (err) { alert("Failed sync configuration parameters."); }
+      setStatusMsg('Profile changes saved successfully!');
+      localStorage.setItem('user', profile.fullName);
+      setInitialProfile(profile);
+      minimalSwal.fire({ icon: 'success', title: 'Profile Updated', text: 'Your profile changes were saved successfully.' });
+    } catch (err) {
+      minimalSwal.fire({ icon: 'error', title: 'Update Failed', text: err.message || 'Failed to save profile changes.' });
+    }
   };
 
   const updatePasswordRequest = async (e) => {
@@ -318,14 +319,17 @@ export default function useOriginatorData() {
       const stops = [];
       for (let i = 1; i <= 7; i++) {
         const kind = selected[`stop_${i}_kind`];
-        const name = kind === 'group' ? selected[`stop_${i}_group_name`] : selected[`stop_${i}_name`];
-        if (name) stops.push(kind === 'group' ? `${name} category` : name);
+        const name = kind === 'group' ? (selected[`stop_${i}_label`] || selected[`stop_${i}_group_name`]) : selected[`stop_${i}_name`];
+        if (name) stops.push(kind === 'group' ? `${name}: choose an office` : name);
       }
       setSelectedRoutePreview(stops);
       setForm({ ...form, processTypeId: pId, placeholderSelections: {} });
       
       const prediction = edcPredictions.find(e => e.process_id === parseInt(pId));
-      if (prediction) {
+      if (getWorkflowStops(selected).some(stop => stop.groupId)) {
+        setEstimatedDate('');
+        setEstimatedDatePayload('');
+      } else if (prediction) {
         const deliveryDate = prediction.estimated_delivery_date;
         setEstimatedDatePayload(deliveryDate || '');
         setEstimatedDate(deliveryDate ? formatPhilippineDate(deliveryDate) : 'Estimation pending...');
@@ -343,11 +347,11 @@ export default function useOriginatorData() {
 
   const submitDocument = async (e) => {
     e.preventDefault();
-    if (workflowsLoading || workflowError || !estimatedDate || estimatedDate === 'Estimation pending...' || (!form.customRoute && !processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId)))) {
+    if (workflowsLoading || workflowError || !resolvedEstimatePayload || (!form.customRoute && !processTypes.some(p => p.is_active === true && String(p.p_id) === String(form.processTypeId)))) {
       alert('Choose an active pipeline from the suggestions before submitting.');
       return;
     }
-    const edcPayload = estimatedDatePayload || null;
+    const edcPayload = resolvedEstimatePayload || null;
     
     try {
       const res = await fetchWithAuth('/api/documents', {
@@ -479,7 +483,11 @@ export default function useOriginatorData() {
     showPassModal, setShowPassModal,
     generatedQr,
     form, setForm, passForm, setPassForm,
-    selectedRoutePreview, estimatedDate, statusMsg,
+    selectedRoutePreview, estimatedDate: displayedEstimate,
+    estimatedWorkingHours: needsRouteEstimate
+      ? (routeEstimate.key === estimateRouteKey ? routeEstimate.hours : null)
+      : edcPredictions.find(p => Number(p.process_id) === Number(form.processTypeId))?.estimated_hours_to_complete,
+    statusMsg,
     recentDocStops, documents, processTypes,
     workflowsLoading, workflowError, retryWorkflows: () => { setWorkflowsLoading(true); setWorkflowRefresh(value => value + 1); },
     filteredDocuments, currentLedgerDocs, totalPages, pendingCount, mostRecentDoc,

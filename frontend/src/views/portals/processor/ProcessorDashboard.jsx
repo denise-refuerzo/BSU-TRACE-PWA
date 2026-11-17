@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { LayoutDashboard, FileText, History, User, Camera, Link2, LogOut, Menu, X, School, Smartphone, ChevronDown, Truck, MonitorPlay, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, History, User, Camera, Link2, LogOut, Menu, X, Smartphone, ChevronDown } from 'lucide-react';
 import { endSession, fetchWithAuth } from "../../../api";
 
 // --- CUSTOM HOOK ---
@@ -9,24 +9,25 @@ import { useProcessorData } from "./hooks/useProcessorData";
 
 // --- EXTRACTED COMPONENTS ---
 import ProcessorOverviewTab from "./components/ProcessorOverviewTab";
-import RegistrationManagementPage from './components/RegistrationManagementPage';
+import RegistrationManagementPage from '../../shared/components/account/RegistrationManagementPage';
 import OfficeSubmissionsTab from "./components/OfficeSubmissionsTab";
-import RequestFacilitiesPage from '../../shared/components/RequestFacilitiesPage';
+import RequestFacilitiesPage from '../../shared/components/request-facilities/RequestFacilitiesPage';
+import RequestFacilitiesSidebarSection from '../../shared/components/request-facilities/RequestFacilitiesSidebarSection';
 
 // --- SHARED COMPONENTS ---
-import UserProfileTab from "../../shared/components/UserProfileTab";
+import UserProfileTab from "../../shared/components/account/UserProfileTab";
 import ChangePasswordModal from "../../shared/modals/ChangePasswordModal";
-import FloatingChat from '../../shared/components/FloatingChat';
-import PWAInstallBanner from '../../shared/components/PWAInstallBanner';
+import FloatingChat from '../../shared/components/messaging/FloatingChat';
+import PWAInstallBanner from '../../shared/components/ui/PWAInstallBanner';
 import { formatOfficeLabel } from '../../../utils/officeLabel';
-import NotificationDropdown from '../../shared/components/NotificationDropdown';
+import NotificationDropdown from '../../shared/components/messaging/NotificationDropdown';
 import IncomingDocumentsModal from '../../shared/modals/IncomingDocumentsModal';
-import SubmissionOverviewTab from '../../shared/components/SubmissionOverviewTab';
+import SubmissionOverviewTab from '../../shared/components/documents/SubmissionOverviewTab';
 import useSubmissionAccess from '../../shared/hooks/useSubmissionAccess';
-import CollaborativeSubmissionsTab from '../../shared/components/CollaborativeSubmissionsTab';
-import SubmissionActivityHistoryTab from '../../shared/components/SubmissionActivityHistoryTab';
-import OfficeDocumentsTab from '../../shared/components/OfficeDocumentsTab';
-import ThemeToggle from '../../shared/components/ThemeToggle';
+import CollaborativeSubmissionsTab from '../../shared/components/documents/CollaborativeSubmissionsTab';
+import SubmissionActivityHistoryTab from '../../shared/components/documents/SubmissionActivityHistoryTab';
+import OfficeDocumentsTab from '../../shared/components/documents/OfficeDocumentsTab';
+import ThemeToggle from '../../shared/components/ui/ThemeToggle';
 import DocumentTrackingModal from '../../shared/modals/DocumentTrackingModal';
 
 const ScannerModal = lazy(() => import('./modals/ScannerModal'));
@@ -51,10 +52,10 @@ export default function ProcessorDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
-  const [facilitiesExpanded, setFacilitiesExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatTargetDoc, setChatTargetDoc] = useState(null);
   const [activeNotificationDocId, setActiveNotificationDocId] = useState(null);
+  const [targetBookingId, setTargetBookingId] = useState(null);
   const [previousTab, setPreviousTab] = useState('dashboard');
 
   // --- MODAL & ACTION STATE ---
@@ -106,11 +107,6 @@ export default function ProcessorDashboard() {
     if (!documentTabs.includes(activeTab)) setActiveTab('documents');
   };
 
-  const openFacilitiesMenu = () => {
-    setFacilitiesExpanded(current => activeTab.startsWith('resource-') ? !current : true);
-    if (!activeTab.startsWith('resource-')) setActiveTab('resource-gym');
-  };
-
   const handleLogout = () => {
     minimalSwal.fire({
       title: 'Sign Out?',
@@ -139,32 +135,14 @@ export default function ProcessorDashboard() {
   };
 
   const handleNotificationClick = async (notif) => {
-    setActiveTab('documents');
-    const targetIniId = notif.ini_id;
-    const allKnownDocs = processorData.pipelineDocs || [];
-
-    let matchedDoc = allKnownDocs.find(d => 
-      (targetIniId && d.ini_id === targetIniId) ||
-      (notif.doc_title && d.title?.toLowerCase() === notif.doc_title?.toLowerCase())
-    );
-
-    if (matchedDoc) {
-      handleOpenPipelineDetails(matchedDoc, false);
+    if (notif.booking_id) {
+      setTargetBookingId(notif.booking_id);
+      setActiveTab('resource-requests');
       return;
     }
-
-    if (targetIniId) {
-      try {
-        const res = await fetchWithAuth(`/api/processor/documents/${processorData.processorOfficeId}`);
-        const freshDocs = await res.json();
-        const docFromFresh = Array.isArray(freshDocs) ? freshDocs.find(d => d.ini_id === targetIniId) : null;
-        if (docFromFresh) {
-          handleOpenPipelineDetails(docFromFresh, false);
-        }
-      } catch (err) {
-        console.error("Error opening notification document:", err);
-      }
-    }
+    if (!notif.ini_id) return;
+    setActiveTab('documents');
+    handleOpenPipelineDetails({ini_id:notif.ini_id}, false);
   };
 
   const executeSimulatedScanner = async (e, scannedCode = null) => {
@@ -363,26 +341,7 @@ export default function ProcessorDashboard() {
               )}
             </div>
 
-            <div>
-              <button onClick={openFacilitiesMenu} aria-expanded={facilitiesExpanded} className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-bold transition-colors cursor-pointer ${activeTab.startsWith('resource-') ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                <span className="flex items-center gap-3"><School size={18} /> Request Facilities</span>
-                <ChevronDown size={15} className={`transition-transform ${facilitiesExpanded ? 'rotate-180' : ''}`} />
-              </button>
-              {facilitiesExpanded && (
-                <div className="ml-5 mt-1 space-y-1 border-l border-neutral-700 pl-3">
-                  {[
-                    { id: 'resource-gym', label: 'Gymnasium', icon: School },
-                    { id: 'resource-room', label: 'Rooms', icon: MonitorPlay },
-                    { id: 'resource-vehicle', label: 'Vehicles', icon: Truck },
-                    { id: 'resource-requests', label: 'Submitted Requests', icon: ClipboardList }
-                  ].map(item => (
-                    <button key={item.id} onClick={() => handleTabSelect(item.id)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors ${activeTab === item.id ? 'bg-red-700 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                      <item.icon size={14} /> {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <RequestFacilitiesSidebarSection activeTab={activeTab} onSelect={handleTabSelect} />
 
             {submissionAccess.canRequestRegistration && <button onClick={() => handleTabSelect('registration-management')} className={`w-full flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${activeTab === 'registration-management' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
               <Link2 size={16} className="shrink-0" /> Registration Management
@@ -442,6 +401,7 @@ export default function ProcessorDashboard() {
               userId={userId}
               notifications={processorData.notifications}
               onNotificationClick={handleNotificationClick}
+              filters={[{value:'work',label:'Documents to process'},{value:'personal',label:'My submissions'}]}
             />
             
             <button 
@@ -486,7 +446,7 @@ export default function ProcessorDashboard() {
           {activeTab === 'resource-gym' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Gymnasium" />}
           {activeTab === 'resource-room' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Multimedia Room" />}
           {activeTab === 'resource-vehicle' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} facility="Van" />}
-          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" />}
+          {activeTab === 'resource-requests' && <RequestFacilitiesPage userId={userId} officeName={processorData.processorOfficeName} view="requests" targetBookingId={targetBookingId} onClearTargetBookingId={() => setTargetBookingId(null)} />}
           {activeTab === 'registration-management' && <RegistrationManagementPage userId={userId} access={submissionAccess} />}
           {activeTab === 'history' && (
             <SubmissionActivityHistoryTab includeOfficeActivity onOpenChat={doc => { setChatTargetDoc(doc); setIsChatOpen(true); processorData.setHasUnreadChats(false); }} />
