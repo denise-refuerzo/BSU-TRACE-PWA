@@ -1,6 +1,6 @@
+/* eslint-disable no-unused-vars */
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import Swal from 'sweetalert2';
+import { MemoryRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';import Swal from 'sweetalert2';
 import { PWAProvider } from './views/shared/PWAContext';
 import { endSession, fetchWithAuth } from './api';
 
@@ -145,9 +145,13 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 };
 
 export default function App() {
+  const initialPath = typeof window !== 'undefined'
+    ? `${window.location.pathname}${window.location.search}`
+    : '/';
+
   return (
     <PWAProvider>
-      <BrowserRouter>
+      <MemoryRouter initialEntries={[initialPath]}>
         <ThemeToggle /> {/* Floating Toggle rendered globally */}
         <IdleTimer>
           <Routes>
@@ -162,7 +166,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </IdleTimer>
-      </BrowserRouter>
+      </MemoryRouter>
     </PWAProvider>
   );
 }
