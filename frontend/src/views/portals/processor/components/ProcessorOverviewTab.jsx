@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars
 import React, { useState } from 'react';
 import { Inbox, Scan, Clock, CheckCircle, Scale, FileText, AlertCircle } from 'lucide-react';
 import CompletedDocumentsModal from '../../../shared/modals/CompletedDocumentsModal'; 
@@ -15,7 +16,6 @@ export default function ProcessorOverviewTab({
   filterStatus,
   setFilterStatus,
   setDashboardPage,
-  currentDashDocs,
   filteredDocs,
   dashboardPage,
   totalDashPages,

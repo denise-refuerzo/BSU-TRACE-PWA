@@ -96,76 +96,85 @@ export default function OfficeDocumentsTab({
 
         {/* Table Body */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
-                <th className="p-4">Document Name</th>
-                <th className="p-4">Category</th>
-                <th className="p-4">Current Status</th>
-                <th className="p-4">Next Office</th>
-                <th className="p-4 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
-              {currentPipeDocs.map((doc, index) => {
-                const isCompleted = Boolean(doc.time_out);
-                const isInVerification = resolveOfficeStatus(doc) === 'In Verification';
+        <table className="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
+              <th className="p-4">Tracking No.</th>
+              <th className="p-4">Document Name</th>
+              <th className="p-4">Category</th>
+              <th className="p-4">Current Status</th>
+              <th className="p-4">Next Office</th>
+              <th className="p-4 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
+            {currentPipeDocs.map((doc, index) => {
+              const isCompleted = Boolean(doc.time_out);
+              const isInVerification = resolveOfficeStatus(doc) === 'In Verification';
 
-                return (
-                  <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-[#2b1317]/50 transition-colors group">
-                    <td className="p-4">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="p-2 rounded-lg bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800 group-hover:bg-white dark:group-hover:bg-[#180e10] group-hover:border-gray-200 dark:group-hover:border-gray-700 group-hover:shadow-sm transition-all">
-                          <FileText size={16} className="text-gray-500 dark:text-gray-400 group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors" />
-                        </div>
-                        <p title={doc.title} className="min-w-0 max-w-[16rem] truncate font-bold text-gray-900 dark:text-white text-sm leading-tight">{doc.title}</p>
+              return (
+                <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-[#2b1317]/50 transition-colors group">
+                  <td className="p-4 whitespace-nowrap">
+                    <span
+                      title={doc.qr_code || doc.tracking_number || ''}
+                      className="inline-block max-w-[10rem] truncate rounded-md bg-gray-100 dark:bg-[#2b1317] px-2.5 py-1 font-mono text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#42292f]"
+                    >
+                      {doc.qr_code || doc.tracking_number || '—'}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800 group-hover:bg-white dark:group-hover:bg-[#180e10] group-hover:border-gray-200 dark:group-hover:border-gray-700 group-hover:shadow-sm transition-all">
+                        <FileText size={16} className="text-gray-500 dark:text-gray-400 group-hover:text-[#D32F2F] dark:group-hover:text-red-400 transition-colors" />
                       </div>
-                    </td>
-                    <td className="p-4">
-                      <span title={doc.process_name} className="block max-w-[12rem] truncate px-2.5 py-1 bg-red-50 dark:bg-red-900/30 text-[#D32F2F] dark:text-red-400 border border-red-100 dark:border-red-800 font-bold text-[9px] uppercase tracking-wider rounded-md shadow-sm">
-                        {doc.process_name}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
-                        isCompleted ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 
-                        isInVerification ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800' : 
-                        'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          isCompleted ? 'bg-emerald-500' : 
-                          isInVerification ? 'bg-purple-500' : 
-                          'bg-amber-500'
-                        }`}></span>
-                        {resolveOfficeStatus(doc)}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300">
-                        {doc.next_office ? (
-                          <>
-                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                            {doc.next_office}
-                          </>
-                        ) : (
-                          <span className="text-gray-400 italic">None (Final Stop)</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-4 text-center">
-                      <button 
-                        onClick={() => handleOpenPipelineDetails(doc, false)} 
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#1c1113] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-lg hover:bg-red-50 dark:hover:bg-[#2b1317] hover:text-[#D32F2F] dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all text-[11px] shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-100"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                        View Details
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <p title={doc.title} className="min-w-0 max-w-[16rem] truncate font-bold text-gray-900 dark:text-white text-sm leading-tight">{doc.title}</p>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <span title={doc.process_name} className="block max-w-[12rem] truncate px-2.5 py-1 bg-red-50 dark:bg-red-900/30 text-[#D32F2F] dark:text-red-400 border border-red-100 dark:border-red-800 font-bold text-[9px] uppercase tracking-wider rounded-md shadow-sm">
+                      {doc.process_name}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                      isCompleted ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 
+                      isInVerification ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800' : 
+                      'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        isCompleted ? 'bg-emerald-500' : 
+                        isInVerification ? 'bg-purple-500' : 
+                        'bg-amber-500'
+                      }`}></span>
+                      {resolveOfficeStatus(doc)}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      {doc.next_office ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                          {doc.next_office}
+                        </>
+                      ) : (
+                        <span className="text-gray-400 italic">None (Final Stop)</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-4 text-center">
+                    <button 
+                      onClick={() => handleOpenPipelineDetails(doc, false)} 
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#1c1113] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-lg hover:bg-red-50 dark:hover:bg-[#2b1317] hover:text-[#D32F2F] dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all text-[11px] shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-100"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
           
           {filteredPipelineDocs.length === 0 && (
             <div className="p-12 text-center bg-gray-50 dark:bg-[#1c1113]">
