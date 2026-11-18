@@ -1,11 +1,11 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef } from 'react';
-import { MoreVertical, Search, Filter, Plus, QrCode, FileText, AlertTriangle, ChevronLeft, ChevronRight, CheckCircle, Zap, MapPin } from 'lucide-react';
+import { MoreVertical, Search, Filter, Plus, QrCode, FileText, AlertTriangle, ChevronLeft, ChevronRight, CheckCircle, Zap } from 'lucide-react';
 
 import DocumentTrackingModal from '../../../shared/modals/DocumentTrackingModal';
 import ViewTrackingQrModal from '../modals/ViewTrackingQrModal';
 
 export default function OriginatorDocumentsTab({ 
-  userId, 
   documents, 
   fetchDashboardLedger, 
   setShowModal, 
@@ -30,6 +30,27 @@ export default function OriginatorDocumentsTab({
   const tableRef = useRef(null);
 
   const isAdhocLog = (l) => l && (l.is_adhoc === true || String(l.is_adhoc) === 'true' || l.is_adhoc === 1);
+
+  const handleSelectDocument = (doc) => {
+    setSelectedDoc(doc);
+
+    const match = processTypes.find(p => p.process_name === doc.process_name);
+    if (match) {
+      const stops = [];
+      for (let i = 1; i <= 7; i++) {
+        let stopName = match[`stop_${i}_name`];
+        
+        if (stopName === 'ORIGINATING_COLLEGE_DYNAMIC') {
+          const firstNormalLog = doc.history_logs?.find(l => !isAdhocLog(l));
+          stopName = firstNormalLog?.office_name || doc.current_office || 'Origin Office';
+        }
+        if (stopName) stops.push(stopName);
+      }
+      setActiveRouteStops(stops);
+    } else {
+      setActiveRouteStops([doc.current_office || 'Origin Office', doc.next_office || 'Next Unit'].filter(Boolean));
+    }
+  };
 
   useEffect(() => {
     if (documents.length > 0 && !selectedDoc) {
@@ -59,27 +80,6 @@ export default function OriginatorDocumentsTab({
       if (onClearTargetDocId) onClearTargetDocId();
     }
   }, [targetDocId, documents]);
-
-  const handleSelectDocument = (doc) => {
-    setSelectedDoc(doc);
-
-    const match = processTypes.find(p => p.process_name === doc.process_name);
-    if (match) {
-      const stops = [];
-      for (let i = 1; i <= 7; i++) {
-        let stopName = match[`stop_${i}_name`];
-        
-        if (stopName === 'ORIGINATING_COLLEGE_DYNAMIC') {
-          const firstNormalLog = doc.history_logs?.find(l => !isAdhocLog(l));
-          stopName = firstNormalLog?.office_name || doc.current_office || 'Origin Office';
-        }
-        if (stopName) stops.push(stopName);
-      }
-      setActiveRouteStops(stops);
-    } else {
-      setActiveRouteStops([doc.current_office || 'Origin Office', doc.next_office || 'Next Unit'].filter(Boolean));
-    }
-  };
 
   const handleOpenDetails = (e, doc) => {
     e?.preventDefault?.();
@@ -360,79 +360,88 @@ export default function OriginatorDocumentsTab({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
-                <th className="p-4">Document Name</th>
-                <th className="p-4">Category</th>
-                <th className="p-4">Est. Completion</th>
-                <th className="p-4">Current Location</th>
-                <th className="p-4 text-center">Action</th>
+        <table className="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
+              <th className="p-4">Tracking No.</th>
+              <th className="p-4">Document Name</th>
+              <th className="p-4">Category</th>
+              <th className="p-4">Est. Completion</th>
+              <th className="p-4">Current Location</th>
+              <th className="p-4 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
+            {currentDocs.map((doc) => (
+              <tr key={doc.ini_id} 
+                  onClick={() => handleSelectDocument(doc)}
+                  className={`transition-colors cursor-pointer ${selectedDoc?.ini_id === doc.ini_id ? 'bg-red-50/40 dark:bg-red-900/10' : 'hover:bg-gray-50/80 dark:hover:bg-[#2b1317]/50'}`}>
+                <td className="p-4 whitespace-nowrap">
+                  <span
+                    title={doc.qr_code || ''}
+                    className="inline-block max-w-[10rem] truncate rounded-md bg-gray-100 dark:bg-[#2b1317] px-2.5 py-1 font-mono text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#42292f]"
+                  >
+                    {doc.qr_code || '—'}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`p-2 rounded-lg ${selectedDoc?.ini_id === doc.ini_id ? 'bg-white dark:bg-[#180e10] shadow-sm border border-red-100 dark:border-red-900' : 'bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800'}`}>
+                      <FileText size={16} className={selectedDoc?.ini_id === doc.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-500 dark:text-gray-400'} />
+                    </div>
+                    <div className="min-w-0">
+                      <p title={doc.title} className="max-w-[16rem] truncate font-bold text-gray-900 dark:text-gray-200">{doc.title}</p>
+                      <span className="text-[10px] text-gray-500 dark:text-gray-500 font-medium">Modified recently</span>
+                    </div>
+                  </div>
+                </td>
+                <td className="p-4">
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                    <span title={doc.process_name} className="block max-w-[12rem] truncate">{doc.process_name}</span>
+                  </span>
+                </td>
+                <td className="p-4 text-xs text-gray-600 dark:text-gray-400 font-medium">
+                  {doc.edc ? new Date(doc.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
+                </td>
+                <td className="p-4">
+                  <span title={doc.current_office || doc.status || ''} className={`inline-flex max-w-[12rem] items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                    doc.status?.toLowerCase() === 'completed' 
+                      ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
+                      : doc.status?.toLowerCase() === 'cancelled' 
+                        ? 'bg-neutral-100 dark:bg-gray-800 text-neutral-700 dark:text-gray-300 border border-neutral-300 dark:border-gray-600'
+                      : doc.status?.toLowerCase() === 'action required' 
+                        ? 'bg-red-50 dark:bg-red-900/30 text-[#D32F2F] dark:text-red-400 border border-red-200 dark:border-red-800' 
+                        : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                  }`}>
+                    <span className="truncate">{doc.status?.toLowerCase() === 'completed' ? 'Completed' :
+                    doc.status?.toLowerCase() === 'cancelled' ? 'Cancelled' : 
+                    doc.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (doc.current_office || 'Origin Unit')}</span>
+                  </span>
+                </td>
+                <td className="p-4 text-center">
+                  <button 
+                    onClick={(e) => handleOpenDetails(e, doc)} 
+                    className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
-              {currentDocs.map((doc) => (
-                <tr key={doc.ini_id} 
-                    onClick={() => handleSelectDocument(doc)}
-                    className={`transition-colors cursor-pointer ${selectedDoc?.ini_id === doc.ini_id ? 'bg-red-50/40 dark:bg-red-900/10' : 'hover:bg-gray-50/80 dark:hover:bg-[#2b1317]/50'}`}>
-                  <td className="p-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className={`p-2 rounded-lg ${selectedDoc?.ini_id === doc.ini_id ? 'bg-white dark:bg-[#180e10] shadow-sm border border-red-100 dark:border-red-900' : 'bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800'}`}>
-                        <FileText size={16} className={selectedDoc?.ini_id === doc.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-500 dark:text-gray-400'} />
-                      </div>
-                      <div className="min-w-0">
-                        <p title={doc.title} className="max-w-[16rem] truncate font-bold text-gray-900 dark:text-gray-200">{doc.title}</p>
-                        <span className="text-[10px] text-gray-500 dark:text-gray-500 font-medium">Modified recently</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 font-medium">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                      <span title={doc.process_name} className="block max-w-[12rem] truncate">{doc.process_name}</span>
-                    </span>
-                  </td>
-                  <td className="p-4 text-xs text-gray-600 dark:text-gray-400 font-medium">
-                    {doc.edc ? new Date(doc.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
-                  </td>
-                  <td className="p-4">
-                    <span title={doc.current_office || doc.status || ''} className={`inline-flex max-w-[12rem] items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm ${
-                      doc.status?.toLowerCase() === 'completed' 
-                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
-                        : doc.status?.toLowerCase() === 'cancelled' 
-                          ? 'bg-neutral-100 dark:bg-gray-800 text-neutral-700 dark:text-gray-300 border border-neutral-300 dark:border-gray-600'
-                        : doc.status?.toLowerCase() === 'action required' 
-                          ? 'bg-red-50 dark:bg-red-900/30 text-[#D32F2F] dark:text-red-400 border border-red-200 dark:border-red-800' 
-                          : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
-                    }`}>
-                      <span className="truncate">{doc.status?.toLowerCase() === 'completed' ? 'Completed' :
-                       doc.status?.toLowerCase() === 'cancelled' ? 'Cancelled' : 
-                       doc.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (doc.current_office || 'Origin Unit')}</span>
-                    </span>
-                  </td>
-                  <td className="p-4 text-center">
-                    <button 
-                      onClick={(e) => handleOpenDetails(e, doc)} 
-                      className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {currentDocs.length === 0 && (
-                <tr>
-                  <td colSpan="5" className="p-12 text-center bg-gray-50 dark:bg-[#180e10]">
-                    <div className="flex flex-col items-center justify-center">
-                      <Search className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-3" />
-                      <p className="text-sm font-bold text-gray-600 dark:text-gray-400">No documents found</p>
-                      <p className="text-xs text-gray-500 mt-1">Try adjusting your search or filters.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            ))}
+            {currentDocs.length === 0 && (
+              <tr>
+                <td colSpan="6" className="p-12 text-center bg-gray-50 dark:bg-[#180e10]">
+                  <div className="flex flex-col items-center justify-center">
+                    <Search className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-3" />
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400">No documents found</p>
+                    <p className="text-xs text-gray-500 mt-1">Try adjusting your search or filters.</p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
         </div>
 
         {totalPages > 1 && (

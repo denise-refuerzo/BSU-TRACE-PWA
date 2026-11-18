@@ -82,67 +82,76 @@ export default function CollaborativeSubmissionsTab({ mode = 'shared', onOpenCha
 
       <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-[#42292f] bg-white dark:bg-[#180e10] shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 dark:border-[#42292f] bg-neutral-50 dark:bg-[#2b1317] text-[10px] font-black uppercase tracking-wider text-neutral-500 dark:text-gray-400">
-                <th className="p-4">Document</th>
-                <th className="p-4">Submitted by</th>
-                <th className="p-4">Current status</th>
-                <th className="p-4">Updated</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-gray-800/50">
-              {pageRows.map(document => (
-                <tr key={document.ini_id} onClick={() => setSelected(document)} className="cursor-pointer hover:bg-red-50/30 dark:hover:bg-[#2b1317]/50 transition-colors">
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <span className="rounded-lg bg-neutral-100 dark:bg-gray-800 p-2 text-neutral-600 dark:text-gray-300">
-                        <FileText size={16}/>
-                      </span>
-                      <div>
-                        <p title={document.title} className="max-w-[16rem] truncate font-bold text-neutral-900 dark:text-white">{document.title}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4 text-xs font-semibold text-neutral-700 dark:text-gray-300">{document.submitted_by}</td>
-                  <td className="p-4">
-                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${document.status?.toLowerCase()==='completed'?'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400':document.status?.toLowerCase()==='cancelled'?'border-neutral-300 dark:border-gray-700 bg-neutral-100 dark:bg-gray-800 text-neutral-700 dark:text-gray-300':'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'}`}>
-                      {document.status || 'Pending'}
+        <table className="w-full min-w-[780px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-neutral-200 dark:border-[#42292f] bg-neutral-50 dark:bg-[#2b1317] text-[10px] font-black uppercase tracking-wider text-neutral-500 dark:text-gray-400">
+              <th className="p-4">Tracking No.</th>
+              <th className="p-4">Document</th>
+              <th className="p-4">Submitted by</th>
+              <th className="p-4">Current status</th>
+              <th className="p-4">Updated</th>
+              <th className="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100 dark:divide-gray-800/50">
+            {pageRows.map(document => (
+              <tr key={document.ini_id} onClick={() => setSelected(document)} className="cursor-pointer hover:bg-red-50/30 dark:hover:bg-[#2b1317]/50 transition-colors">
+                <td className="p-4 whitespace-nowrap">
+                  <span
+                    title={document.qr_code || ''}
+                    className="inline-block max-w-[10rem] truncate rounded-md bg-neutral-100 dark:bg-[#2b1317] px-2.5 py-1 font-mono text-xs font-bold text-neutral-700 dark:text-gray-300 border border-neutral-200 dark:border-[#42292f]"
+                  >
+                    {document.qr_code || '—'}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-lg bg-neutral-100 dark:bg-gray-800 p-2 text-neutral-600 dark:text-gray-300">
+                      <FileText size={16}/>
                     </span>
-                    <p className="mt-2 text-[10px] text-neutral-500 dark:text-gray-400">{document.current_office || 'Processing complete'}</p>
-                  </td>
-                  <td className="p-4 text-xs text-neutral-500 dark:text-gray-400">{formatPhilippineDateTime(document.archived_at || document.created_at)}</td>
-                  <td className="p-4">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={event => { event.stopPropagation(); setSelected(document); }} className="trace-button dark:bg-[#1c1113] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#2b1317]">
-                        <Eye size={14}/>View
-                      </button>
-                      {archived && (
-                        <button onClick={event => restore(event, document)} className="trace-button dark:bg-[#1c1113] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#2b1317]">
-                          <RefreshCw size={14}/>Restore
-                        </button>
-                      )}
+                    <div>
+                      <p title={document.title} className="max-w-[16rem] truncate font-bold text-neutral-900 dark:text-white">{document.title}</p>
                     </div>
-                  </td>
-                </tr>
-              ))}
-              {!loading && !filtered.length && (
-                <tr>
-                  <td colSpan="5" className="p-12 text-center text-sm text-neutral-500 dark:text-gray-400">
-                    {archived ? 'Your archive is empty.' : 'No submissions have been shared with you.'}
-                  </td>
-                </tr>
-              )}
-              {loading && (
-                <tr>
-                  <td colSpan="5" className="p-12 text-center text-sm text-neutral-500 dark:text-gray-400">
-                    Loading submissions…
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  </div>
+                </td>
+                <td className="p-4 text-xs font-semibold text-neutral-700 dark:text-gray-300">{document.submitted_by}</td>
+                <td className="p-4">
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${document.status?.toLowerCase()==='completed'?'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400':document.status?.toLowerCase()==='cancelled'?'border-neutral-300 dark:border-gray-700 bg-neutral-100 dark:bg-gray-800 text-neutral-700 dark:text-gray-300':'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'}`}>
+                    {document.status || 'Pending'}
+                  </span>
+                  <p className="mt-2 text-[10px] text-neutral-500 dark:text-gray-400">{document.current_office || 'Processing complete'}</p>
+                </td>
+                <td className="p-4 text-xs text-neutral-500 dark:text-gray-400">{formatPhilippineDateTime(document.archived_at || document.created_at)}</td>
+                <td className="p-4">
+                  <div className="flex justify-end gap-2">
+                    <button onClick={event => { event.stopPropagation(); setSelected(document); }} className="trace-button dark:bg-[#1c1113] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#2b1317]">
+                      <Eye size={14}/>View
+                    </button>
+                    {archived && (
+                      <button onClick={event => restore(event, document)} className="trace-button dark:bg-[#1c1113] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#2b1317]">
+                        <RefreshCw size={14}/>Restore
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!loading && !filtered.length && (
+              <tr>
+                <td colSpan="6" className="p-12 text-center text-sm text-neutral-500 dark:text-gray-400">
+                  {archived ? 'Your archive is empty.' : 'No submissions have been shared with you.'}
+                </td>
+              </tr>
+            )}
+            {loading && (
+              <tr>
+                <td colSpan="6" className="p-12 text-center text-sm text-neutral-500 dark:text-gray-400">
+                  Loading submissions…
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
         </div>
         <PaginationControls page={visiblePage} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE}/>
       </div>

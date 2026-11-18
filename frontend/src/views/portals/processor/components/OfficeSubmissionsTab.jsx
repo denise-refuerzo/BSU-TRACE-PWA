@@ -230,123 +230,136 @@ export default function OfficeSubmissionsTab({ officeId, processTypes: providedP
 
         {/* Table Body - Mobile Friendly Horizontal Scroll */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-[900px] table-fixed text-left text-sm border-collapse">
-            <colgroup>
-              <col className="w-[28%]" />
-              <col className="w-[24%]" />
-              <col className="w-[16%]" />
-              <col className="w-[18%]" />
-              <col className="w-[14%]" />
-            </colgroup>
-            <thead>
-              <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
-                <th className="p-4">Document Name</th>
-                <th className="p-4">Process Type</th>
-                <th className="p-4">Est. Completion</th>
-                <th className="p-4">Current Location</th>
-                <th className="p-4 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
+        <table className="w-full min-w-[900px] table-fixed text-left text-sm border-collapse">
+          <colgroup>
+            <col className="w-[15%]" />
+            <col className="w-[25%]" />
+            <col className="w-[20%]" />
+            <col className="w-[14%]" />
+            <col className="w-[16%]" />
+            <col className="w-[10%]" />
+          </colgroup>
+          <thead>
+            <tr className="bg-gray-50 dark:bg-[#2b1317] border-b border-gray-200 dark:border-[#42292f] text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase tracking-wider">
+              <th className="p-4">Tracking No.</th>
+              <th className="p-4">Document Name</th>
+              <th className="p-4">Process Type</th>
+              <th className="p-4">Est. Completion</th>
+              <th className="p-4">Current Location</th>
+              <th className="p-4 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
 
-              {isDocsLoading && documents.length === 0 ? (
-                [...Array(4)].map((_, i) => (
-                  <tr key={`skeleton-${i}`}>
-                    <td className="p-4 align-middle">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-800 animate-pulse shrink-0"></div>
-                        <div className="space-y-2">
-                          <div className="h-4 w-48 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
-                          <div className="h-3 w-32 bg-gray-100 dark:bg-gray-800 rounded animate-pulse"></div>
-                        </div>
+            {isDocsLoading && documents.length === 0 ? (
+              [...Array(4)].map((_, i) => (
+                <tr key={`skeleton-${i}`}>
+                  <td className="p-4 align-middle">
+                    <div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 rounded-md animate-pulse"></div>
+                  </td>
+                  <td className="p-4 align-middle">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-800 animate-pulse shrink-0"></div>
+                      <div className="space-y-2">
+                        <div className="h-4 w-48 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                        <div className="h-3 w-32 bg-gray-100 dark:bg-gray-800 rounded animate-pulse"></div>
                       </div>
-                    </td>
-                    <td className="p-4"><div className="h-4 w-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
-                    <td className="p-4"><div className="h-4 w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
-                    <td className="p-4"><div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 rounded-md animate-pulse"></div></td>
-                    <td className="p-4 text-center"><div className="h-8 w-8 bg-gray-200 dark:bg-gray-800 rounded-lg animate-pulse mx-auto"></div></td>
-                  </tr>
-                ))
-              ) : filteredDocs.length > 0 ? (
-                filteredDocs.map(d => (
-                  <tr key={d.ini_id} 
-                      onClick={() => setSelected(d)}
-                      className={`transition-colors cursor-pointer group ${selected?.ini_id === d.ini_id ? 'bg-red-50/40 dark:bg-red-900/10' : 'hover:bg-gray-50/80 dark:hover:bg-[#2b1317]/50'}`}>
-                    <td className="p-4 align-middle">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className={`p-2 rounded-lg transition-all duration-150 shrink-0 ${selected?.ini_id === d.ini_id ? 'bg-white dark:bg-[#180e10] shadow-sm border border-red-100 dark:border-red-900' : 'bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800'}`}>
-                          <FileText size={16} className={`transition-colors duration-150 ${selected?.ini_id === d.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-bold text-gray-900 dark:text-white text-sm leading-5" title={d.title}>{d.title}</p>
-                          <p className="mt-1 whitespace-nowrap text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            {formatPhilippineDateTime(d.created_at)}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-4 align-middle">
-                      <span className="flex items-start gap-1.5 text-xs font-medium leading-5 text-gray-700 dark:text-gray-300">
-                        <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                        <span className="line-clamp-2" title={d.process_name}>{d.process_name}</span>
-                      </span>
-                    </td>
-                    <td className="p-4 align-middle text-xs text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
-                      {d.edc ? new Date(d.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
-                    </td>
-                    <td className="p-4 align-middle">
-                      <span title={d.current_office || d.status || ''} className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
-                        <span className="truncate">{d.status?.toLowerCase() === 'completed' ? 'Completed' :
-                          d.status?.toLowerCase() === 'cancelled' ? 'Cancelled' :
-                          d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}</span>
-                      </span>
-                    </td>
-                    <td className="p-4 text-center align-middle">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setSelected(d); }}
-                        className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-
-                      {d.status?.toLowerCase() === 'action required' && (
-                        <div className="mt-3 w-full rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-3 text-left" onClick={e => e.stopPropagation()}>
-                          <p className="text-[11px] text-red-800 dark:text-red-300 font-medium mb-2 leading-relaxed">
-                            <strong className="block text-[10px] uppercase tracking-wider mb-0.5">Remarks:</strong>
-                            {d.last_action}
-                          </p>
-                          {d.release_time ? (
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); setRevision({ ...d }); }} 
-                              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-red-400 hover:text-red-900 cursor-pointer mt-2 transform active:scale-95 transition-[transform,colors] duration-200"
-                            >
-                              <RefreshCw size={12} /> Correct & Resubmit
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider flex items-center gap-1 mt-2">
-                              <AlertCircle size={12} /> Awaiting Release Return
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="5" className="p-12 text-center bg-gray-50/50 dark:bg-[#1c1113]">
-                    <div className="flex flex-col items-center justify-center">
-                      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-3">
-                        <Inbox className="w-8 h-8 text-gray-300 dark:text-gray-600" />
-                      </div>
-                      <p className="text-sm font-bold text-gray-600 dark:text-gray-400">No submissions found</p>
-                      <p className="text-xs text-gray-500 mt-1 font-medium">Try adjusting your filters or search terms.</p>
                     </div>
                   </td>
+                  <td className="p-4"><div className="h-4 w-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
+                  <td className="p-4"><div className="h-4 w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div></td>
+                  <td className="p-4"><div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 rounded-md animate-pulse"></div></td>
+                  <td className="p-4 text-center"><div className="h-8 w-8 bg-gray-200 dark:bg-gray-800 rounded-lg animate-pulse mx-auto"></div></td>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              ))
+            ) : filteredDocs.length > 0 ? (
+              filteredDocs.map(d => (
+                <tr key={d.ini_id} 
+                    onClick={() => setSelected(d)}
+                    className={`transition-colors cursor-pointer group ${selected?.ini_id === d.ini_id ? 'bg-red-50/40 dark:bg-red-900/10' : 'hover:bg-gray-50/80 dark:hover:bg-[#2b1317]/50'}`}>
+                  <td className="p-4 align-middle">
+                    <span
+                      title={d.qr_code || ''}
+                      className="inline-block max-w-full truncate rounded-md bg-gray-100 dark:bg-[#2b1317] px-2.5 py-1 font-mono text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#42292f]"
+                    >
+                      {d.qr_code || '—'}
+                    </span>
+                  </td>
+                  <td className="p-4 align-middle">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`p-2 rounded-lg transition-all duration-150 shrink-0 ${selected?.ini_id === d.ini_id ? 'bg-white dark:bg-[#180e10] shadow-sm border border-red-100 dark:border-red-900' : 'bg-gray-50 dark:bg-[#1c1113] border border-gray-100 dark:border-gray-800'}`}>
+                        <FileText size={16} className={`transition-colors duration-150 ${selected?.ini_id === d.ini_id ? 'text-[#D32F2F] dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-bold text-gray-900 dark:text-white text-sm leading-5" title={d.title}>{d.title}</p>
+                        <p className="mt-1 whitespace-nowrap text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          {formatPhilippineDateTime(d.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4 align-middle">
+                    <span className="flex items-start gap-1.5 text-xs font-medium leading-5 text-gray-700 dark:text-gray-300">
+                      <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                      <span className="line-clamp-2" title={d.process_name}>{d.process_name}</span>
+                    </span>
+                  </td>
+                  <td className="p-4 align-middle text-xs text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
+                    {d.edc ? new Date(d.edc).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Processing'}
+                  </td>
+                  <td className="p-4 align-middle">
+                    <span title={d.current_office || d.status || ''} className={`inline-flex max-w-full items-center justify-center rounded-md px-2.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-wider shadow-sm ${getStatusStyles(d.status)}`}>
+                      <span className="truncate">{d.status?.toLowerCase() === 'completed' ? 'Completed' :
+                        d.status?.toLowerCase() === 'cancelled' ? 'Cancelled' :
+                        d.status?.toLowerCase() === 'action required' ? 'Halted Checklist' : (d.current_office || 'Origin Unit')}</span>
+                    </span>
+                  </td>
+                  <td className="p-4 text-center align-middle">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setSelected(d); }}
+                      className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mx-auto flex items-center justify-center transition-all focus:outline-none cursor-pointer"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+
+                    {d.status?.toLowerCase() === 'action required' && (
+                      <div className="mt-3 w-full rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-3 text-left" onClick={e => e.stopPropagation()}>
+                        <p className="text-[11px] text-red-800 dark:text-red-300 font-medium mb-2 leading-relaxed">
+                          <strong className="block text-[10px] uppercase tracking-wider mb-0.5">Remarks:</strong>
+                          {d.last_action}
+                        </p>
+                        {d.release_time ? (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setRevision({ ...d }); }} 
+                            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-red-400 hover:text-red-900 cursor-pointer mt-2 transform active:scale-95 transition-[transform,colors] duration-200"
+                          >
+                            <RefreshCw size={12} /> Correct & Resubmit
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider flex items-center gap-1 mt-2">
+                            <AlertCircle size={12} /> Awaiting Release Return
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6" className="p-12 text-center bg-gray-50/50 dark:bg-[#1c1113]">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-3">
+                      <Inbox className="w-8 h-8 text-gray-300 dark:text-gray-600" />
+                    </div>
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400">No submissions found</p>
+                    <p className="text-xs text-gray-500 mt-1 font-medium">Try adjusting your filters or search terms.</p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
         </div>
       </div>
 
