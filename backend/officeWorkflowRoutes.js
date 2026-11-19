@@ -1,5 +1,4 @@
 const {fail, isOffice, resolveRoute, resolveTemplateRoute, assertAction} = require('./officeWorkflow');
-const crypto = require('node:crypto');
 const {routeProgress} = require('./routeProgress');
 const {attachStepActors} = require('./officeActionAudit');
 
@@ -129,7 +128,9 @@ module.exports = function registerOfficeWorkflow(app, pool, requireAuth) {
     if (completeOriginProcessing && (!isOffice(user) || Number(user.o_id) !== sequence[0]))
       throw fail(403, 'Only staff of the pipeline’s originating office may complete its processing upon submission.');
     
-    const qrCode = `TRK-${crypto.randomUUID()}`;
+    const trackingNumber = (await db.query("SELECT nextval('public.document_tracking_number_seq') AS num")).rows[0].num;
+    const digits = String(trackingNumber).padStart(6, '0');
+    const qrCode = `TRK-${digits.slice(0, 3)}-${digits.slice(3)}`;
     const doc = (await db.query(`INSERT INTO public.initial_document
       (p_id,u_id,title,edc,qr_code,created_at,submission_office_id,route_snapshot)
       VALUES ($1,$2,$3,$4,$5,TIMEZONE('Asia/Manila',NOW()),$6,$7) RETURNING *`,
