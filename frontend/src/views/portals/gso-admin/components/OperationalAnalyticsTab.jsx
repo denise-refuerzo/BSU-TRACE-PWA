@@ -113,14 +113,14 @@ function DashboardCard({ card, editMode, onResize, onDragStart, onDrop, children
   );
 }
 
-function RankedChart({ rows, labelKey, valueKey, chartType, datasetLabel, unit = '' }) {
+function RankedChart({ rows, labelKey, valueKey, chartType, datasetLabel, unit = '', barColor = '#4f46e5' }) {
   const data = {
     labels: rows.map(row => row[labelKey]),
     datasets: [{
       label: datasetLabel,
       data: rows.map(row => Number(row[valueKey] || 0)),
-      backgroundColor: chartType === 'bar' ? '#991b1b' : rows.map((_, index) => COLORS[index % COLORS.length]),
-      borderColor: chartType === 'bar' ? '#7f1d1d' : '#180e10',
+      backgroundColor: chartType === 'bar' ? barColor : rows.map((_, index) => COLORS[index % COLORS.length]),
+      borderColor: chartType === 'bar' ? barColor : '#180e10',
       borderWidth: chartType === 'bar' ? 0 : 2,
       borderRadius: chartType === 'bar' ? 6 : 0
     }]
@@ -163,6 +163,10 @@ export default function OperationalAnalyticsTab({
   const [frequencySort, setFrequencySort] = useState('desc');
   const [routingSort, setRoutingSort] = useState('desc');
   const [vehicleSort, setVehicleSort] = useState('desc');
+
+  useEffect(() => {
+    setBottleneckSort?.('asc');
+  }, [setBottleneckSort]);
 
   useEffect(() => {
     localStorage.setItem(layoutKey, JSON.stringify(layout));
@@ -244,7 +248,8 @@ export default function OperationalAnalyticsTab({
             <input value={bottleneckSearch} onChange={event => setBottleneckSearch(event.target.value)} placeholder={`Search ${bottleneckMode}...`} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] py-2 pl-8 pr-3 text-xs text-gray-900 dark:text-white outline-none focus:border-red-400" />
           </label>
           <select value={bottleneckSort} onChange={event => setBottleneckSort(event.target.value)} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1c1113] px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300">
-            <option value="desc">Highest delay</option><option value="asc">Lowest delay</option>
+            <option value="asc">Shortest Time</option>
+            <option value="desc">Longest Time</option>
           </select>
         </div>
         <div className="h-56">{bottleneckRows.length ? <RankedChart rows={bottleneckRows} labelKey="office_name" valueKey="dwell_time_hours" chartType={bottleneckChart} datasetLabel={bottleneckMode === 'office' ? 'Average processing time (hours)' : 'Average completion time (hours)'} unit="h" /> : <EmptyState message={`No ${bottleneckMode} data matches the current search.`} />}</div>
