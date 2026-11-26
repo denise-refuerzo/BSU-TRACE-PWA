@@ -1,0 +1,47 @@
+# Exported from Render on 2026-11-26T13:55:24Z
+version: "1"
+projects:
+- name: My project
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: bsu-trace-ml-engine
+      runtime: python
+      repo: https://github.com/denise-refuerzo/BSU-TRACE-PWA
+      plan: 0.5c-512mb
+      envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ML_DATABASE_URL
+        sync: false
+      region: oregon
+      buildCommand: pip install -r requirements.txt
+      startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+      autoDeployTrigger: commit
+      rootDir: backend/ml-engine
+    - type: web
+      name: BSU-TRACE-PWA
+      runtime: node
+      repo: https://github.com/denise-refuerzo/BSU-TRACE-PWA
+      plan: 0.5c-512mb
+      envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: ML_DATABASE_URL
+        sync: false
+      - key: PYTHON_MICROSERVICE_URL
+        sync: false
+      - key: FILE_ENCRYPTION_KEY
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      region: oregon
+      buildCommand: npm install
+      startCommand: node server.js
+      autoDeployTrigger: commit
+      rootDir: backend
