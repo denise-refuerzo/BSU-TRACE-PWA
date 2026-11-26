@@ -1,13 +1,11 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { fetchWithAuth } from '../../../../api';
+import { fetchWithAuth, SOCKET_URL } from '../../../../api';
 import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 import DocumentSubmissionModal from '../../originator/modals/DocumentSubmissionModal';
 import OfficeDocumentModal from '../../../shared/modals/DocumentTrackingModal';
 import { formatPhilippineDateTime, formatPhilippineDate } from '../../../../utils/philippineTime';
 import {getWorkflowStops, getSelectedRouteKey} from '../../../../utils/workflowRoute';
 import { Search, Plus, AlertCircle, X, FileText, RefreshCw, Inbox, Filter, MoreVertical } from 'lucide-react';
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 export default function OfficeSubmissionsTab({ officeId, processTypes: providedProcessTypes = [], onProcessed = () => {}, onOpenChat }) {
   const userId = localStorage.getItem('userId');

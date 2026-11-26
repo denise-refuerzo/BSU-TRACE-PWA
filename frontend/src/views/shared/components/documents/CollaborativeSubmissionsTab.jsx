@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, FileText, RefreshCw, Search } from 'lucide-react';
-import { fetchWithAuth } from '../../../../api';
+import { fetchWithAuth, SOCKET_URL } from '../../../../api';
 import { formatPhilippineDateTime } from '../../../../utils/philippineTime';
 import DocumentTrackingModal from '../../modals/DocumentTrackingModal';
 import PaginationControls from '../ui/PaginationControls';
 import { createRealtimeClient } from '../../../../utils/realtimeClient';
 
 const PAGE_SIZE = 5;
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
-
 export default function CollaborativeSubmissionsTab({ mode = 'shared', onOpenChat }) {
   const [documents, setDocuments] = useState([]);
   const [selected, setSelected] = useState(null);

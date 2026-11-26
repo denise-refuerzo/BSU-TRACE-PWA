@@ -1,8 +1,8 @@
 import Swal from 'sweetalert2';
 import axios from 'axios';
 
-// Replace line 4 in api.js:
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa-t711.onrender.com';
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_BASE_URL;
 const API = axios.create({
   baseURL: API_BASE_URL,
 });

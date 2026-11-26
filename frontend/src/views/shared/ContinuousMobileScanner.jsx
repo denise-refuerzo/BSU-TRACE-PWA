@@ -3,8 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { Html5Qrcode } from 'html5-qrcode';
 import { CheckCircle2, AlertCircle, ArrowDownLeft, ArrowUpRight, Wifi, WifiOff, Smartphone } from 'lucide-react';
-
-const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
+import { SOCKET_URL } from '../../api.js';
 
 export default function ContinuousMobileScanner() {
   const [searchParams] = useSearchParams();

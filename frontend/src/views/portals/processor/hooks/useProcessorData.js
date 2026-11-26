@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchWithAuth } from '../../../../api';
+import { fetchWithAuth, SOCKET_URL } from '../../../../api';
 import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 export function useProcessorData(userId) {
   // --- USER & OFFICE STATE ---

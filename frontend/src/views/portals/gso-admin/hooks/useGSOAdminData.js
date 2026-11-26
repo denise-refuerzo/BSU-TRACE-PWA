@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchWithAuth } from "../../../../api";
+import { fetchWithAuth, SOCKET_URL } from "../../../../api";
 import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 export function useGSOAdminData() {
   const navigate = useNavigate();
