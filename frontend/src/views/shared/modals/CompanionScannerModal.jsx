@@ -1,10 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import QRCode from 'react-qr-code';
-import { fetchWithAuth } from '../../../api.js';
+import { fetchWithAuth, SOCKET_URL } from '../../../api.js';
 import { X, Smartphone, Wifi, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
-
-const SOCKET_URL = 'https://bsu-trace-pwa.onrender.com';
 
 export default function CompanionScannerModal({ onClose, onScanSuccess }) {
   const [roomId] = useState(() => `bsu-room-${Math.random().toString(36).substring(2, 9)}`);

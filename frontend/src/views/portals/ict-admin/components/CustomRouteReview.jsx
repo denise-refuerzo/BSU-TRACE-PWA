@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, Search, X } from 'lucide-react';
-import { API_BASE_URL, fetchWithAuth } from '../../../../api';
+import { fetchWithAuth, SOCKET_URL } from '../../../../api';
 import { createRealtimeClient } from '../../../../utils/realtimeClient';
 
 const PAGE_SIZE = 8;
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_BASE_URL;
 const statusLabels = { custom: 'Pending review', official: 'Approved', declined: 'Kept private' };
 
 function RouteRequestModal({ request, onClose, onReview, busy }) {

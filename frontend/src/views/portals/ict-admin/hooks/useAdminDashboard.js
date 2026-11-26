@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE_URL, fetchWithAuth } from "../../../../api";
+import { fetchWithAuth, SOCKET_URL } from "../../../../api";
 import { createRealtimeClient } from '../../../../utils/realtimeClient';
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_BASE_URL;
 
 export function useAdminDashboard(enabled = true) {
   const [loading, setLoading] = useState(true);

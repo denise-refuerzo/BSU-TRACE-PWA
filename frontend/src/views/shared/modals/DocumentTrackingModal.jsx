@@ -1,13 +1,11 @@
 import {useEffect, useState, useRef} from 'react';
 import {QRCodeSVG} from 'qrcode.react';
 import {FileText, X, GitBranch, Clock3, Building2, ArrowRight, CheckCircle2, ShieldCheck, LogIn, LogOut, PenLine, Undo2, MessageSquare, Download, ChevronDown, Image as ImageIcon, UserRound} from 'lucide-react';
-import {fetchWithAuth} from '../../../api';
+import { fetchWithAuth, SOCKET_URL } from '../../../api';
 import {formatPhilippineDateTime,formatPhilippineDate} from '../../../utils/philippineTime';
 import DocumentAccessControls from '../components/documents/DocumentAccessControls';
 import TrackingId from '../components/documents/TrackingId';
 import {createRealtimeClient as io} from '../../../utils/realtimeClient';
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 function StatusBadge({step}) {
   const states={

@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useEffectEvent } from 'react';
 import { createRealtimeClient as io } from '../../utils/realtimeClient';
 import { Send, Lock, MessageSquare, RefreshCw, Search, FileText, ArrowLeft, Info } from 'lucide-react';
-import { fetchWithAuth } from "../../api";
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
+import { fetchWithAuth, SOCKET_URL } from "../../api";
 
 function mergeMessages(previous, incoming) {
   const messages = new Map(previous.map(message => [String(message.message_id), message]));

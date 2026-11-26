@@ -3,11 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; 
 import { createRealtimeClient as io } from '../../../../utils/realtimeClient';
 
-import { fetchWithAuth } from "../../../../api";
+import { fetchWithAuth, SOCKET_URL } from "../../../../api";
 import { formatPhilippineDate } from '../../../../utils/philippineTime';
 import {getWorkflowStops, getSelectedRouteKey} from '../../../../utils/workflowRoute';
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
 
 const minimalSwal = Swal.mixin({
   customClass: {

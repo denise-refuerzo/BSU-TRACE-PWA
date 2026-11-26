@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { API_BASE_URL, fetchWithAuth } from "../../../../api";
+import { fetchWithAuth, SOCKET_URL } from "../../../../api";
 import { createRealtimeClient } from '../../../../utils/realtimeClient';
 
 export function useRolesPermissions(enabled = true) {
@@ -107,8 +107,7 @@ export function useRolesPermissions(enabled = true) {
 
   useEffect(() => {
     if (!enabled) return undefined;
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || API_BASE_URL;
-    const socket = createRealtimeClient(socketUrl, { secure: true, reconnection: true });
+    const socket = createRealtimeClient(SOCKET_URL, { secure: true, reconnection: true });
     const subscribe = () => socket.emit('join-ict-admin-room');
     socket.on('connect', subscribe);
     socket.on('admin-configuration-updated', fetchBaselineCatalogs);

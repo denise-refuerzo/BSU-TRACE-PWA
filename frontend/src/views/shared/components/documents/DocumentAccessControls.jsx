@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import { Archive, Check, ChevronDown, OctagonX, RotateCcw, Search, Share2, Trash2, UserPlus, Users, X } from 'lucide-react';
-import { fetchWithAuth } from '../../../../api';
+import { fetchWithAuth, SOCKET_URL } from '../../../../api';
 import { createRealtimeClient } from '../../../../utils/realtimeClient';
 
 const button = 'trace-button dark:bg-[#1c1113] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#2b1317]';
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://bsu-trace-pwa.onrender.com';
-
 function CandidateRows({ people, selectedCandidates, busy, candidateLoading, onToggle }) {
   if (!people.length) return candidateLoading ? null : <p className="rounded-xl border border-dashed border-neutral-300 dark:border-gray-700 p-4 text-center text-xs text-neutral-500 dark:text-gray-400">No eligible accounts found.</p>;
   return (
